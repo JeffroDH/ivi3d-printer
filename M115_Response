@@ -1,0 +1,26 @@
+< FIRMWARE_NAME:Marlin V1.3.2-alpha (Mar 29 2021 10:54:26) SOURCE_CODE_URL:https://github.com/MarlinFirmware/Marlin PROTOCOL_VERSION:1.0 MACHINE_TYPE:STM32F407VET6 EXTRUDER_COUNT:1 UUID:cede2a2f-41a2-4748-9b12-c55c62f367ff
+others < Cap:SERIAL_XON_XOFF:1
+others < Cap:BINARY_FILE_TRANSFER:0
+others < Cap:EEPROM:1
+others < Cap:VOLUMETRIC:1
+others < Cap:AUTOREPORT_TEMP:1
+others < Cap:PROGRESS:0
+others < Cap:PRINT_JOB:1
+others < Cap:AUTOLEVEL:1
+others < Cap:RUNOUT:1
+others < Cap:Z_PROBE:1
+others < Cap:LEVELING_DATA:1
+others < Cap:BUILD_PERCENT:0
+others < Cap:SOFTWARE_POWER:0
+others < Cap:TOGGLE_LIGHTS:0
+others < Cap:CASE_LIGHT_BRIGHTNESS:0
+others < Cap:EMERGENCY_PARSER:1
+others < Cap:PROMPT_SUPPORT:0
+others < Cap:SDCARD:0
+others < Cap:AUTOREPORT_SD_STATUS:0
+others < Cap:LONG_FILENAME:0
+others < Cap:THERMAL_PROTECTION:1
+others < Cap:MOTION_MODES:0
+others < Cap:ARCS:1
+others < Cap:BABYSTEPPING:1
+others < Cap:CHAMBER_TEMPERATURE:0
