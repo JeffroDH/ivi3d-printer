@@ -74,22 +74,37 @@ The token is the default hard-coded in the stock slicer. If your printer rejects
 **Discovery:** send ASCII `discover` to the broadcast address on **UDP 20050**. Reply:
 `IVI3D@<ip>|Model:IVI 3D Printer|status:IDLE`.
 
-**HTTP API** at `http://<ip>:8080/api/v1/` (form-encoded or multipart; HTTP 200/201/203/204 = OK, 204 on status = waiting for on-screen confirm):
+**HTTP API** at `http://<ip>:8080/api/v1/` (kore). Endpoint list comes from the stock slicer; **tested against the beta firmware on 2026-11-01**:
 
-| Endpoint | Use |
+| Endpoint | Tested result |
 |---|---|
-| `POST connect` / `disconnect` | `token=` → JSON with `token`, `series`, `headType` |
-| `GET status?token=` | state, position, temps, `laserPower`, `currentLine`/`totalLines`, `estimatedTime` |
-| `POST prepare_print` | multipart `token`, `type`=`3DP`/`Laser`/`CNC`, `file` — uploads and loads the job |
-| `POST start_print`, `pause_print`, `resume_print`, `stop_print` | `token=` |
-| `POST execute_code` | `token=&code=<one G-code line>` |
-| `POST upload` | multipart `token`, `file` — store a file (< 20 MiB) |
-| `POST sliceUpload` | chunked store: `index` (1-based), `count`, `md5` (whole file), `size`, `filename`, `file` (2 MiB chunk) |
-| `POST override_nozzle_temperature`, `override_bed_temperature`, `override_work_speed`, `override_z_offset`, `override_laser_power` | live adjustments |
-| other | `setSystemTime`, `print_file`, `filament_load`/`filament_unload`, camera endpoints |
+| `POST connect` | ✅ needs `token=` (empty token rejected) → `{"token":…,"readonly":true,"series":"IVI Printer","headType":1,"hasEnclosure":true}` |
+| `POST disconnect`, `POST setSystemTime` | ✅ work |
+| `GET status?token=` | ⚠️ only ever returns `{"status":"IDLE"}` — no temps/progress, even while printing from the touch screen |
+| `POST execute_code` | ✅ `token=&code=<one G-code line>` (e.g. `M503`) |
+| `POST upload` | ✅ multipart `token`, `file` → 201 "Upload successfully" (file then started from the touch screen) |
+| `POST sliceUpload` | ⚠️ exists; returns 412 `md5 err` unless the md5 field is right. Fields: `index`, `count`, `md5`, `size`, `filename`, `file` (2 MiB chunks) |
+| `prepare_print`, `start_print`, `pause_print`, `resume_print`, `stop_print` | ❌ **404 on this firmware** |
+| `confirm`, `accept`, `set_readonly`, `readonly` | ❌ 404 |
+
+The session is always `readonly:true`. Adding `readonly=false`, `readOnly=0`, `isReadOnly=false`, `confirm=1` or `accept=1` to
+`connect` changes nothing, and no known request clears it (on Snapmaker it clears via an accept prompt on the touch screen).
+The slicer never checks the flag. IVI 3licer's Wi-Fi **Run** does `execute_code` (G53/G0/G54/G92) → upload → `prepare_print`
+(404) and then silently fails. **Wi-Fi workaround: use Send, then start the job on the touch screen.**
+
+> **Future firmware:** this is a beta unit and the Wi-Fi API looks unfinished. A later official or **custom firmware may
+> enable the print-control endpoints over Wi-Fi** — re-test them after any firmware update.
+
+**USB serial (works, verified 2026-11-01):** USB-C CDC at 115200 baud. The printer reports Firmware V1.3.2-alpha, Tool Head
+FW V1.1, HW V1, `Head 3DP,0.3mm`. Start a PC job with `M2411 S2` (plus `M1001 L` if firmware ≥ 2.4.0) → `PC start work` /
+`trigger work: ok`, state `WORKING_PC`; then stream G-code line by line, one per `ok`. `M2410` pause, `M2411 S1` resume,
+`M2411 S3` rejoin a running job. An FDM print was started this way from IVI 3licer (G53, G28, M82, M104 S215, M140 S50,
+M109 S215 with `busy: processing` while heating, then printing). On macOS, allow the slicer under **Privacy & Security →
+Local Network**, or Wi-Fi requests fail with "No route to host".
 
 The stock slicer prepends a `;Header Start … ;Header End` block to jobs (see `docs/slicer_report.md`). Laser jobs are `.nc`
-(`M3 S…` power), CNC jobs are `.cnc` (`M3 S…` spindle).
+(`M3 S…` power), CNC jobs are `.cnc` (`M3 S…` spindle). The laser/CNC header and power scale are **not yet verified** on
+hardware (plan: capture a small test job from IVI 3licer over USB).
 
 ## Firmware findings (summary)
 
@@ -119,8 +134,8 @@ bootloader) with an ST-Link on the SWD pads.
 
 ## Status and roadmap
 
-- ✅ Wi-Fi API, discovery, serial link, and update format documented; command-line client working from the same endpoints the stock slicer uses.
-- ⏳ **Orca Slicer bridge (idea):** a small local service that looks like an OctoPrint server to Orca and forwards jobs to `prepare_print` + `start_print`. Orca would use a delta profile built from the M665 values above. Snapmaker Luban can't be used directly: it only connects to Snapmaker machines.
+- ✅ Discovery, serial link, and update format documented. Wi-Fi API tested: upload/execute_code work; print control is 404 on current firmware (USB serial works).
+- ⏳ **Orca Slicer bridge (idea):** a small local service that looks like an OctoPrint server to Orca and streams jobs over **USB serial** (`M2411 S2` + line-by-line G-code); Wi-Fi can only upload until firmware enables print control. Orca would use a delta profile built from the M665 values above. Snapmaker Luban can't be used directly: it only connects to Snapmaker machines.
 - 🔍 **Modern Marlin:** feasible but a big job. The delta motion, pins and endstops port directly; the smart-driver UART link, CAN tool-head link (including hotend temperature control via the head) and touchscreen compatibility must be written. Estimate **~3–5 weeks for FDM-only, ~2–3 months** for full laser/CNC/UI parity. Open items need hardware: mapping driver UART pads to STM32 pins (multimeter), bed/`FAN24V` switching, full CAN frame meanings (CANable capture), bootloader behaviour (SWD backup).
 - ❓ The HTTP server binary on the Linux side hasn't been recovered yet. Next step: try the `UGUART` console pads with a 3.3 V USB-serial adapter (see [docs/mainboard.md](docs/mainboard.md)).
 

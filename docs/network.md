@@ -14,6 +14,18 @@ About 12k ports actively refused; ~53k gave no response. That pattern often mean
 
 USB-C is **not** a network path: it enumerates as CDC serial (`/dev/cu.usbmodem…`) straight to Marlin at 115200 8N1.
 
+## HTTP API test results (2026-11-01)
+
+- Works: `connect` (token required; returns `readonly:true`, `series:"IVI Printer"`, `headType:1`, `hasEnclosure:true`), `setSystemTime`, `status` (only `{"status":"IDLE"}`), `execute_code`, `disconnect`, `upload` (201).
+- `sliceUpload` exists (412 `md5 err` without a correct md5; fields `index,count,md5,size,filename,file`, 2 MiB chunks).
+- **404:** `prepare_print`, `start_print`, `pause_print`, `resume_print`, `stop_print`, `confirm`, `accept`, `set_readonly`, `readonly`.
+- No known request clears read-only (extra `readonly=false`/`readOnly=0`/`isReadOnly=false`/`confirm=1`/`accept=1` on connect do nothing).
+- IVI 3licer 1.6.2 Wi-Fi Run: `execute_code` (G53/G0/G54/G92) → upload → `prepare_print` 404 → silent failure. Workaround: Send, then start on the touch screen.
+- macOS: allow the slicer in **Local Network** privacy settings, otherwise "No route to host".
+- Beta firmware likely ships an unfinished API. **Future official or custom firmware may enable these endpoints over Wi-Fi** — re-test after updates.
+
+USB serial is the working control path: `M2411 S2` (+ `M1001 L` if fw ≥ 2.4.0) starts a PC job (`WORKING_PC`), G-code streamed per `ok`; `M2410` pause, `M2411 S1` resume, `M2411 S3` rejoin. Verified with an FDM print on 2026-11-01. See README.
+
 ## How to get a shell anyway
 
 1. **`UGUART_RX` / `UGUART_TX`** (likely A33 Linux console) — 3.3 V USB-TTL; see [tools.md](tools.md) and [mainboard.md](mainboard.md).

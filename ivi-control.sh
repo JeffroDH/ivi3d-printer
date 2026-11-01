@@ -8,6 +8,8 @@
 #   connect                  POST /api/v1/connect (may need confirming on the printer screen)
 #   disconnect               POST /api/v1/disconnect
 #   status                   GET  /api/v1/status
+#   NOTE (tested 2026-11-01): print/prepare/start/pause/resume/stop return 404 on current beta firmware;
+#   use upload, then start on the touch screen, or USB serial (M2411 S2). Future firmware may enable them.
 #   print <file> [type]      prepare_print (uploads the file) then start_print; type = 3DP|Laser|CNC (default 3DP)
 #   prepare <file> [type]    prepare_print only (upload + load, do not start)
 #   start|pause|resume|stop  start_print / pause_print / resume_print / stop_print

@@ -18,6 +18,9 @@ Bundle: `IVI 3licer.app/Contents/Resources/app/` (unpacked Electron app, no asar
 - `this.port = a || 8080`, so the base URL is **`http://<ip>:8080`**. Requests use form-urlencoded bodies (superagent `.send("k=v")`) or multipart forms.
 - **Default token** (set in `_stateInit`): `e0cf19a3-e0a4-4740-825f-bdffb49e58b8`.
 
+
+> **Tested 2026-11-01:** on the beta firmware `prepare_print`, `start_print`, `pause_print`, `resume_print` and `stop_print` return **404**, and `status` only returns `{"status":"IDLE"}`. Only connect/disconnect/setSystemTime/execute_code/upload work over Wi-Fi; use USB serial (`M2411 S2`) to run jobs. Future official or custom firmware may enable these endpoints. See README.
+
 | Action | Request |
 |---|---|
 | connect | POST `/api/v1/connect`, body `token=<tok>` (empty on first connect). If the response is 403, it retries with no token. The response JSON includes `token`, `series`, `headType`. The user may need to confirm on the printer screen; the first successful status call confirms. |

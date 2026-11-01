@@ -105,6 +105,9 @@ Camera helpers also hardcode `:8080`.
 
 ### 1.3 HTTP API (`/api/v1/…`) — print-job control path for Orca
 
+> **Tested 2026-11-01:** on the beta firmware `prepare_print`, `start_print`, `pause_print`, `resume_print` and `stop_print` return **404**, and `status` only returns `{"status":"IDLE"}`. Only connect/disconnect/setSystemTime/execute_code/upload work over Wi-Fi; use USB serial (`M2411 S2`) to run jobs. Future official or custom firmware may enable these endpoints. See README.
+
+
 Auth: session **token** query/body field. Default bootstrap token above; `POST /api/v1/connect` returns `{ token, series, headType, … }`. Reuse returned token. `403` on connect with a stale token → retry connect with empty token. `POST /api/v1/disconnect` with `token=…`.
 
 | Method | Path | Purpose |
