@@ -2,3 +2,4 @@
 .DS_Store
 *Non Disclosure Agreement*
 ._*
+__pycache__/
