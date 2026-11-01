@@ -137,3 +137,5 @@ Original work in this repo (documentation, scripts, `supx_pack.py`) is licensed 
 **Not covered by the license:** the firmware files in `firmware/`, material extracted from IVI's installers, and the
 `Beta Test Program/` documents are IVI's material. They are included here for preservation and interoperability
 because the company no longer exists.
+
+- Orca Slicer bridge plan: see [docs/orca_bridge.md](docs/orca_bridge.md)
