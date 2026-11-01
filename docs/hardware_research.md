@@ -29,13 +29,22 @@ The Wayback Machine listed `ivi3d.com` images named like `mcu-*.jpg`, `closed-lo
 `https://web.archive.org/cdx/search/cdx?url=ivi3d.com&matchType=domain&filter=original:.*(mcu|closed-loop|sensors).*`
 
 ## Open questions
-- Which pins drive the heater, fans, and outputs, and which pin pairs the driver UARTs are remapped to (see `supx_decompile_report.md` §8)
-- The head connector pinout and pitch, and the full CAN message set (needs a CAN capture)
-- Whether STM32 readout protection is enabled (SWD pads now located, see mainboard.md)
-- Confirm the likely A33 console pads `UGUART_RX/TX` (found, untested; see mainboard.md)
-- What `INP/INN` measures (load cell for probing? **[G]**) and why each axis has both `LIMITSW_` and `LIMIT_` pads
-- Part numbers of the 8-pin SOIC near the SWD pads and the QFN by the second SWD port (second MCU? **[G]**)
-- Resolved: all four driver connectors (X, Y, Z, F = extruder) and the CAN+/CAN- head cable are now photo-confirmed, see mainboard.md
+Photos answered the big architecture questions (see [mainboard.md](mainboard.md)). What is left is mostly pin-level and protocol work:
+
+**Resolved by board photos**
+- Hotend heater, head fan, laser, and spindle are **on the toolhead**, driven by the head MCU over **CAN** — there is no hotend MOSFET expected on the main board
+- Main-board power rails labeled: `VCCIN24V`, `BEDVCC24V` (heated bed supply), `FAN24V` (chassis/system fan rail), `HEADVCC24V` with `CAN+`/`CAN-`
+- `BEDTEMP` is the bed thermistor input; `INP`/`INN` is a differential input (likely the load cell, firmware `M2049`)
+- Four driver boards (`MTX`/`MTY`/`MTZ`/`MTF`) each have their own UART pads; SWD and likely `UGUART` console pads are located
+
+**Still open**
+- Which **STM32 pins** the driver UARTs, bed heater switch, and `FAN24V` control map to (needs a multimeter continuity check from pads to the MCU; see `supx_decompile_report.md` §8)
+- Whether bed heat is switched on this board (MOSFET/relay on `BEDVCC24V`) or elsewhere on a power PCB
+- Head connector pinout and pitch; full CAN message set (needs a CAN capture)
+- STM32 readout protection (SWD pads located, not yet probed)
+- Confirm `UGUART_RX`/`UGUART_TX` is the A33 console (found, untested)
+- Why each axis has both `LIMITSW_` and `LIMIT_` pads
+- Part numbers of the 8-pin SOIC near SWD and the QFN by the second SWD port
 
 ## Contributing board photos
 If you own an IVI, please open an issue or PR with:
