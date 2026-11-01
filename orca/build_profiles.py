@@ -161,6 +161,14 @@ EXTRA_FILAMENTS = [
 ]
 FILAMENTS = [filament] + EXTRA_FILAMENTS
 
+# Printer limits (touchscreen presets): nozzle up to 270 C, bed up to 100 C. Clamp every filament to them.
+MAX_NOZZLE, MAX_BED = 270, 100
+for _f in FILAMENTS:
+    for _k, _v in list(_f.items()):
+        if not (isinstance(_v, list) and _v and isinstance(_v[0], str) and _v[0].isdigit()): continue
+        if _k.startswith("nozzle_temperature"): _f[_k] = [str(min(int(_v[0]), MAX_NOZZLE))]
+        elif _k.endswith("plate_temp") or _k.endswith("plate_temp_initial_layer"): _f[_k] = [str(min(int(_v[0]), MAX_BED))]
+
 def write(sub, obj):
     os.makedirs(os.path.join(D, sub), exist_ok=True)
     p = os.path.join(D, sub, obj["name"] + ".json")

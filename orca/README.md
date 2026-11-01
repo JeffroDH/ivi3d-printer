@@ -85,7 +85,7 @@ Baseline: Anycubic's own OrcaSlicer vendor profiles (`resources/profiles/Anycubi
 | IVI3D SR-30 Soluble (EXPERIMENTAL) | 255 (260) | 100 | 0–20 % (3) | machine 6.5 mm | 4 | Stratasys / MakerBot SR-30 docs (support for ABS/ASA, ~250–260 °C class); assumed values |
 
 Caveats:
-- **ABS / ASA / SR-30:** enclosure strongly recommended (warping, fumes; ventilate). Bed 90–100 °C: the IVI bed's max temperature is not yet verified; if it can't reach it, use the highest stable value plus a brim/adhesive.
+- **ABS / ASA / SR-30:** enclosure strongly recommended (warping, fumes; ventilate). Bed 90–100 °C (the IVI supports bed up to 100 °C and nozzle up to 270 °C per its touchscreen presets; `build_profiles.py` clamps all filament temps to these limits).
 - **PCTG / PETG:** stick very hard to smooth PEI/glass; use glue stick as a release agent.
 - **TPU 95A:** keep slow (≈15–20 mm/s; 1.5 mm³/s cap enforces this). If the extruder path is Bowden, TPU may buckle — test first.
 - **SR-30:** NOT PVA. Stratasys alkaline-soluble terpolymer, dissolved in a heated NaOH bath (~70 °C, Stratasys/MakerBot). Single nozzle means it can't be support under another material here; whole-part tests only. Hygroscopic: dry before use. Values are untested guesses.
