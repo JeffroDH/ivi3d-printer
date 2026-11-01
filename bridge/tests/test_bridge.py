@@ -365,4 +365,79 @@ class MonitorApiTests(OctoPrintApiTests):
         with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
         for s in ("Toolhead", "Filament", "M220 S", "M221 S", "min-width:1100px"): self.assertIn(s, page)
 
+class HeatingSerial(MonitorSerial):
+    """Nozzle warms 60 °C per M105 toward the M104 target."""
+    def __init__(self):
+        super().__init__(); self.actual = 25.0; self.hold = False
+    def write(self, b):
+        for cmd in b.decode().split("\n"):
+            cmd = cmd.strip()
+            if cmd == "M105":
+                self.written.append(cmd)
+                if not self.hold: self.actual = min(self.t, self.actual + 60) if self.t > self.actual else self.actual
+                self.out.append("ok T:%.1f /%.1f B:25.0 /0.0" % (self.actual, self.t))
+            elif cmd: MonitorSerial.write(self, (cmd + "\n").encode())
+
+class FilamentTests(unittest.TestCase):
+    def setUp(self):
+        self.cfg = dict(B.DEFAULT_CONFIG, notify=False, filament_poll_s=0.01)
+        self.hs = HeatingSerial(); self.b = B.Bridge(self.cfg, serial_factory=lambda: self.hs); self.b.monitor.poll_once()
+    def wait(self, *states):
+        for _ in range(500):
+            if self.b.filament.state in states: return
+            time.sleep(0.01)
+        self.fail(self.b.filament.info())
+    def moves(self):
+        return [c for c in self.hs.written if c[:2] in ("M8", "G1")]
+    def test_default_extrude(self): self.assertEqual(B.DEFAULT_CONFIG["filament_load"], "extrude")
+    def test_unload(self):
+        self.b.start_filament("unload", 240); self.wait("done")
+        self.assertIn("M104 S240", self.hs.written); self.assertNotIn("M109", " ".join(self.hs.written))
+        self.assertEqual(self.moves(), ["M83", "G1 E10 F300", "G1 E-100 F1500", "M82"])
+        i = self.hs.written.index("M83"); self.assertGreaterEqual(self.hs.actual, 237)
+        self.assertGreater(self.hs.written[:i].count("M105"), 3)   # polled while heating
+    def test_load_custom_length(self):
+        self.cfg["filament_load_mm"] = 80; self.b.start_filament("load", 215); self.wait("done")
+        self.assertEqual(self.moves(), ["M83", "G1 E80 F300", "M82"])
+    def test_cancel_while_heating(self):
+        self.hs.hold = True; self.b.start_filament("load", 250); time.sleep(0.05)
+        self.assertEqual(self.b.filament.state, "heating"); self.b.filament.cancel(); self.wait("cancelled")
+        self.assertEqual(self.moves(), [])
+    def test_timeout_and_bad_input(self):
+        self.hs.hold = True; self.cfg["filament_heat_timeout_s"] = 0.05
+        self.b.start_filament("load", 250); self.wait("error"); self.assertIn("did not reach", self.b.filament.error)
+        for a, t in (("eat", 200), ("load", 400), ("load", 20)):
+            with self.assertRaises(ValueError): self.b.start_filament(a, t)
+    def test_no_usb_error(self):
+        b = B.Bridge(self.cfg, serial_factory=lambda: (_ for _ in ()).throw(RuntimeError("no port")))
+        b.start_filament("load", 210)
+        for _ in range(200):
+            if b.filament.state == "error": break
+            time.sleep(0.01)
+        self.assertEqual(b.filament.state, "error")
+    def test_m701_option(self):
+        self.cfg["filament_load"] = "m701"; self.b.start_filament("unload", 210); self.wait("done")
+        self.assertIn("M702", self.hs.written)
+
+class FilamentApiTests(MonitorApiTests):
+    test_auto_print_true_uploads_over_wifi_only = test_live_status = test_octoprint_control_endpoints = None
+    test_pause_resume_screen_job_over_usb = test_no_usb_controls_fail_gracefully = test_allowlist_new_codes = None
+    test_position_and_jog = test_page_matches_touchscreen_spec = test_page_has_panels = None
+    test_version_and_key = test_duplicated_key_header = test_wifi_upload = test_status_page_no_key_needed = None
+    test_auto_mode_picks_usb_when_present = None
+    def test_api_flow_and_page(self):
+        self.cfg["filament_poll_s"] = 0.01; self.cfg["filaments"] = [["PLA", 215], ["PETG", 240]]
+        self.ms.__class__ = HeatingSerial; self.ms.actual = 25.0; self.ms.hold = False
+        self.assertEqual(self.req("/api/ivi/filament")[1]["state"], "idle")
+        st, j = self.req("/api/ivi/filament", json.dumps({"action": "load", "temp": 215}).encode())
+        self.assertEqual(j["target"], 215)
+        for _ in range(300):
+            if self.req("/api/ivi/filament")[1]["state"] == "done": break
+            time.sleep(0.01)
+        self.assertEqual(self.req("/api/ivi/filament")[1]["state"], "done")
+        with self.assertRaises(urllib.error.HTTPError) as e: self.req("/api/ivi/filament", json.dumps({"action": "load", "temp": 999}).encode())
+        self.assertEqual(e.exception.code, 400)
+        with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
+        self.assertIn('[["PLA", 215], ["PETG", 240]]', page); self.assertIn("Heating…", page); self.assertIn("Custom", page)
+
 if __name__ == "__main__": unittest.main()

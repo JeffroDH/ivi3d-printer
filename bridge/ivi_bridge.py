@@ -18,9 +18,13 @@ VERSION = "0.1.0"
 DEFAULT_CONFIG = {
     "mode": "auto",                     # uploads: "auto"/"wifi" = Wi-Fi upload (default); "serial" = USB streaming
     "serial_monitor": True,             # use the USB port (if free) for live status + temp/speed controls
-    "monitor_interval_s": 3,
-    "filament_load": "m701",            # Load/Unload buttons: "m701" (M701/M702) or "extrude" (E moves)
-    "filament_load_mm": 100,            # length for "extrude" load/unload (<=150)            # M105/M2007 poll period of the monitor
+    "monitor_interval_s": 3,            # M105/M114/M2007 poll period of the monitor
+    "filament_load": "extrude",         # Load/Unload: "extrude" (heat, then E moves) or "m701" (M701/M702 - IGNORED by fw V1.3.2-alpha)
+    "filament_load_mm": 100,            # load/unload length (<=150)
+    "filaments": [["PLA", 210], ["PETG", 240], ["ABS", 250], ["TPU", 225], ["PCTG", 250]],  # picker [name, nozzle °C]
+    "filament_tolerance_c": 3,          # start moving once the nozzle is within this of target
+    "filament_heat_timeout_s": 900,
+    "filament_poll_s": 1,
     "notify": True,                     # macOS notifications via osascript
     "caffeinate": True,                 # keep the Mac awake during USB jobs
     "printer_host": "192.168.50.85",
@@ -555,6 +559,54 @@ class SerialMonitor:
             self.ser.write((c + "\n").encode()); self.last_cmd = c
         log("monitor: sent", c); return c
 
+class FilamentChange:
+    """Touch-screen style load/unload: M104 S<t>, poll temps (no blocking M109, so the monitor keeps
+    running) until within tolerance, then M83 + E moves + M82. States: heating, moving, done, cancelled, error."""
+    def __init__(self, bridge, action, temp, clock=time.monotonic):
+        self.b, self.action, self.temp, self.clock = bridge, action, temp, clock
+        self.state, self.error, self.actual = "heating", None, None
+        self._cancel = threading.Event(); self.thread = None
+
+    def info(self):
+        return {"action": self.action, "target": self.temp, "actual": self.actual, "state": self.state, "error": self.error}
+
+    def cancel(self): self._cancel.set()
+
+    def moves(self):
+        n = float(self.b.cfg.get("filament_load_mm", 100))
+        if self.action == "unload":
+            return ["M83", "G1 E10 F300", "G1 E-%g F1500" % n, "M82"]
+        return ["M83", "G1 E%g F300" % n, "M82"]
+
+    def start(self):
+        self.thread = threading.Thread(target=self.run, daemon=True); self.thread.start()
+
+    def run(self):
+        cfg, mon = self.b.cfg, self.b.monitor
+        try:
+            if self.b.cfg.get("filament_load") == "m701":
+                self.state = "moving"; self.b.send_command("M104 S%d" % self.temp)
+                self.b.send_command("M701" if self.action == "load" else "M702"); self.state = "done"; return
+            self.b.send_command("M104 S%d" % self.temp)
+            tol = float(cfg.get("filament_tolerance_c", 3)); end = self.clock() + float(cfg.get("filament_heat_timeout_s", 900))
+            while True:
+                if self._cancel.is_set():
+                    self.state = "cancelled"; return
+                if mon and not (mon.thread and mon.thread.is_alive()): mon.poll_once()   # no monitor thread (tests/CLI)
+                t = self.b.live_status().get("temps", {}).get("tool0")
+                if t: self.actual = t["actual"]
+                if self.actual is not None and abs(self.actual - self.temp) <= tol: break
+                if self.clock() > end: raise TimeoutError("nozzle did not reach %d °C in time" % self.temp)
+                if mon and not mon.connected: raise RuntimeError("USB disconnected while heating")
+                self._cancel.wait(float(cfg.get("filament_poll_s", 1)))
+            self.state = "moving"
+            for c in self.moves():
+                if self._cancel.is_set(): self.state = "cancelled"; return
+                self.b.send_command(c)
+            self.state = "done"
+        except Exception as e:
+            self.state, self.error = "error", str(e); log("filament:", e)
+
 # ------------------------------------------------- OctoPrint emulation ----
 class Bridge:
     def __init__(self, cfg, wifi_factory=None, serial_factory=None, awake_factory=None):
@@ -566,6 +618,7 @@ class Bridge:
         self.job = None; self.thread = None; self.last_file = None
         self.lock = threading.Lock()
         self.monitor = SerialMonitor(cfg, self.serial_factory) if cfg.get("serial_monitor", True) else None
+        self.filament = None
 
     def send_command(self, cmd):
         """Temp/speed/flow etc. over USB: through the streaming job if one runs, else the monitor."""
@@ -574,6 +627,15 @@ class Bridge:
             self.job._write(c); return c
         if not self.monitor: raise RuntimeError("serial_monitor is off")
         return self.monitor.send(c)
+
+    def start_filament(self, action, temp):
+        if action not in ("load", "unload"): raise ValueError("action must be load or unload")
+        temp = int(round(float(temp)))
+        if not 150 <= temp <= 300: raise ValueError("temperature must be 150-300 °C")
+        if self.busy(): raise RuntimeError("a USB job is running")
+        f = self.filament
+        if f and f.state in ("heating", "moving"): raise RuntimeError("a filament change is already running")
+        self.filament = FilamentChange(self, action, temp); self.filament.start(); return self.filament.info()
 
     def live_status(self):
         if self.busy(): return self.job.status
@@ -706,6 +768,12 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
 .tabs{display:flex;position:sticky;bottom:0;background:#fff;border-top:1px solid #c9d7ee}
 .tabs button{flex:1;background:#fff;color:var(--b);font-size:20px;padding:.6em}.tabs button.on{background:var(--sel)}
 .note{font-size:12px;color:#789;padding:0 1em 1em}
+.dlg{position:fixed;inset:0;background:rgba(20,40,80,.35);align-items:center;justify-content:center;z-index:9}
+.box{background:#fff;border-radius:12px;width:min(560px,92vw);box-shadow:0 10px 40px rgba(0,0,40,.3)}
+.fgrid2{display:grid;grid-template-columns:repeat(3,1fr);gap:.6em}.fbtn{background:var(--lb);color:var(--t);border-radius:10px;padding:.8em;display:flex;flex-direction:column;align-items:center;font-size:17px}
+.fbtn span{font-size:14px;color:#456}.fbtn:hover{background:var(--sel)}
+.hs{text-align:center;font-size:22px;color:var(--t);margin-bottom:.8em}.hs.done{color:#1a8a3a}.hs.error{color:#c22}
+.hbar{height:14px;background:#e3ebf7;border-radius:7px;overflow:hidden;margin-bottom:.6em}.hbar>div{height:100%;background:var(--b);width:0;transition:width .5s}
 @media (min-width:1100px){.tabs{display:none}.panels{display:grid;grid-template-columns:1fr 1fr;gap:2em}
 .panel{display:block;border:1px solid #d3e0f3;border-radius:10px;padding:1em}}
 </style>
@@ -731,7 +799,7 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
  <button title="M2411 S3: clear a stuck/paused PC job" onclick="if(confirm('Clear a stuck job on the printer (M2411 S3)?'))fetch('/api/ivi/clear',{method:'POST',headers:H}).then(r=>r.json()).then(j=>say(j.message||j.error))">Clear stuck job</button></div>
 </div>
 <div class=panel id=p_fil><h3>Filament</h3>
-<div class=two><button class="big u" onclick="load(1)">Load Filament</button><button class="big u" onclick="load(-1)">Unload Filament</button></div>
+<div class=two><button class="big u" onclick="pick('load')">Load Filament</button><button class="big u" onclick="pick('unload')">Unload Filament</button></div>
 <div class=fgrid>
  <div><div class=lbl>Nozzle</div><div class=val id=nzv>–</div></div>
  <div class=opts data-g=nz data-c=M104><button>210°C</button><button>240°C</button><button>270°C</button><button class=pm data-d=-5>-</button><button class=pm data-d=5>+</button></div>
@@ -744,9 +812,17 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
  <div class=lbl>Jog Distance<br>(mm)</div><div class=opts data-g=fdst><button class=sel>10</button><button>20</button><button>50</button><button>100</button></div>
 </div></div>
 </div>
-<p class=note id=msg>Controls need USB. M104/M140/M220/M221, G1 jogs, M701/M702 load/unload and M106/M107 fan are standard Marlin and not yet verified on this firmware.</p>
+<p class=note id=msg>Controls need USB. Speed % (M220) and flow % (M221) are not yet verified on this firmware.</p>
 <div class=tabs><button id=t_tool class=on onclick="tab('tool')">Toolhead</button><button id=t_fil onclick="tab('fil')">Filament</button></div>
-<script>const K=__KEY__,LOAD=__LOAD__,LOADMM=__LOADMM__,H={'X-Api-Key':K,'Content-Type':'application/json'};let T={},fanOn=false;
+<div id=dlg class=dlg style="display:none"><div class=box><div class=top style="border-radius:12px 12px 0 0">
+<span id=mt>Filament</span></div><div style="padding:1.2em">
+<div id=v_pick><p class=lbl>Which filament is loaded?</p><div id=fp class=fgrid2></div>
+<div style="display:flex;gap:.6em;align-items:center;margin-top:1em">Custom <input id=fcu type=number min=150 max=300 value=220 style="width:5em;font:inherit;padding:.4em;border:1px solid #bcd;border-radius:6px"> °C
+<button class=btn onclick="run(+fcu.value)">Start</button><span style="flex:1"></span><button class=lite style="width:auto" onclick="fclose()">Close</button></div></div>
+<div id=v_heat style="display:none"><div id=hs class=hs>Heating…</div><div class=hbar><div id=hb></div></div><div id=ht class=val style="text-align:center">–</div>
+<div style="display:flex;justify-content:center;gap:.8em;margin-top:1.2em"><button id=fc class=btn onclick="fcancel()">Cancel</button><button id=fk class=btn style="display:none" onclick="fclose()">OK</button></div></div>
+</div></div></div>
+<script>const K=__KEY__,FIL=__FIL__,H={'X-Api-Key':K,'Content-Type':'application/json'};let T={},fanOn=false;
 function tab(t){for(const n of['tool','fil']){document.getElementById('t_'+n).classList.toggle('on',n==t);document.getElementById('p_'+n).classList.toggle('on',n==t)}}
 tab('tool');
 function say(m){msg.textContent=m}
@@ -759,7 +835,20 @@ async function g(cs){const r=await fetch('/api/printer/command',{method:'POST',h
  say(r.ok?'Sent '+cs.join(' · '):'Failed: '+((await r.json().catch(()=>({}))).error||r.status));setTimeout(tick,300)}
 function jog(a,s){g(['G91','G1 '+a+(s*sel('tdst'))+' F'+sel('tspd'),'G90'])}
 function ext(s){g(['M83','G1 E'+(s*sel('fdst'))+' F'+sel('fspd'),'M82'])}
-function load(s){if(LOAD=='m701')g([s>0?'M701':'M702']);else g(['M83','G1 E'+(s*LOADMM)+' F'+sel('fspd'),'M82'])}
+let FA=null,FT=null;
+function pick(a){FA=a;mt.textContent=(a=='load'?'Load':'Unload')+' Filament';fp.innerHTML='';
+ FIL.forEach(([n,t])=>{const b=document.createElement('button');b.className='fbtn';b.innerHTML='<b>'+n+'</b><span>'+t+'°C</span>';b.onclick=()=>run(t);fp.appendChild(b)});
+ fv('pick');dlg.style.display='flex'}
+function fv(v){for(const k of['pick','heat'])document.getElementById('v_'+k).style.display=k==v?'block':'none'}
+async function run(t){const r=await fetch('/api/ivi/filament',{method:'POST',headers:H,body:JSON.stringify({action:FA,temp:t})});
+ const j=await r.json();if(!r.ok){say('Failed: '+j.error);return}fv('heat');show(j);clearInterval(FT);FT=setInterval(fpoll,1000)}
+async function fpoll(){show(await (await fetch('/api/ivi/filament',{headers:H})).json())}
+function show(j){const a=j.actual,t=j.target,pct=a==null?0:Math.max(0,Math.min(100,100*a/t));
+ hb.style.width=pct+'%';ht.textContent=(a==null?'–':Math.round(a))+'°C / '+t+'°C';
+ hs.textContent={heating:'Heating…',moving:(j.action=='load'?'Loading…':'Unloading…'),done:'Done',cancelled:'Cancelled',error:'Error: '+j.error}[j.state]||j.state;
+ hs.className='hs '+j.state;const fin=['done','cancelled','error'].includes(j.state);fc.style.display=fin?'none':'';fk.style.display=fin?'':'none';if(fin)clearInterval(FT)}
+async function fcancel(){await fetch('/api/ivi/filament',{method:'POST',headers:H,body:JSON.stringify({action:'cancel'})});fpoll()}
+function fclose(){dlg.style.display='none';clearInterval(FT)}
 function fanT(){fanOn=!fanOn;fan.classList.toggle('on',fanOn);g([fanOn?'M106 S255':'M107'])}
 async function cmd(c,a){const r=await fetch('/api/job',{method:'POST',headers:H,body:JSON.stringify({command:c,action:a})});say(r.ok?c+' sent':'Failed: '+((await r.json()).error||r.status));tick()}
 async function tick(){try{const j=await (await fetch('/api/job',{headers:H})).json(),p=await (await fetch('/api/printer',{headers:H})).json();
@@ -775,8 +864,8 @@ tick();setInterval(tick,2000)</script>"""
 
 def status_page(cfg):
     m = "USB streaming" if upload_mode(cfg) == "serial" else "Wi-Fi (start on the touch screen)"
-    return PAGE.replace("__MODE__", html.escape(m)).replace("__LOAD__", json.dumps(cfg.get("filament_load", "m701"))).replace(
-        "__LOADMM__", json.dumps(float(cfg.get("filament_load_mm", 100)))).replace(
+    fil = [[str(n), int(t)] for n, t in cfg.get("filaments") or DEFAULT_CONFIG["filaments"]]
+    return PAGE.replace("__MODE__", html.escape(m)).replace("__FIL__", json.dumps(fil).replace("<", "\\u003c")).replace(
         "__KEY__", json.dumps(cfg.get("api_key", "")).replace("<", "\\u003c"))
 
 def octo_printer_cmds(path, cmd):
@@ -816,6 +905,8 @@ def make_handler(bridge):
         def do_GET(self):
             p = self.path.split("?")[0]
             if p not in ("/", "/index.html") and not self._auth(): return
+            if p == "/api/ivi/filament":
+                return self._json(200, bridge.filament.info() if bridge.filament else {"state": "idle"})
             if p == "/api/version":
                 return self._json(200, {"api": "0.1", "server": "1.9.0", "text": f"OctoPrint (ivi-bridge {VERSION})"})
             if p == "/api/server":
@@ -844,6 +935,15 @@ def make_handler(bridge):
             n = int(self.headers.get("Content-Length", 0)); body = self.rfile.read(n)
             if p in ("/api/files/local", "/api/files/sdcard"):
                 return self._upload(body)
+            if p == "/api/ivi/filament":
+                try: cmd = json.loads(body or b"{}")
+                except ValueError: return self._json(400, {"error": "bad json"})
+                if cmd.get("action") == "cancel":
+                    if bridge.filament: bridge.filament.cancel()
+                    return self._json(200, bridge.filament.info() if bridge.filament else {"state": "idle"})
+                try: return self._json(200, bridge.start_filament(cmd.get("action"), cmd.get("temp", 0)))
+                except (ValueError, TypeError) as e: return self._json(400, {"error": str(e)})
+                except Exception as e: return self._json(409, {"error": str(e)})
             if p == "/api/ivi/clear":
                 try: return self._json(200, {"message": bridge.clear_printer()})
                 except Exception as e: return self._json(409, {"error": str(e)})
