@@ -1,0 +1,89 @@
+echo:  G21    ; Units in mm (mm)
+
+echo:; Filament settings: Disabled
+echo:  M200 S0 D1.75
+echo:; Steps per unit:
+echo: M92 X800.00 Y800.00 Z800.00 E1150.00
+echo:; Maximum feedrates (units/s):
+echo:  M203 X500.00 Y500.00 Z500.00 E100.00
+echo:; Maximum Acceleration (units/s2):
+echo:  M201 X3000.00 Y3000.00 Z3000.00 E1000.00
+echo:; Acceleration (units/s2): P<print_accel> R<retract_accel> T<travel_accel>
+echo:  M204 P1000.00 R1000.00 T3000.00
+echo:; Advanced: B<min_segment_time_us> S<min_feedrate> T<min_travel_feedrate> X<max_x_jerk> Y<max_y_jerk> Z<max_z_jerk> E<max_e_jerk>
+echo:  M205 B20000.00 S0.00 T0.00 X10.00 Y10.00 Z10.00 E5.00
+echo:; Auto Bed Leveling:
+echo:  M420 S0 Z0.00
+echo:  G29 W I0 J0 Z0.08005
+echo:  G29 W I1 J0 Z0.03613
+echo:  G29 W I2 J0 Z-0.04049
+echo:  G29 W I3 J0 Z-0.00937
+echo:  G29 W I4 J0 Z0.01107
+echo:  G29 W I5 J0 Z0.00015
+echo:  G29 W I6 J0 Z-0.03946
+echo:  G29 W I0 J1 Z-0.04064
+echo:  G29 W I1 J1 Z0.09038
+echo:  G29 W I2 J1 Z-0.03927
+echo:  G29 W I3 J1 Z0.03184
+echo:  G29 W I4 J1 Z0.01782
+echo:  G29 W I5 J1 Z-0.02632
+echo:  G29 W I6 J1 Z-0.02930
+echo:  G29 W I0 J2 Z-0.04042
+echo:  G29 W I1 J2 Z-0.07238
+echo:  G29 W I2 J2 Z0.01252
+echo:  G29 W I3 J2 Z-0.00542
+echo:  G29 W I4 J2 Z0.07535
+echo:  G29 W I5 J2 Z0.01948
+echo:  G29 W I6 J2 Z-0.07899
+echo:  G29 W I0 J3 Z0.08284
+echo:  G29 W I1 J3 Z-0.05564
+echo:  G29 W I2 J3 Z0.03352
+echo:  G29 W I3 J3 Z0.03297
+echo:  G29 W I4 J3 Z-0.07611
+echo:  G29 W I5 J3 Z-0.06055
+echo:  G29 W I6 J3 Z-0.02548
+echo:  G29 W I0 J4 Z0.06741
+echo:  G29 W I1 J4 Z0.06914
+echo:  G29 W I2 J4 Z0.01838
+echo:  G29 W I3 J4 Z0.09352
+echo:  G29 W I4 J4 Z0.02851
+echo:  G29 W I5 J4 Z0.15345
+echo:  G29 W I6 J4 Z0.03666
+echo:  G29 W I0 J5 Z0.14670
+echo:  G29 W I1 J5 Z0.21624
+echo:  G29 W I2 J5 Z0.14910
+echo:  G29 W I3 J5 Z0.15433
+echo:  G29 W I4 J5 Z0.15639
+echo:  G29 W I5 J5 Z0.29834
+echo:  G29 W I6 J5 Z0.30736
+echo:  G29 W I0 J6 Z0.30818
+echo:  G29 W I1 J6 Z0.35289
+echo:  G29 W I2 J6 Z0.42132
+echo:  G29 W I3 J6 Z0.35199
+echo:  G29 W I4 J6 Z0.28574
+echo:  G29 W I5 J6 Z0.29400
+echo:  G29 W I6 J6 Z0.48283
+echo:; Endstop adjustment:
+echo:  M666 X-0.03 Y-0.13 Z0.00
+echo:; Delta settings: L<diagonal rod> R<radius> H<height> S<segments per sec> XYZ<tower angle trim> ABC<rod trim>
+echo:  M665 L357.50 R160.31 H233.22 S200.00 X0.11 Y-0.07 Z-0.04 A0.00 B0.00 C0.00
+echo:; PID settings:
+echo:  M301 P22.20 I1.08 D114.00
+echo:; Z-Probe Offset (mm):
+echo:  M851 X0.00 Y0.00 Z-14.29
+echo:; Linear Advance:
+echo:  M900 K0.00
+echo:; Filament load/unload lengths:
+echo:  M603 L0.00 U100.00
+echo:; Filament runout sensor:
+echo:  M412 S1
+ok
+ T:25.63 /0.00 B:23.75 /0.00 @:0 B@:0
+X:0.00 Y:0.00 Z:230.00 E:0.00 Count A:439635 B:439635 C:439635
+Homed: NO
+Selected origin num: 0
+Selected == Current: YES
+Origin offset X: 0.00
+Origin offset Y: 0.00
+Origin offset Z: 0.00
+Working Status: IDLE
