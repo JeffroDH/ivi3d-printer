@@ -31,6 +31,8 @@ Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/mar
 - **Likely Linux console:** `UGUART_RX`/`UGUART_TX` pads near the A33 (3.3 V, probably 115200 8N1, untested). This is the most promising way to get a shell and back up the Linux side.
 - `INP`/`INN` differential input with its own analog supply, probably the load cell used for probing (firmware has `M2049` load cell), plus SD/eMMC lines, USB host pads, `BUTTON` and `LED_CTL`.
 
+**Tools for SWD and console access:** see [docs/tools.md](docs/tools.md).
+
 **Background research:** board history, magnetic-encoder motors, head ID chips, the 8-pad head connector, and product renders are in [docs/hardware_research.md](docs/hardware_research.md).
 
 ## Repo layout
