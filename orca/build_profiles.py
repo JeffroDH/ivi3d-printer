@@ -104,6 +104,23 @@ process = {
     "post_process": [],
 }
 
+# IVI 3licer 1.6.2 built-in quality defs for the 0.3 nozzle (resources/CuraEngine/Config/test/quality.(0.3).*.def.json).
+# Shell layer counts are derived like Cura does from thickness/layer (the files' default *_layers/wall_line_count are
+# stale defaults; the active Standard config showed 3 walls / 6 top / 4 bottom computed from thickness).
+def variant(name, layer, top_thick, top, bottom, walls, infill, outer, inner, fill, topbot, travel):
+    p = dict(process, name=name, print_settings_id=name, layer_height=str(layer),
+             wall_loops=str(walls), top_shell_layers=str(top), top_shell_thickness=str(top_thick),
+             bottom_shell_layers=str(bottom), sparse_infill_density=f"{infill}%",
+             outer_wall_speed=str(outer), inner_wall_speed=str(inner), sparse_infill_speed=str(fill),
+             internal_solid_infill_speed=str(fill), top_surface_speed=str(topbot), travel_speed=str(travel))
+    return p
+
+# fast_print(0.3): layer 0.2, top 0.9 / bottom 0.6 mm, wall 0.8 mm, 15 %, wall_0 50, wall_x 60, infill 80, topbottom 40, travel 100
+fast = variant("IVI3D 0.20mm Fast", 0.2, 0.9, 5, 3, 3, 15, 50, 60, 80, 40, 100)
+# high_quality(0.3): layer 0.1, top 1.2 / bottom 0.6 mm, wall 0.8 mm, 20 %, wall_0 30, wall_x 45, infill 50, topbottom 30, travel 60
+hq = variant("IVI3D 0.10mm High Quality", 0.1, 1.2, 12, 6, 3, 20, 30, 45, 50, 30, 60)
+PROCESSES = [process, fast, hq]
+
 def write(sub, obj):
     os.makedirs(os.path.join(D, sub), exist_ok=True)
     p = os.path.join(D, sub, obj["name"] + ".json")
@@ -111,14 +128,14 @@ def write(sub, obj):
     return p
 
 if __name__ == "__main__":
-    paths = [write("machine", machine), write("filament", filament), write("process", process)]
+    paths = [write("machine", machine), write("filament", filament), ] + [write("process", p) for p in PROCESSES]
     bundle = os.path.join(D, "IVI3D.orca_printer")
     structure = {"bundle_id": "ivi3d_" + VERSION, "bundle_type": "printer config bundle", "version": VERSION,
                  "printer_preset_name": PRINTER,
                  "printer_config": [f"printer/{PRINTER}.json"], "filament_config": [f"filament/{FILAMENT}.json"],
-                 "process_config": [f"process/{PROCESS}.json"]}
+                 "process_config": [f"process/{p['name']}.json" for p in PROCESSES]}
     with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("bundle_structure.json", json.dumps(structure, indent=4))
         z.write(paths[0], f"printer/{PRINTER}.json"); z.write(paths[1], f"filament/{FILAMENT}.json")
-        z.write(paths[2], f"process/{PROCESS}.json")
+        for p, path in zip(PROCESSES, paths[2:]): z.write(path, f"process/{p['name']}.json")
     print("\n".join(paths + [bundle]))

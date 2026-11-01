@@ -46,3 +46,22 @@ class ProfileTests(unittest.TestCase):
                 self.assertEqual(json.load(open(os.path.join(D, sub, f)))["compatible_printers"], [m["name"]])
 
 if __name__ == "__main__": unittest.main()
+
+
+class VariantTests(unittest.TestCase):
+    def test_fast_and_hq(self):
+        subprocess.run([sys.executable, os.path.join(D, "build_profiles.py")], check=True, capture_output=True)
+        P = lambda n: json.load(open(os.path.join(D, "process", n + ".json")))
+        f, h = P("IVI3D 0.20mm Fast"), P("IVI3D 0.10mm High Quality")
+        self.assertEqual((f["layer_height"], f["outer_wall_speed"], f["sparse_infill_speed"], f["travel_speed"], f["sparse_infill_density"]),
+                         ("0.2", "50", "80", "100", "15%"))
+        self.assertEqual((h["layer_height"], h["outer_wall_speed"], h["sparse_infill_speed"], h["top_shell_layers"], h["sparse_infill_density"]),
+                         ("0.1", "30", "50", "12", "20%"))
+        for p in (f, h):
+            self.assertEqual(p["initial_layer_print_height"], "0.3")
+            self.assertTrue(all(float(p[k]) <= 0.33 for k in p if k.endswith("line_width")))
+            self.assertGreaterEqual(float(p["top_shell_layers"]) * float(p["layer_height"]), float(p["top_shell_thickness"]) - 1e-9)
+        names = zipfile.ZipFile(os.path.join(D, "IVI3D.orca_printer")).namelist()
+        st = json.loads(zipfile.ZipFile(os.path.join(D, "IVI3D.orca_printer")).read("bundle_structure.json"))
+        for n in ("IVI3D 0.15mm Standard", "IVI3D 0.20mm Fast", "IVI3D 0.10mm High Quality"):
+            self.assertIn(f"process/{n}.json", names); self.assertIn(f"process/{n}.json", st["process_config"])

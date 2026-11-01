@@ -2,14 +2,14 @@
 
 | File | What |
 |---|---|
-| `IVI3D.orca_printer` | Bundle: printer + PLA filament + 0.15 mm process (one import) |
-| `machine/IVI3D 0.3 nozzle.json`, `filament/IVI3D PLA.json`, `process/IVI3D 0.15mm Standard.json` | Same presets as separate user-preset JSON |
+| `IVI3D.orca_printer` | Bundle: printer + PLA filament + 3 processes: 0.15 Standard, 0.20 Fast, 0.10 High Quality (one import) |
+| `machine/IVI3D 0.3 nozzle.json`, `filament/IVI3D PLA.json`, `process/IVI3D 0.15mm Standard.json`, `process/IVI3D 0.20mm Fast.json`, `process/IVI3D 0.10mm High Quality.json` | Same presets as separate user-preset JSON |
 | `ivi_fdm_header.py` | Optional post-processing hook that adds the IVI 3licer `;Header Start … header_type: 3dp` block |
 | `build_profiles.py` | Regenerates everything (edit values here) · `tests/` validates JSON, geometry, bundle, header |
 
 ## Import
 1. OrcaSlicer → **File → Import → Import Configs…** → pick `IVI3D.orca_printer` (or the three `.json` files).
-2. Select printer **IVI3D 0.3 nozzle**, filament **IVI3D PLA**, process **IVI3D 0.15mm Standard**.
+2. Select printer **IVI3D 0.3 nozzle**, filament **IVI3D PLA**, process **IVI3D 0.15mm Standard** (or **0.20mm Fast** / **0.10mm High Quality**).
 3. Printer settings → Connection: the host is pre-set to OctoPrint `127.0.0.1:5000`; paste the API key from the
    IVI Bridge installer ([../bridge/README.md](../bridge/README.md)) → Test.
 4. Optional header hook: Process → Others → Post-processing scripts:
@@ -40,7 +40,17 @@ then drops to Z15 at the bed edge before the purge line (same as IVI 3licer).
 | Skirt | 1 loop, brim width 8 (off) | active |
 | Support | off, 50° | active |
 
-**Assumed** (not in IVI's files): max layer 0.24 / min 0.05; deretraction speed = retraction speed; retraction min travel
+**Fast / High Quality** — IVI 3licer built-in quality defs for the 0.3 nozzle, `resources/CuraEngine/Config/test/quality.(0.3).fast_print.def.json` / `quality.(0.3).high_quality.def.json` (*fast* / *hq*). Everything not listed equals Standard (first layer 0.3 @ 18 mm/s, skirt 1, brim 8 off, support off 50°, retraction 6.5 @ 25 no Z-hop, accel 500 / jerk 15 — identical in both files).
+| Setting | 0.20mm Fast | 0.10mm High Quality | Source |
+|---|---|---|---|
+| Layer / first | 0.2 / 0.3 | 0.1 / 0.3 | fast/hq `layer_height`, `layer_height_0` — match the requested heights |
+| Walls | 3 (0.8 mm) | 3 (0.8 mm) | `wall_thickness 0.8` ÷ 0.28 width (files' stale `wall_line_count` 4 / 8 ignored, as Standard) |
+| Top / bottom | 5 (0.9 mm) / 3 (0.6 mm) | 12 (1.2 mm) / 6 (0.6 mm) | `top/bottom_thickness` ÷ layer, rounded up (files' stale 4/3, 10/6) |
+| Infill | 15 % | 20 % | `infill_sparse_density` |
+| Speeds outer / inner / infill / top-bottom / travel | 50 / 60 / 80 / 40 / 100 | 30 / 45 / 50 / 30 / 60 | `speed_wall_0`, `speed_wall_x`, `speed_infill`, `speed_topbottom`, `speed_travel` |
+| Line widths | 0.3 / 0.28 | 0.3 / 0.28 | hq sets 0.28 everywhere; fast inherits def (same as Standard) |
+
+**Assumed** (not in IVI's files; applies to all three processes): internal solid infill speed = infill speed; gap/support/bridge speeds as Standard; max layer 0.24 / min 0.05; deretraction speed = retraction speed; retraction min travel
 1.5 mm; max jerk Z 10 / E 5 (M503 M205 has Z10 E5); machine limits not emitted to G-code (firmware keeps its own);
 `M107` added to the end G-code; fan 100 % after layer 1; max volumetric speed 8 mm³/s; skirt distance 3 mm; seam
 aligned; grid infill; pause G-code `M2410`; PLA range 190–230 °C; thumbnails off. Today's observed start used
