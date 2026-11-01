@@ -1,3 +1,4 @@
+import re
 import json, os, sys, tempfile, threading, time, unittest, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -9,9 +10,9 @@ class FakeSerial:
         self.working = "IDLE"; self.paused5 = False
         self.out = [banner]; self.written = []; self.closed = False; self.lock = threading.Lock()
     def write(self, b):
-        cmd = b.decode().strip()
+        raw = b.decode().strip(); cmd = re.sub(r"^N\d+ (.*)\*\d+$", r"\1", raw)
         with self.lock:
-            self.written.append(cmd)
+            self.written.append(raw)
             if cmd == "M2411 S2":
                 self.out += ["Can't start work in current status: 5", "start work failed, err= 200"] if self.paused5 else ["PC start work", "trigger work: ok"]
             elif cmd == "M1001 L": self.out += ["ok"]
@@ -26,6 +27,24 @@ class FakeSerial:
             if self.out: return (self.out.pop(0) + "\n").encode()
         time.sleep(0.001); return b""
     def close(self): self.closed = True
+
+class ChecksumTests(unittest.TestCase):
+    def test_checksum(self):
+        self.assertEqual(B.checksum_line(1, "G28"), "N1 G28*18")
+    def test_resend(self):
+        ser = FakeSerial(); orig = ser.write; state = {"n": 0}
+        def w(b):
+            c = b.decode().strip()
+            if c.startswith("N2 ") and not state["n"]:
+                state["n"] = 1; ser.written.append(c); ser.out += ["Error:checksum mismatch, Last Line: 1", "Resend: 2", "ok"]; return
+            orig(b)
+        ser.write = w
+        ser.write = w
+        j = B.SerialJob(ser, ["G28", "G1 X1", "G1 X2"], "t", line_numbers=True)
+        # Error: lines abort jobs by default; checksum errors must be tolerated when line numbers are on
+        j.run(); self.assertEqual(j.state, "Operational", j.error)
+        self.assertEqual([x for x in ser.written if x.startswith("N2 ")], [B.checksum_line(2, "G1 X1")] * 2)
+        self.assertEqual(j.sent, 3)
 
 class GcodeTests(unittest.TestCase):
     def test_clean(self):
@@ -210,7 +229,7 @@ class OctoPrintApiTests(unittest.TestCase):
         orig = self.ser.write
         def w(b):
             orig(b)
-            if b.decode().startswith("M109"): self.ser.out.insert(0, " T:214.8 /215.0 B:50.1 /50.0 @:0")
+            if "M109" in b.decode(): self.ser.out.insert(0, " T:214.8 /215.0 B:50.1 /50.0 @:0")
         self.ser.write = w
         self.upload("G28\nM109 S215\n"); self.bridge.thread.join(5)
         t = self.req("/api/printer")[1]["temperature"]
@@ -250,7 +269,8 @@ class OctoPrintApiTests(unittest.TestCase):
         self.bridge.thread.join(5)
         job = self.req("/api/job")[1]
         self.assertEqual(job["state"], "Operational"); self.assertEqual(job["progress"]["completion"], 100.0)
-        self.assertEqual(self.ser.written, ["M2005", "M2007", "M105", "M2155 S4"] + ["M2411 S2", "G28", "M109 S215", "G1 X1"]); self.assertTrue(self.ser.closed)
+        self.assertEqual(self.ser.written, ["M2005", "M2007", "M105", "M2155 S4"] + ["M2411 S2", "M110 N0"] +
+                         [B.checksum_line(1, "G28"), B.checksum_line(2, "M109 S215"), B.checksum_line(3, "G1 X1")]); self.assertTrue(self.ser.closed)
     def test_serial_pause_cancel_via_api(self):
         self.cfg["mode"] = "serial"
         self.upload("\n".join("G1 X%d" % i for i in range(100000)))
@@ -319,14 +339,36 @@ class MonitorApiTests(OctoPrintApiTests):
         self.url = f"http://127.0.0.1:{self.srv.server_port}"; self.bridge.monitor.poll_once()
     # inherited tests that need a FakeSerial job port are covered by OctoPrintApiTests
     test_clear_endpoint = test_temps_and_caffeinate = test_serial_print_and_job = test_serial_pause_cancel_via_api = None
+    def upload(self, text, start=False):     # auto mode: Orca "Upload" (Wi-Fi); Upload and Print tested separately
+        return OctoPrintApiTests.upload(self, text, start)
     def post(self, path, obj):
         r = urllib.request.Request(self.url + path, data=json.dumps(obj).encode(), headers={"X-Api-Key": "KEY", "Content-Type": "application/json"})
         with urllib.request.urlopen(r, timeout=5) as resp: return resp.status
-    def test_auto_print_true_uploads_over_wifi_only(self):
-        st, js = self.upload("G28\n", start=True)
+    def test_auto_upload_only_goes_wifi_and_locks_usb(self):
+        st, js = self.upload("G28\n", start=False)
         self.assertEqual(st, 201); self.assertIn("touch screen", js["message"])
         self.assertEqual([c[0] for c in FakePrinter.calls], ["connect", "upload", "disconnect"])
         self.assertNotIn("M2411 S2", self.ms.written)
+        p = self.req("/api/printer")[1]["ivi"]; self.assertTrue(p["usb_locked"]); self.assertFalse(p["usb"])
+        self.assertEqual(p["storage_file"], "cube.gcode"); self.assertTrue(self.ms.closed)
+        n = len(self.ms.written); self.assertFalse(self.bridge.monitor.poll_once()); self.assertEqual(len(self.ms.written), n)
+        with self.assertRaises(urllib.error.HTTPError) as e: self.post("/api/printer/command", {"commands": ["M105"]})
+        self.assertEqual(e.exception.code, 409)
+        with self.assertRaises(urllib.error.HTTPError) as e: self.req("/api/job", json.dumps({"command": "pause"}).encode())
+        self.assertEqual(e.exception.code, 409)
+        self.assertIn("storage", self.req("/api/job")[1]["state"])
+        self.assertFalse(self.req("/api/ivi/usb", json.dumps({"action": "enable"}).encode())[1]["usb_locked"])
+        self.assertTrue(self.bridge.monitor.poll_once()); self.assertTrue(self.req("/api/printer")[1]["ivi"]["usb"])
+    def test_auto_upload_and_print_streams_over_usb(self):
+        self.bridge.serial_factory = lambda: self.ser
+        st, js = self.upload("G28\nM204 P500\nM73 P1\nG21\nG1 X1\n", start=True)
+        self.assertEqual(st, 201); self.assertIn("USB", js["message"]); self.bridge.thread.join(5)
+        self.assertEqual(FakePrinter.calls, [])
+        self.assertIn(B.checksum_line(1, "G28"), self.ser.written); self.assertIn(B.checksum_line(2, "G1 X1"), self.ser.written)
+        self.assertFalse(any(w.split(" ", 1)[-1].startswith(("M204", "M73", "G21")) for w in self.ser.written))
+        j = self.req("/api/job")[1]; self.assertEqual(j["state"], "Operational"); self.assertEqual(j["ivi"]["total"], 2)
+        self.assertEqual(len(self.awake), 1); self.assertTrue(self.awake[0].terminated)
+        self.assertFalse(self.bridge.monitor._paused.is_set())     # monitor resumes after the stream
     def test_live_status(self):
         p = self.req("/api/printer")[1]
         self.assertTrue(p["ivi"]["usb"]); self.assertEqual(p["temperature"]["bed"]["target"], 60.0)

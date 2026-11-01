@@ -44,7 +44,11 @@ Reinstalling resets the plugin's granted permissions, so Orca asks again.
 
 ## Use
 - Slice and send/export as usual (bridge as OctoPrint host). The header is added automatically.
-- Open the **IVI3D Bridge** tab to watch the print and Pause / Resume / Cancel / Clear stuck job.
+- **Upload and Print** streams the job over USB (live progress, Mac must stay awake and connected); **Upload**
+  stores it on the printer for the touch screen, and the bridge keeps USB closed during that print (opening USB
+  mid-print stalls it). The bridge's Device page shows a banner with *Printer idle, re-enable USB*.
+- Open the **IVI3D Bridge** tab to watch the print and Pause / Resume / Cancel / Clear stuck job (USB prints only;
+  stored prints are paused/cancelled on the touch screen).
 
 ## Tests
 `python3 -m unittest discover -s orca/plugin/tests -v` — stubs the `orca` module, runs a fake bridge HTTP server,

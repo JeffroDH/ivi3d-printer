@@ -16,7 +16,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 VERSION = "0.1.0"
 DEFAULT_CONFIG = {
-    "mode": "auto",                     # uploads: "auto"/"wifi" = Wi-Fi upload (default); "serial" = USB streaming
+    "mode": "auto",                     # "auto" (default): Upload = Wi-Fi to printer storage, Upload and Print = USB stream;
+                                        # "wifi": both go over Wi-Fi; "serial": both stream over USB
     "serial_monitor": True,             # use the USB port (if free) for live status + temp/speed controls
     "monitor_interval_s": 3,            # M105/M114/M2007 poll period of the monitor
     "filament_load": "extrude",         # Load/Unload: "extrude" (heat, then E moves) or "m701" (M701/M702 - IGNORED by fw V1.3.2-alpha)
@@ -35,7 +36,8 @@ DEFAULT_CONFIG = {
     "printer_host": "192.168.50.85",
     "printer_port": 8080,
     "printer_token": "",                # kore API token (keep out of git)
-    "serial_port": "/dev/tty.usbmodem*",  # glob allowed
+    "serial_port": "/dev/tty.usbmodem*",  # glob allowed (IVI3D: /dev/tty.usbmodemREDACTED)
+    "line_numbers": True,               # USB stream: Marlin 'N<n> <cmd>*<checksum>' lines, M110 N0 reset, Resend handling
     "baud": 115200,
     "firmware_version": "",             # override; otherwise read from the serial banner
     "listen_host": "127.0.0.1",
@@ -97,6 +99,19 @@ def resolve_mode(cfg):
     if m == "auto":
         return "serial" if find_usb_port(cfg["serial_port"]) else "wifi"
     return m
+
+def route_upload(cfg, start):
+    """Where one upload goes: 'usb' (stream now, live monitoring) or 'wifi' (store on the printer)."""
+    m = cfg.get("mode", "auto")
+    if m == "serial": return "usb"
+    if m == "wifi": return "wifi"
+    return "usb" if start else "wifi"
+
+def checksum_line(n, cmd):
+    """Marlin line-numbered command with XOR checksum: 'N<n> <cmd>*<cs>'."""
+    body = f"N{n} {cmd}"; cs = 0
+    for ch in body.encode(): cs ^= ch
+    return f"{body}*{cs}"
 
 def upload_mode(cfg):
     """Where an uploaded file goes. Only an explicit mode "serial" streams over USB; "auto" and "wifi"
@@ -428,8 +443,9 @@ class PrinterHalted(RuntimeError): pass
 class SerialJob:
     """Streams one job. States: Starting -> Printing <-> Paused -> Operational | Cancelled | Error."""
     def __init__(self, ser, lines, name="job", firmware_version="", line_timeout=600, clock=time.monotonic,
-                 prelude=(), report_interval=4, auto_clear=True, notify=None):
+                 prelude=(), report_interval=4, auto_clear=True, notify=None, line_numbers=False):
         self.ser, self.lines, self.name = ser, lines, name
+        self.line_numbers = line_numbers; self._resend = None
         self.fw = firmware_version
         self.line_timeout, self.clock = line_timeout, clock
         self.prelude, self.report_interval, self.auto_clear = list(prelude), report_interval, auto_clear
@@ -474,6 +490,8 @@ class SerialJob:
         m = re.search(r"Can't start work in current status:\s*(\d+)", line)
         if m: self._flags.add(("cant_start", int(m.group(1))))
         if "start work failed" in low: self._flags.add("start_failed")
+        m = re.match(r"(?:resend|rs)[:\s]\s*N?(\d+)", low)
+        if m: self._resend = int(m.group(1))
 
     def _wait(self, predicate, timeout):
         end = self.clock() + timeout
@@ -484,7 +502,10 @@ class SerialJob:
             if not line:
                 continue
             if low_err(line):
-                raise RuntimeError(f"printer error: {line}")
+                l2 = line.lower()
+                if not (self.line_numbers and any(k in l2 for k in ("checksum", "line number", "last line", "no line"))):
+                    raise RuntimeError(f"printer error: {line}")
+                continue                     # Marlin follows with 'Resend: N' + ok
             if predicate(line):
                 return True
             if "busy" in line:          # 'echo:busy: processing' during heating/homing
@@ -555,15 +576,25 @@ class SerialJob:
             self._start()
             self.state, self.started = "Printing", self.clock()
             log(f"job {self.name}: started, {len(self.lines)} lines")
-            for cmd in self.lines:
+            if self.line_numbers:
+                self._write("M110 N0")
+                self._wait(lambda l: l == "ok" or l.startswith("ok "), self.line_timeout)
+            i = 0; resends = 0
+            while i < len(self.lines):
                 while self._pause.is_set() and not self._cancel.is_set():
                     self._readline()          # keep watching for resume / kill while paused
                 if self._cancel.is_set():
                     break
-                self._write(cmd)
+                cmd = self.lines[i]
+                self._resend = None
+                self._write(checksum_line(i + 1, cmd) if self.line_numbers else cmd)
                 if self._wait(lambda l: l == "ok" or l.startswith("ok "), self.line_timeout) is False:
                     break
-                self.sent += 1
+                if self._resend is not None and self.line_numbers:
+                    resends += 1
+                    if resends > 50: raise RuntimeError("too many resend requests (line noise?)")
+                    i = max(0, self._resend - 1); self.sent = i; continue
+                i += 1; self.sent = i
             if self._cancel.is_set():
                 self._stop_printer(); self.state = "Cancelled"
             else:
@@ -597,6 +628,11 @@ class SerialJob:
     @property
     def progress(self):
         return 100.0 * self.sent / len(self.lines) if self.lines else 0.0
+
+    def info(self):
+        el = (self.clock() - self.started) if self.started else None
+        left = el * (len(self.lines) - self.sent) / self.sent if el and self.sent else None
+        return {"source": "usb stream", "sent": self.sent, "total": len(self.lines), "elapsed": el, "left": left}
 
 def low_err(line):
     return line.lower().startswith(("error", "!!"))
@@ -818,12 +854,25 @@ class Bridge:
         self.lock = threading.Lock()
         self.monitor = SerialMonitor(cfg, self.serial_factory) if cfg.get("serial_monitor", True) else None
         self.filament = None
+        self.storage_print = None      # name of a Wi-Fi-uploaded job; USB stays closed until the user re-enables it
+
+    def usb_locked(self): return self.storage_print is not None
+
+    def lock_usb(self, name):
+        """After 'Upload': the job will run from printer storage. Opening USB mid-print stalls it, so let go."""
+        self.storage_print = name
+        if self.monitor: self.monitor.release()
+
+    def unlock_usb(self):
+        self.storage_print = None
+        if self.monitor: self.monitor.resume()
 
     def send_command(self, cmd):
         """Temp/speed/flow etc. over USB: through the streaming job if one runs, else the monitor."""
         c = check_command(cmd)
         if self.busy() and isinstance(self.job, SerialJob):
             self.job._write(c); return c
+        if self.usb_locked(): raise RuntimeError("USB controls are off while the printer prints from its own storage")
         if not self.monitor: raise RuntimeError("serial_monitor is off")
         return self.monitor.send(c)
 
@@ -873,6 +922,7 @@ class Bridge:
         """Clear a stale/paused PC job on the printer (M2411 S3), e.g. after 'Can't start work in current status: 5'."""
         with self.lock:
             if self.busy(): raise RuntimeError("a job is running; use Cancel")
+            if self.usb_locked(): raise RuntimeError("USB controls are off while the printer prints from its own storage")
             if self.monitor: self.monitor.release()
             ser = self.serial_factory()
             try:
@@ -886,22 +936,31 @@ class Bridge:
                 if self.monitor: self.monitor.resume()
 
     def submit(self, path, name, start=True, mode=None):
-        mode = mode or upload_mode(self.cfg)
+        if mode in ("serial", "usb"): route = "usb" if start else "spool"
+        elif mode == "wifi": route = "wifi"
+        else: route = route_upload(self.cfg, start)
+        if route == "usb" and self.cfg.get("mode") == "serial" and not start: route = "spool"
         self.last_file = name
-        if mode == "wifi":
+        if route == "wifi":
+            if self.busy(): raise RuntimeError("a USB job is already running")
             try: self.wifi_factory().upload(path, name)
             except Exception as e:
                 notify(self.cfg, f"Wi-Fi upload of {name} failed: {e}"); raise
-            m = f"Uploaded {name} to the printer over Wi-Fi. Start it on the touch screen."
+            self.lock_usb(name)
+            m = (f"Uploaded {name} to the printer over Wi-Fi. Start it on the touch screen. "
+                 "USB controls are off until you press 'Printer idle, re-enable USB' on the Device page.")
             notify(self.cfg, m); return m
-        if not start:
+        if route == "spool":
             return f"Stored {name} in the spool folder (serial mode; print=false)."
         with self.lock:
             if self.busy():
                 raise RuntimeError("a job is already running")
+            self.storage_print = None      # user chose a USB print: the printer is not running a stored job
             with open(path, errors="replace") as f:
                 raw = f.read()
+            rx = strip_regex(self.cfg.get("strip_commands", DEFAULT_STRIP))
             lines, kind = clean_gcode(raw), header_type(raw)
+            if rx: lines = [l for l in lines if not rx.match(l)]
             try: pre = job_prelude(self.cfg, kind, lines)
             except Exception as e:
                 notify(self.cfg, f"Not starting {name}: {e}"); raise
@@ -914,7 +973,8 @@ class Bridge:
                                  self.cfg.get("line_timeout_s", 600), prelude=pre,
                                  report_interval=self.cfg.get("report_interval_s", 4),
                                  auto_clear=self.cfg.get("auto_clear_stale_job", True),
-                                 notify=lambda m: notify(self.cfg, m))
+                                 notify=lambda m: notify(self.cfg, m),
+                                 line_numbers=self.cfg.get("line_numbers", True))
             awake = self.awake_factory()
             def runner(job=self.job):
                 try:
@@ -935,6 +995,11 @@ class Bridge:
 
     def job_info(self):
         j = self.job
+        if self.usb_locked() and not self.busy():
+            return {"job": {"file": {"name": self.storage_print, "origin": "printer"}},
+                    "progress": {"completion": None, "printTime": None, "printTimeLeft": None, "filepos": None},
+                    "state": "Printing from printer storage (USB off)",
+                    "ivi": {"source": "printer storage", "usb_locked": True}}
         if not self.busy() and self.monitor and self.monitor.connected:
             st = self.monitor.status; code = st.get("systat"); ws = st.get("working", "")
             if code is not None or ws:
@@ -949,10 +1014,11 @@ class Bridge:
         if j and j.error: state = f"Error: {j.error}"
         elif j and j.reason and j.state == "Paused": state = f"Paused: {j.reason}"
         elapsed = (time.monotonic() - j.started) if j and j.started else None
+        d = j.info() if j and hasattr(j, "info") else {}
         return {"job": {"file": {"name": j.name if j else self.last_file, "origin": "local"}},
                 "progress": {"completion": j.progress if j else None, "printTime": elapsed,
-                             "printTimeLeft": None, "filepos": j.sent if j else None},
-                "state": state}
+                             "printTimeLeft": d.get("left"), "filepos": j.sent if j else None},
+                "state": state, "ivi": dict(d, usb_locked=False) if j else {"usb_locked": False}}
 
 PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>IVI Bridge - Control</title>
 <style>
@@ -993,12 +1059,25 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
 .fbtn span{font-size:14px;color:#456}.fbtn:hover{background:var(--sel)}
 .hs{text-align:center;font-size:22px;color:var(--t);margin-bottom:.8em}.hs.done{color:#1a8a3a}.hs.error{color:#c22}
 .hbar{height:14px;background:#e3ebf7;border-radius:7px;overflow:hidden;margin-bottom:.6em}.hbar>div{height:100%;background:var(--b);width:0;transition:width .5s}
+.ban{display:none;margin:.8em 1em 0;padding:.8em 1em;border-radius:10px;background:#fff4d6;border:1px solid #e8b84a;color:#5a3d00;align-items:center;gap:1em}
+.ban b{color:#3d2900}.ban button{background:#e8b84a;color:#2a1c00;border-radius:999px;padding:.5em 1em;white-space:nowrap}
+.job{display:none;margin:.8em 1em 0;padding:.8em 1em;border-radius:10px;background:#eaf2ff;border:1px solid #b8cdee}
+.job .hbar{margin:.5em 0}.job .row{display:flex;flex-wrap:wrap;gap:.4em 1.4em;font-size:13px;color:#456}.job button{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .9em}
 @media (min-width:1100px){.tabs{display:none}.panels{display:grid;grid-template-columns:1fr 1fr;gap:2em}
 .panel{display:block;border:1px solid #d3e0f3;border-radius:10px;padding:1em}}
 </style>
 <div class=top>Control<a href=# onclick="tick();return false">&#8635;</a></div>
 <div class=info><span>Uploads: <b>__MODE__</b></span><span>USB: <b id=usb>…</b></span><span>State: <b id=st>…</b></span><span>File: <b id=fn></b></span><span id=pc></span></div>
 <div class=bar><div id=pb></div></div>
+<div class=ban id=ban><div style="flex:1"><b>USB controls are off &mdash; the printer is printing <span id=banf></span> from its own storage.</b><br>
+You used <i>Upload</i>, so the job runs from the touch screen. Opening USB during a stored-file print stalls it, so the bridge
+keeps the port closed. Pause or cancel on the touch screen. When the printer is idle, turn USB back on.</div>
+<button title="Only press this when the printer is idle (job finished or cancelled on the touch screen)" onclick="usbOn()">Printer idle, re-enable USB</button></div>
+<div class=job id=jobp><b>USB print: <span id=jn></span></b> <span id=js2 style="color:#456"></span>
+<div class=hbar><div id=jb></div></div>
+<div class=row><span>Progress <b id=jpc>–</b></span><span>Lines <b id=jl>–</b></span><span>Elapsed <b id=je>–</b></span><span>Left ≈ <b id=jt>–</b></span></div>
+<div class=row style="margin-top:.5em"><button title="M2410" onclick="cmd('pause','pause')">Pause</button><button title="M2411 S1" onclick="cmd('pause','resume')">Resume</button><button title="Stop the stream and the printer job (M2411 S3)" onclick="if(confirm('Cancel print?'))cmd('cancel')">Cancel</button>
+<span style="font-size:12px;color:#789">Streamed from this Mac over USB with live monitoring &ndash; keep the Mac awake and the cable connected until it finishes.</span></div></div>
 <div class=panels>
 <div class=panel id=p_tool><h3>Toolhead</h3>
 <div class=tgrid>
@@ -1031,7 +1110,7 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
  <div class=lbl>Jog Distance<br>(mm)</div><div class=opts data-g=fdst><button class=sel>10</button><button>20</button><button>50</button><button>100</button></div>
 </div></div>
 </div>
-<p class=note id=msg>Controls need USB. Speed % (M220) and flow % (M221) are not yet verified on this firmware.</p>
+<p class=note id=msg>Controls need USB. <b>Upload and Print</b> streams the job over USB (live status, Mac must stay awake and connected); <b>Upload</b> stores it on the printer for the touch screen and turns USB controls off during that print. Speed % (M220) and flow % (M221) are not yet verified on this firmware.</p>
 <div class=tabs><button id=t_tool class=on onclick="tab('tool')">Toolhead</button><button id=t_fil onclick="tab('fil')">Filament</button></div>
 <div id=dlg class=dlg style="display:none"><div class=box><div class=top style="border-radius:12px 12px 0 0">
 <span id=mt>Filament</span></div><div style="padding:1.2em">
@@ -1042,6 +1121,9 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
 <div style="display:flex;justify-content:center;gap:.8em;margin-top:1.2em"><button id=fy class=btn style="display:none" onclick="fans('yes')">Yes, done</button><button id=fm class=btn style="display:none" onclick="fans('more')">No, extrude more</button><button id=fc class=btn onclick="fcancel()">Cancel</button><button id=fk class=btn style="display:none" onclick="fclose()">OK</button></div></div>
 </div></div></div>
 <script>const K=__KEY__,FIL=__FIL__,H={'X-Api-Key':K,'Content-Type':'application/json'};let T={},fanOn=false;
+async function usbOn(){if(!confirm('Is the printer idle (stored print finished or cancelled)? Opening USB during a stored print stalls it.'))return;
+ await fetch('/api/ivi/usb',{method:'POST',headers:H,body:JSON.stringify({action:'enable'})});say('USB controls re-enabled');tick()}
+function hms(s){if(s==null)return'–';s=Math.round(s);return Math.floor(s/3600)+'h '+String(Math.floor(s%3600/60)).padStart(2,'0')+'m'}
 function tab(t){for(const n of['tool','fil']){document.getElementById('t_'+n).classList.toggle('on',n==t);document.getElementById('p_'+n).classList.toggle('on',n==t)}}
 tab('tool');
 function say(m){msg.textContent=m}
@@ -1076,7 +1158,10 @@ function fclose(){dlg.style.display='none';clearInterval(FT)}
 function fanT(){fanOn=!fanOn;fan.classList.toggle('on',fanOn);g([fanOn?'M106 S255':'M107'])}
 async function cmd(c,a){const r=await fetch('/api/job',{method:'POST',headers:H,body:JSON.stringify({command:c,action:a})});say(r.ok?c+' sent':'Failed: '+((await r.json()).error||r.status));tick()}
 async function tick(){try{const j=await (await fetch('/api/job',{headers:H})).json(),p=await (await fetch('/api/printer',{headers:H})).json();
- const u=p.ivi&&p.ivi.usb;usb.textContent=u?'connected':'not connected'+(p.ivi&&p.ivi.usb_error?' ('+p.ivi.usb_error+')':'');
+ const lk=p.ivi&&p.ivi.usb_locked;ban.style.display=lk?'flex':'none';banf.textContent=(p.ivi&&p.ivi.storage_file)||'';
+ const ji=j.ivi||{},us=ji.source=='usb stream'&&!/^(Operational|Cancelled)/.test(j.state);jobp.style.display=us?'block':'none';
+ if(us){jn.textContent=j.job.file.name;js2.textContent=j.state;const c2=j.progress.completion||0;jb.style.width=c2+'%';jpc.textContent=c2.toFixed(1)+'%';jl.textContent=ji.sent+' / '+ji.total;je.textContent=hms(ji.elapsed);jt.textContent=hms(ji.left)}
+ const u=p.ivi&&p.ivi.usb&&!lk;usb.textContent=lk?'off (printing from printer storage)':u?(us?'streaming job':'connected'):'not connected'+(p.ivi&&p.ivi.usb_error?' ('+p.ivi.usb_error+')':'');
  document.querySelectorAll('.u,.opts[data-c] button').forEach(b=>b.disabled=!u);
  st.textContent=j.state;fn.textContent=j.job.file.name||'–';const c=j.progress.completion;pb.style.width=(c||0)+'%';pc.textContent=c==null?'':c.toFixed(1)+'%';
  const t=p.temperature||{},f=v=>v?Math.round(v.actual)+'°C/'+Math.round(v.target)+'°C':'–';nzv.textContent=f(t.tool0);bdv.textContent=f(t.bed);
@@ -1087,7 +1172,8 @@ async function tick(){try{const j=await (await fetch('/api/job',{headers:H})).js
 tick();setInterval(tick,2000)</script>"""
 
 def status_page(cfg):
-    m = "USB streaming" if upload_mode(cfg) == "serial" else "Wi-Fi (start on the touch screen)"
+    m = {"serial": "all over USB", "wifi": "all over Wi-Fi"}.get(cfg.get("mode"),
+         "Upload = Wi-Fi to printer storage · Upload and Print = USB stream")
     fil = [[str(n), int(t)] for n, t in cfg.get("filaments") or DEFAULT_CONFIG["filaments"]]
     return PAGE.replace("__MODE__", html.escape(m)).replace("__FIL__", json.dumps(fil).replace("<", "\\u003c")).replace(
         "__KEY__", json.dumps(cfg.get("api_key", "")).replace("<", "\\u003c"))
@@ -1145,7 +1231,8 @@ def make_handler(bridge):
                                    "ready": not bridge.busy()}},
                                    "temperature": temps, "position": bridge.live_status().get("position"),
                                    "ivi": {"usb": bool(bridge.busy() or (mon and mon.connected)),
-                                           "usb_error": mon.error if mon else "serial_monitor off"}})
+                                           "usb_error": mon.error if mon else "serial_monitor off",
+                                           "usb_locked": bridge.usb_locked(), "storage_file": bridge.storage_print}})
             if p == "/" or p == "/index.html":
                 b = status_page(cfg).encode()
                 self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1176,6 +1263,13 @@ def make_handler(bridge):
                     return self._json(200, bridge.start_filament(cmd.get("action"), cmd.get("temp", 0)))
                 except (ValueError, TypeError) as e: return self._json(400, {"error": str(e)})
                 except Exception as e: return self._json(409, {"error": str(e)})
+            if p == "/api/ivi/usb":
+                try: cmd = json.loads(body or b"{}")
+                except ValueError: return self._json(400, {"error": "bad json"})
+                if cmd.get("action") == "enable": bridge.unlock_usb()
+                elif cmd.get("action") == "disable": bridge.lock_usb(bridge.last_file or "manual")
+                else: return self._json(400, {"error": "action must be enable or disable"})
+                return self._json(200, {"usb_locked": bridge.usb_locked()})
             if p == "/api/ivi/clear":
                 try: return self._json(200, {"message": bridge.clear_printer()})
                 except Exception as e: return self._json(409, {"error": str(e)})
@@ -1193,6 +1287,9 @@ def make_handler(bridge):
                 try: cmd = json.loads(body or b"{}")
                 except ValueError: return self._json(400, {"error": "bad json"})
                 j = bridge.job
+                if (not j or not bridge.busy()) and bridge.usb_locked():
+                    return self._json(409, {"error": "USB controls are off while the printer prints from its own storage; "
+                                                     "pause/cancel on the touch screen"})
                 if (not j or not bridge.busy()) and bridge.monitor and bridge.monitor.connected:
                     # Wi-Fi-uploaded job started on the touch screen: control it over USB
                     c, a = cmd.get("command"), cmd.get("action", "toggle")

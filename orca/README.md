@@ -16,7 +16,7 @@
    plugin config. Do this again after every re-import. Optional: Connection icon on the Printer bar → Test.
 4. Optional header hook: Process → Others → Post-processing scripts:
    `/usr/bin/python3 "/Volumes/14TB/3D Printing Files/IVI3D/orca/ivi_fdm_header.py";`
-   Not needed for USB printing through the bridge; may matter for files uploaded over Wi-Fi and started from the touch
+   The bridge already adds it on upload. Not needed for USB printing (Orca **Upload and Print**); may matter for files uploaded over Wi-Fi and started from the touch
    screen (it shows type/material/time from that header). Unverified whether the screen refuses files without it.
 
 The bed is a 105 mm-radius circle with the origin at the centre; the delta homes to the top, so the start G-code homes
@@ -93,3 +93,9 @@ Caveats:
 - **PCTG / PETG:** stick very hard to smooth PEI/glass; use glue stick as a release agent.
 - **TPU 95A:** keep slow (≈15–20 mm/s; 1.5 mm³/s cap enforces this). If the extruder path is Bowden, TPU may buckle — test first.
 - **SR-30:** NOT PVA. Stratasys alkaline-soluble terpolymer, dissolved in a heated NaOH bath (~70 °C, Stratasys/MakerBot). Single nozzle means it can't be support under another material here; whole-part tests only. Hygroscopic: dry before use. Values are untested guesses.
+
+## Upload vs Upload and Print
+- **Upload and Print** — the bridge streams the job over USB and shows live progress, temps and Pause/Resume/Cancel on
+  the Device tab. Keep the Mac awake and the cable connected until it finishes.
+- **Upload** — the file is stored on the printer over Wi-Fi; start it on the touch screen. USB controls on the Device
+  tab are off during that print (opening USB mid-print stalls it); press *Printer idle, re-enable USB* afterwards.

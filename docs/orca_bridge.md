@@ -5,7 +5,7 @@
 ## One-time setup (macOS)
 1. Double-click `bridge/Install IVI Bridge.command`; note the dialog (API key is on the clipboard).
 2. Orca → printer → Connection: **OctoPrint**, host `127.0.0.1:5000`, paste API key → Test.
-3. Every job: slice → **Print** (USB plugged in: starts now) or **Send** (Wi-Fi: press start on the touch screen). Notifications report progress; status page http://127.0.0.1:5000/.
+3. Every job: slice → **Upload and Print** (streams over USB now, live monitoring; the Mac must stay awake and connected) or **Upload** (stored on the printer over Wi-Fi; start on the touch screen; the bridge keeps USB closed during that print because opening it mid-print stalls the job). Notifications report progress; status page http://127.0.0.1:5000/.
 4. Anycubic Next: add the post-processing line shown by the installer (also saved in `~/.config/ivi-bridge/orca-settings.txt`) and use *Export G-code*.
 Keep IVI 3licer disconnected from USB while the bridge prints.
 
