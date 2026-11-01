@@ -24,7 +24,8 @@ then drops to Z15 at the bed edge before the purge line (same as IVI 3licer).
 `bed/IVI_plate.stl` (bed model) is the whole IVI plate outline (~300 mm wide at the front, ~190 mm at the flat back,
 ~240 mm deep; traced from a photo against the 20 mm grid, so expect a few mm of error), centred on the 210 mm printable
 circle with the wide edge at the front. `bed/IVI_plate.svg` (bed texture) covers only the 210 mm printable circle,
-because Orca stretches the texture over the printable area. The printable area stays a 210 mm circle.
+because Orca stretches the texture over the printable area. It is transparent (only the IVI logo, text as paths and
+the dashed 210 mm circle), so Orca's bed grid stays visible. The printable area stays a 210 mm circle.
 The preset sets `bed_custom_model` and `bed_custom_texture` to the Mac mirror paths
 (`/Volumes/14TB/3D Printing Files/IVI3D/orca/bed/IVI_plate.stl` / `.svg`) because Orca keeps absolute paths and config
 bundles do not carry them. On another machine, set `IVI3D_BED_MODEL` / `IVI3D_BED_TEXTURE` before running
