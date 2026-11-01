@@ -9,7 +9,7 @@ These are the tools for going beyond Wi-Fi (port 8080) and the USB-C Marlin seri
 | ST-Link V2 (SWD programmer) | Check STM32 readout protection and back up the full flash, including the 64 KB bootloader that isn't in `firmware.supx` | [AITRIP ST-Link V2 with cable](https://link.amazon/B0dqOexs0) |
 | 3.3 V USB-to-TTL serial adapter (CP2102) | Connect to the likely A33 Linux console (`UGUART_RX`/`UGUART_TX`) | [HJHYUL CP2102, 3-pack with jumper wires](https://link.amazon/B03eMUPzG) |
 | Multimeter with continuity mode | Map the board pads (driver UARTs, bed, fan, limits) to STM32 pins | Any |
-| CAN USB adapter (e.g. CANable), optional | Sniff the toolhead CAN bus (500 kbit/s) for heater, fan, laser, and spindle messages | Not tested yet |
+| CAN USB adapter (CANable), optional | Sniff the toolhead CAN bus (500 kbit/s) for heater, fan, laser, and spindle messages. Listen-only; tap `CAN+`/`CAN-` and GND | [CANable PRO V2.0](https://link.amazon/B0d0s4BOo) |
 
 Remove the power cable before you attach any wires.
 
