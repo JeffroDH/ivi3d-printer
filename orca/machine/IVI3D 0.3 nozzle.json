@@ -85,6 +85,8 @@
     ],
     "printable_height": "220",
     "bed_exclude_area": [],
+    "bed_custom_texture": "/Volumes/14TB/3D Printing Files/IVI3D/orca/bed/ivi3d_bed.png",
+    "bed_custom_model": "",
     "nozzle_diameter": [
         "0.3"
     ],

@@ -11,6 +11,9 @@ PROCESS = "IVI3D 0.15mm Standard"
 RADIUS = 105.0          # Cura "elliptic" 210 x 210, centre is zero
 HEIGHT = 220            # machine_height (delta height H233.22 in M503)
 VERSION = "2.3.0.0"
+# Bed texture (bed/make_bed.py). Orca stores an absolute path and bundles do not carry images, so this
+# points at the Mac mirror; override with IVI3D_BED_TEXTURE or re-pick it in Printer settings > Bed shape.
+BED_TEXTURE = os.environ.get("IVI3D_BED_TEXTURE", "/Volumes/14TB/3D Printing Files/IVI3D/orca/bed/ivi3d_bed.png")
 
 def circle(r, n=72):
     return [f"{r * math.cos(2 * math.pi * i / n):.3f}x{r * math.sin(2 * math.pi * i / n):.3f}" for i in range(n)]
@@ -47,7 +50,7 @@ machine = {
     "type": "machine", "name": PRINTER, "from": "User", "inherits": "", "version": VERSION,
     "printer_settings_id": PRINTER, "printer_technology": "FFF", "printer_model": "IVI3D", "printer_variant": "0.3",
     "gcode_flavor": "marlin", "printable_area": circle(RADIUS), "printable_height": str(HEIGHT),
-    "bed_exclude_area": [], "nozzle_diameter": ["0.3"], "nozzle_type": "brass", "extruder_offset": ["0x0"],
+    "bed_exclude_area": [], "bed_custom_texture": BED_TEXTURE, "bed_custom_model": "", "nozzle_diameter": ["0.3"], "nozzle_type": "brass", "extruder_offset": ["0x0"],
     "max_layer_height": ["0.24"], "min_layer_height": ["0.05"],
     "use_relative_e_distances": "0", "use_firmware_retraction": "0",
     "retraction_length": ["6.5"], "retraction_speed": ["25"], "deretraction_speed": ["25"],
