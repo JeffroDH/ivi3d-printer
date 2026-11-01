@@ -21,6 +21,10 @@ machines, so this repo collects what's needed to keep them running and to drive 
 
 Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/marlin_M503_settings.txt`](docs/marlin_M503_settings.txt).
 
+## Hardware research
+
+What's known about the board architecture (4+ boards, magnetic-encoder closed-loop motors, CAN toolheads identified by an onboard chip, and an 8-pad head connector), plus product renders and how to contribute board photos: see [docs/hardware_research.md](docs/hardware_research.md).
+
 ## Repo layout
 
 | Path | Contents |

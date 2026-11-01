@@ -263,6 +263,9 @@ Update packaging names in UI: `IVI3DPrinterFirmware`, `IVI3DPrinterFirmwarePack`
 
 ## 6. Uncertainties / next steps on-device
 
+> Hardware cross-reference: [hardware_research.md](hardware_research.md) covers the 4-board architecture (ARM A7 UI board, motion board, power and switch PCBs), the per-motor magnetic encoders and driver boards, the toolhead ID chip, and the 8-pad head connector (pin roles guessed).
+
+
 1. **HTTP server binary** is not this Qt ELF and has not been recovered. A network scan of the printer shows **only TCP 8080 open** (it answers `{"status":"IDLE"}`); SSH/Telnet/FTP are closed, so the server binary can't currently be pulled over the network. Getting it would need a UART console on the Linux board.  
 2. Exact mapping of every `setUdpInfo` field → discovery `NAME` vs `Model:` under all firmware builds (ctor default is `IVI3D-Zoom-Mammoth`; live capture shows `IVI3D` / `IVI 3D Printer`). Wire format is solid; field provenance can vary by version.  
 3. Full semantics of `M2005` / `M2051` / `M210` / `M2155` not fully traced.  

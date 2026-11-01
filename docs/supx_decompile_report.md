@@ -149,6 +149,9 @@ benefit over stock is small unless a specific feature/bug matters. A middle path
 better from Orca/Luban — remains far cheaper.
 
 ## 8. Unresolved
+
+> Hardware cross-reference: [hardware_research.md](hardware_research.md) covers the 4-board architecture (ARM A7 UI board, motion board, power and switch PCBs), the per-motor magnetic encoders and driver boards, the toolhead ID chip, and the 8-pad head connector (pin roles guessed).
+
 - Exact UART TX/RX pins (needs board photo/continuity), role of PB13/PB14/PD0/PD1/PC9/PD15/PE4/PD3.
 - Heater/fan timer-channel mapping; thermistor table type.
 - Full CAN head-frame field meanings (needs live CAN sniff); probe signal path.
