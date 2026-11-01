@@ -61,7 +61,10 @@ machine = {
     "machine_max_acceleration_e": ["1000"], "machine_max_acceleration_extruding": ["1000"],
     "machine_max_acceleration_retracting": ["1000"], "machine_max_acceleration_travel": ["1000"],
     "machine_max_jerk_x": ["15"], "machine_max_jerk_y": ["15"], "machine_max_jerk_z": ["10"], "machine_max_jerk_e": ["5"],
-    "emit_machine_limits_to_gcode": "0",
+    "emit_machine_limits_to_gcode": "0",   # no M201/M203/M204/M205 block at the start
+    "disable_m73": "1",                     # no M73 progress lines (firmware stalled on them; printer-option in Orca 2.5)
+    # G21 cannot be turned off: GCodeWriter::preamble() writes "G90\nG21" for every flavour but MakerWare.
+    # The bridge strips it (strip_commands).
     "machine_start_gcode": START, "machine_end_gcode": END,
     "before_layer_change_gcode": "", "layer_change_gcode": "", "change_filament_gcode": "M2410 ; pause for manual filament swap",
     "thumbnails": "", "host_type": "octoprint", "print_host": "127.0.0.1:5000",
@@ -97,10 +100,16 @@ process = {
     "top_surface_speed": "30", "travel_speed": "80", "initial_layer_speed": "18", "initial_layer_infill_speed": "18",
     "initial_layer_travel_speed": "30", "skirt_speed": "18", "gap_infill_speed": "30", "support_speed": "40",
     "bridge_speed": "25",
-    "default_acceleration": "500", "outer_wall_acceleration": "500", "inner_wall_acceleration": "500",
-    "top_surface_acceleration": "500", "sparse_infill_acceleration": "500", "initial_layer_acceleration": "500",
-    "travel_acceleration": "500", "default_jerk": "15", "outer_wall_jerk": "15", "inner_wall_jerk": "15",
-    "top_surface_jerk": "15", "infill_jerk": "15", "initial_layer_jerk": "15", "travel_jerk": "15",
+    # Acceleration/jerk control off (0 = Orca emits no M204/M205; GCodeWriter skips 0). The IVI3D firmware stalled
+    # on Orca's M204/M205 lines in the field; it uses its own M503 limits. Keys verified in OrcaSlicer v2.5.0-rc
+    # src/libslic3r/Preset.cpp s_Preset_print_options.
+    **{k: "0" for k in ("default_acceleration", "outer_wall_acceleration", "inner_wall_acceleration",
+                        "top_surface_acceleration", "sparse_infill_acceleration", "initial_layer_acceleration",
+                        "travel_acceleration", "bridge_acceleration", "internal_solid_infill_acceleration",
+                        "initial_layer_travel_acceleration", "default_jerk", "outer_wall_jerk", "inner_wall_jerk",
+                        "top_surface_jerk", "infill_jerk", "initial_layer_jerk", "travel_jerk",
+                        "initial_layer_travel_jerk")},
+    "accel_to_decel_enable": "0",
     "skirt_loops": "1", "skirt_distance": "3", "brim_type": "no_brim", "brim_width": "8",
     "enable_support": "0", "support_type": "normal(auto)", "support_threshold_angle": "50",
     "support_base_pattern": "rectilinear", "support_object_xy_distance": "0.35",

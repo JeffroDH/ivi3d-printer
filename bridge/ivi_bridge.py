@@ -27,6 +27,7 @@ DEFAULT_CONFIG = {
     "filament_heat_timeout_s": 900,
     "filament_poll_s": 1,
     "ivi_header": True,                 # prepend IVI 3licer's ';Header Start' block (time/material on the touch screen)
+    "strip_commands": ["M204", "M205", "M73", "G21"],  # dropped on upload (firmware stalled on Orca's M204/M205/M73/G21)
     "nozzle_diameter": 0.3,             # used in ';header_type: 3dp,<d>mm' if the G-code doesn't say
     "jog_extrude_temp": 235,            # Extrude/Retract on a cold nozzle (<170 °C target or below target) heat to this first
     "notify": True,                     # macOS notifications via osascript
@@ -187,13 +188,28 @@ def _num(v):
 
 def _fmt(v): return "%g" % v if isinstance(v, float) else str(v)
 
-def scan_gcode(f):
-    """One streaming pass over a text file object -> stats dict."""
-    st = {"lines": 0, "valid": 0, "head": [], "head_done": False, "time": None, "m73": None, "set": {},
+DEFAULT_STRIP = ("M204", "M205", "M73", "G21")
+
+def strip_regex(codes):
+    """Matches command lines whose first word is one of codes (e.g. 'M204 P500 ; accel', not M2040)."""
+    codes = [c.strip().upper() for c in codes if c.strip()]
+    if not codes: return None
+    return re.compile(r"^\s*(?:%s)(?![0-9.])" % "|".join(re.escape(c) for c in codes), re.I)
+
+def scan_gcode(f, strip=None):
+    """One streaming pass over a text file object -> stats dict. strip: regex from strip_regex(); those lines
+    are not counted (they are dropped from the output) but M73 is still read for the time estimate."""
+    st = {"lines": 0, "stripped": 0, "valid": 0, "head": [], "head_done": False, "time": None, "m73": None, "set": {},
           "min": [None] * 3, "max": [None] * 3}
     pos = [0.0, 0.0, 0.0]; e = 0.0; rel = False; rel_e = False
     mn, mx = st["min"], st["max"]
     for raw in f:
+        if strip and strip.match(raw):
+            st["stripped"] += 1
+            if st["m73"] is None:
+                m = _M73_RE.match(raw.strip())
+                if m: st["m73"] = int(m.group(1)) * 60
+            continue
         st["lines"] += 1
         line = raw.strip()
         if not st["head_done"]:
@@ -266,22 +282,44 @@ def build_ivi_header(st, nozzle=0.4, date=None):
 def has_ivi_header(path):
     with open(path, "rb") as f: return b";Header Start" in f.read(4096)
 
-def add_ivi_header(src, dst=None, nozzle=0.4, date=None):
-    """Stream src -> dst with the IVI header prepended (original comment lines before ';Generated' move into
-    it). dst None = in place. Returns False if src already has ';Header Start'."""
-    if has_ivi_header(src): 
+def prepare_gcode(src, dst=None, nozzle=0.4, date=None, header=True, strip=DEFAULT_STRIP):
+    """Stream src -> dst (None = in place): drop command lines whose first word is in strip and, if header and
+    the file has no ';Header Start', prepend the IVI header (original comment lines before ';Generated' move
+    into it; line counts describe the output). Returns {"header": bool, "removed": int}."""
+    rx = strip_regex(strip or ())
+    add = header and not has_ivi_header(src)
+    if not add and not rx:
         if dst and dst != src: shutil.copyfile(src, dst)
-        return False
-    with open(src, encoding="utf-8", errors="surrogateescape", newline="") as f:
-        st = scan_gcode(f)
-    tmp = (dst or src) + ".ivitmp"
+        return {"header": False, "removed": 0}
+    st = {"head": [], "stripped": 0}
+    if add:
+        with open(src, encoding="utf-8", errors="surrogateescape", newline="") as f:
+            st = scan_gcode(f, rx)
+    tmp = (dst or src) + ".ivitmp"; removed = 0
     with open(src, encoding="utf-8", errors="surrogateescape", newline="") as fi, \
          open(tmp, "w", encoding="utf-8", errors="surrogateescape", newline="") as fo:
-        fo.write(build_ivi_header(st, nozzle, date))
-        for _ in range(len(st["head"])): next(fi)
-        shutil.copyfileobj(fi, fo, 1 << 20)
+        if add:
+            fo.write(build_ivi_header(st, nozzle, date))
+            n = len(st["head"])
+            while n:                                  # head lines moved into the header (stripped ones dropped)
+                raw = next(fi)
+                if rx and rx.match(raw): removed += 1; continue
+                n -= 1
+        if rx:
+            buf = []
+            for raw in fi:
+                if rx.match(raw): removed += 1; continue
+                buf.append(raw)
+                if len(buf) >= 4096: fo.writelines(buf); buf = []
+            fo.writelines(buf)
+        else:
+            shutil.copyfileobj(fi, fo, 1 << 20)
     os.replace(tmp, dst or src)
-    return True
+    return {"header": add, "removed": removed}
+
+def add_ivi_header(src, dst=None, nozzle=0.4, date=None, strip=()):
+    """Header only (no stripping unless strip is given). Returns False if src already has ';Header Start'."""
+    return prepare_gcode(src, dst, nozzle, date, True, strip)["header"]
 
 # --------------------------------------------------------------- serial ----
 def clean_gcode(text):
@@ -1189,10 +1227,12 @@ def make_handler(bridge):
             os.makedirs(cfg["spool_dir"], exist_ok=True)
             path = os.path.join(cfg["spool_dir"], fname)
             with open(path, "wb") as f: f.write(data)
-            if cfg.get("ivi_header", True):
-                try:
-                    if add_ivi_header(path, nozzle=float(cfg.get("nozzle_diameter", 0.3))): log(f"added IVI header to {fname}")
-                except Exception as e: log(f"IVI header skipped for {fname}: {e}")
+            try:
+                r = prepare_gcode(path, nozzle=float(cfg.get("nozzle_diameter", 0.3)), header=cfg.get("ivi_header", True),
+                                  strip=cfg.get("strip_commands", DEFAULT_STRIP))
+                if r["header"]: log(f"added IVI header to {fname}")
+                if r["removed"]: log(f"removed {r['removed']} line(s) ({', '.join(cfg.get('strip_commands', DEFAULT_STRIP))}) from {fname}")
+            except Exception as e: log(f"G-code preparation skipped for {fname}: {e}")
             start = fields.get("print", "false").lower() == "true"
             try:
                 msg_txt = bridge.submit(path, fname, start=start)

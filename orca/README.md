@@ -53,12 +53,12 @@ the edge. Measure the real plate and update the constants in `make_bed.py` if pr
 | Layer | 0.15, first 0.3; widths 0.3 / 0.28 | active |
 | Shells / infill | 3 walls, 6 top, 4 bottom, 15 % | active |
 | Speeds (mm/s) | outer 45, inner 50, infill 60, top/bottom 30, travel 80, first layer 18, first-layer travel 30, skirt 18 | active |
-| Accel / jerk | 500 mm/s² print, jerk 15 | active |
+| Accel / jerk | **0 = off** (no M204/M205 in G-code; firmware stalled on them, uses its own M503 limits) | active |
 | Machine limits | max accel X/Y/E 1000; feed Z 500 | active (firmware M503: M201 3000, M203 500/500/500/100) |
 | Skirt | 1 loop, brim width 8 (off) | active |
 | Support | off, 50° | active |
 
-**Fast / High Quality** — IVI 3licer built-in quality defs for the 0.3 nozzle, `resources/CuraEngine/Config/test/quality.(0.3).fast_print.def.json` / `quality.(0.3).high_quality.def.json` (*fast* / *hq*). Everything not listed equals Standard (first layer 0.3 @ 18 mm/s, skirt 1, brim 8 off, support off 50°, retraction 6.5 @ 25 no Z-hop, accel 500 / jerk 15 — identical in both files).
+**Fast / High Quality** — IVI 3licer built-in quality defs for the 0.3 nozzle, `resources/CuraEngine/Config/test/quality.(0.3).fast_print.def.json` / `quality.(0.3).high_quality.def.json` (*fast* / *hq*). Everything not listed equals Standard (first layer 0.3 @ 18 mm/s, skirt 1, brim 8 off, support off 50°, retraction 6.5 @ 25 no Z-hop, accel 500 / jerk 15 in IVI 3licer — disabled (0) in the Orca presets).
 | Setting | 0.20mm Fast | 0.10mm High Quality | Source |
 |---|---|---|---|
 | Layer / first | 0.2 / 0.3 | 0.1 / 0.3 | fast/hq `layer_height`, `layer_height_0` — match the requested heights |
@@ -69,7 +69,7 @@ the edge. Measure the real plate and update the constants in `make_bed.py` if pr
 | Line widths | 0.3 / 0.28 | 0.3 / 0.28 | hq sets 0.28 everywhere; fast inherits def (same as Standard) |
 
 **Assumed** (not in IVI's files; applies to all three processes): internal solid infill speed = infill speed; gap/support/bridge speeds as Standard; max layer 0.24 / min 0.05; deretraction speed = retraction speed; retraction min travel
-1.5 mm; max jerk Z 10 / E 5 (M503 M205 has Z10 E5); machine limits not emitted to G-code (firmware keeps its own);
+1.5 mm; max jerk Z 10 / E 5 (M503 M205 has Z10 E5); machine limits not emitted to G-code (firmware keeps its own); `disable_m73` = 1 (no M73); Orca's `G90`/`G21` preamble cannot be turned off (GCodeWriter::preamble), the bridge strips G21;
 `M107` added to the end G-code; fan 100 % after layer 1; max volumetric speed 8 mm³/s; skirt distance 3 mm; seam
 aligned; grid infill; pause G-code `M2410`; PLA range 190–230 °C; thumbnails off. Today's observed start used
 `M140 S50` — the profile uses the IVI default bed 60 °C. Firmware delta values (M665 L357.5 R160.31 H233.22, M666, M851
