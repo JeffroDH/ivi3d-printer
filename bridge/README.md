@@ -5,7 +5,7 @@ A small local Python service that looks like an **OctoPrint** server to the slic
 | Mode | Transport | What happens |
 |---|---|---|
 | `wifi` (default) | kore API `:8080` | `connect` → `upload` (201) → `disconnect`. **Start the job on the touch screen** — `start_print` is 404 on firmware V1.3.2-alpha. Future/custom firmware may enable Wi-Fi start. |
-| `serial` | USB-C, 115200 | `M2411 S2` (+`M1001 L` only if fw ≥ 2.4.0) → wait for `PC start work` → stream G-code per `ok`. Pause `M2410`, resume `M2411 S1`, cancel = stop streaming + heaters off. Progress at `/api/job`. **Only one program can own the port — disconnect IVI 3licer.** The Mac must stay awake for the whole print. |
+| `serial` | USB-C, 115200 | `M2411 S2` (+`M1001 L` only if fw ≥ 2.4.0) → wait for `PC start work` → stream G-code per `ok`. Connect: `M2005`, `M2007`, `M105`, `M2155 S4` (like IVI 3licer; a stale PC job is stopped with `M2411 S3`). Laser/CNC: `G53`, `G28`, [`G0 Z<laser_focus_z> F1500`], `G54` before start. Pause `M2410`, resume `M2411 S1`, cancel = `M2411 S3` + heaters off. Progress at `/api/job`. **Only one program can own the port — disconnect IVI 3licer.** The Mac must stay awake for the whole print. |
 
 ## Install (macOS) — one time, no Terminal
 Double-click **`Install IVI Bridge.command`** (first time: right-click → Open if Gatekeeper complains). It:
@@ -36,6 +36,18 @@ Next is an Orca fork, but its printer connection is built around Anycubic's own 
 3. If your Next build does show a 3rd-party/OctoPrint print host for a custom printer, use the Orca steps.
 Either way, use a custom (non-Anycubic) printer profile with the IVI delta geometry.
 
+## Printer events handled (USB)
+| Printer says | Bridge does |
+|---|---|
+| `warning:DriveX locked rotor` | pauses (`M2410`, as IVI 3licer does), state *Paused: locked rotor*, notification |
+| `PC/SC trigger pause`, `trigger resume: ok` | tracks pause/resume (touch-screen pauses too) |
+| `Printer halted. kill() called!` | *Error*, notification — power-cycle the printer |
+| `Can't start work in current status: 5` | old job still paused: sends `M2411 S3` and retries once (`auto_clear_stale_job`), else error |
+| `Working Status: WORKING_SCREEN` at connect | refuses (touch-screen job running) |
+Status page button **Clear stuck job** (`POST /api/ivi/clear`) sends `M2411 S3`.
+Laser jobs without a Z move are refused when `home_before_job` is on unless `laser_focus_z` is set: after `G28` a delta sits at the top
+and the first sideways move stalls a tower (see docs/laser_cnc_gcode.md).
+
 ## CLI
 `ivi_bridge.py [--config F] [--mode wifi|serial] serve | send FILE | postprocess FILE | watch DIR`
 `send`/`postprocess`/`watch` hand the file to the running service if it is up (required for serial, since streaming outlasts the slicer hook), else upload directly over Wi-Fi.
@@ -44,4 +56,4 @@ Either way, use a custom (non-Anycubic) printer profile with the IVI delta geome
 `python3 -m unittest discover -s bridge/tests -v` — fake serial printer and fake kore HTTP printer; nothing touches real hardware.
 
 ## Not yet verified on hardware
-Whole bridge (written 2026-11-01, unit-tested only); Orca/Next host test against it; serial cancel (no verified stop code — heaters off and stream halts, the printer may need the touch screen to exit PC mode); laser/CNC jobs.
+Whole bridge (written 2026-11-01, unit-tested only); Orca/Next host test against it; serial cancel via `M2411 S3` (decoded, not run), locked-rotor/kill/status-5 handling, laser/CNC prelude (fake-serial tests only; the printer may need the touch screen to exit PC mode); laser/CNC jobs.

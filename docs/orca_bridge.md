@@ -14,7 +14,7 @@ Slice in Orca Slicer and send jobs directly to the IVI3D, replacing the disconti
 
 ## Core features (v1)
 - **Orca printer profile**: delta geometry, build volume, heater/fan settings producing Marlin V1.3.2-compatible G-code.
-- **Job start/pause/resume**: over **USB-C serial** (`M2411 S2` start, stream per `ok`, `M2410` pause, `M2411 S1` resume) — the only working path on current firmware. Wi-Fi (`:8080` `upload`) can store files only; print-control endpoints are 404. Future official/custom firmware may enable them over Wi-Fi.
+- **Job start/pause/resume**: over **USB-C serial** (`M2411 S2` start, stream per `ok`, `M2410` pause, `M2411 S1` resume, `M2411 S3` stop) — the only working path on current firmware. Wi-Fi (`:8080` `upload`) can store files only; print-control endpoints are 404. Future official/custom firmware may enable them over Wi-Fi.
 - **Status and control**: from serial (`M105`, line counts); Wi-Fi `status` only reports `IDLE`.
 - **G-code translation**: map any IVI-specific commands (tool selection, laser/spindle) to what the firmware expects.
 

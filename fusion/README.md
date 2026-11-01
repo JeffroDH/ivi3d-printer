@@ -24,7 +24,7 @@ at low power on scrap with laser safety glasses, or with the CNC bit raised abov
   **Laser power (%)** → `M3 S<percent>` (first segment), bare `M3` after, `M5` after each segment. `M106 P0` /
   `M107 P0` (fan/air assist) wrap the job; turn off with the *Fan / air assist* property. Feed comes from the
   operation; jog speed from the property (default 1500).
-- CNC: spindle is the property **Spindle power (%)** → `M3 P<percent>` (Fusion RPM is ignored). Safe Z 10 and
+- CNC: spindle is the property **Spindle power (%)** → `M3 S<percent>` (the firmware reads S as percent and ignores P; IVI 3licer's `M3 P100` is available via *Spindle word = P*). Fusion RPM is ignored. Safe Z 10 and
   retract Z 5 as in IVI 3licer; plunges are capped at 300 mm/min.
 
 ## Check a file before printing

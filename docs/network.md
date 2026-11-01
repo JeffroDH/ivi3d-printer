@@ -24,7 +24,7 @@ USB-C is **not** a network path: it enumerates as CDC serial (`/dev/cu.usbmodem�
 - macOS: allow the slicer in **Local Network** privacy settings, otherwise "No route to host".
 - Beta firmware likely ships an unfinished API. **Future official or custom firmware may enable these endpoints over Wi-Fi** — re-test after updates.
 
-USB serial is the working control path: `M2411 S2` (+ `M1001 L` if fw ≥ 2.4.0) starts a PC job (`WORKING_PC`), G-code streamed per `ok`; `M2410` pause, `M2411 S1` resume, `M2411 S3` rejoin. Verified with an FDM print on 2026-11-01. See README.
+USB serial is the working control path: `M2411 S2` (+ `M1001 L` if fw ≥ 2.4.0) starts a PC job (`WORKING_PC`), G-code streamed per `ok`; `M2410` pause, `M2411 S1` resume, `M2411 S3` stop (decoded 2026-11-01; earlier docs said "rejoin" — wrong). Verified with an FDM print on 2026-11-01. See README.
 
 ## How to get a shell anyway
 

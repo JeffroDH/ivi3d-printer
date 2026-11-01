@@ -30,7 +30,11 @@ DEFAULT_CONFIG = {
     "api_key": "",                      # key the slicer must send as X-Api-Key ("" = no check)
     "spool_dir": "~/Library/Application Support/ivi-bridge/jobs",
     "retries": 3,
-    "line_timeout_s": 600,              # max wait for 'ok' (long heats send 'busy' meanwhile)
+    "line_timeout_s": 600,
+    "report_interval_s": 4,             # M2155 S<n>: printer pushes temps/position/status every n s
+    "home_before_job": True,            # laser/CNC: G53, G28, ..., G54 before M2411 S2 (IVI 3licer behaviour)
+    "laser_focus_z": None,              # machine Z (mm) to drop to before a laser job; required if homing
+    "auto_clear_stale_job": True,       # on "Can't start work in current status: 5" send M2411 S3 and retry once              # max wait for 'ok' (long heats send 'busy' meanwhile)
 }
 
 def log(*a):
@@ -219,64 +223,158 @@ def parse_status(line, status):
     if m: status["working"] = m.group(1); hit = True
     return hit
 
+# Job state enum of the motion firmware (byte +0x1e of the job object, firmware V1.3.2-alpha).
+# Names 0-8 come from IVI 3licer's server (SYSTAT_*); 9/10 from the firmware stop path.
+SYSTAT = {0: "INIT", 1: "IDLE", 2: "WORK", 3: "PAUSE_TRIG", 4: "PAUSE_STOPPED", 5: "PAUSE_FINISH (paused)",
+          6: "RESUME_TRIG", 7: "RESUME_MOVING", 8: "RESUME_WAITING", 9: "STOPPING", 10: "STOPPING (from pause)"}
+
+def header_type(text):
+    m = re.search(r"^;header_type:\s*(\w+)", text[:4000], re.M)
+    return m.group(1).lower() if m else "3dp"
+
+def z_before_xy(lines):
+    for c in lines:
+        u = c.upper()
+        if re.match(r"G[01]\b", u):
+            if " Z" in u or u.startswith(("G0Z", "G1Z")): return True
+            if " X" in u or " Y" in u: return False
+    return False
+
+class PrinterHalted(RuntimeError): pass
+
 class SerialJob:
-    """Streams one job. State: Operational -> Starting -> Printing <-> Paused -> Operational/Cancelled/Error."""
-    def __init__(self, ser, lines, name="job", firmware_version="", line_timeout=600, clock=time.monotonic):
+    """Streams one job. States: Starting -> Printing <-> Paused -> Operational | Cancelled | Error."""
+    def __init__(self, ser, lines, name="job", firmware_version="", line_timeout=600, clock=time.monotonic,
+                 prelude=(), report_interval=4, auto_clear=True, notify=None):
         self.ser, self.lines, self.name = ser, lines, name
         self.fw = firmware_version
         self.line_timeout, self.clock = line_timeout, clock
-        self.sent = 0; self.state = "Starting"; self.error = None
+        self.prelude, self.report_interval, self.auto_clear = list(prelude), report_interval, auto_clear
+        self.notify = notify or (lambda m: None)
+        self.sent = 0; self.state = "Starting"; self.error = None; self.reason = None
         self.started = None; self.status = {}
         self._pause = threading.Event(); self._cancel = threading.Event()
-        self._pending = []   # out-of-band commands (pause/resume) sent between lines
+        self._flags = set()
 
     def _write(self, cmd):
         self.ser.write((cmd + "\n").encode())
 
     def _readline(self):
         line = self.ser.readline().decode(errors="replace").strip()
-        if line: parse_status(line, self.status)
+        if line:
+            parse_status(line, self.status)
+            self._event(line)
         return line
+
+    def _event(self, line):
+        """Asynchronous printer messages (decoded from firmware + IVI 3licer's parser)."""
+        low = line.lower()
+        if "kill() called" in low or "printer halted" in low:
+            raise PrinterHalted(f"printer halted (kill) - power-cycle or reset it before the next job ({line})")
+        if "locked rotor" in low:
+            m = re.search(r"Drive(\w+)", line)
+            self.reason = (f"Drive {m.group(1) if m else '?'} locked rotor (motor stalled). On a delta this usually "
+                           "means the head was asked to move sideways at the very top after homing - lower Z first.")
+            if self.state == "Printing":
+                self._pause.set(); self._write("M2410")   # what IVI 3licer does (shouldPause)
+                self.state = "Paused"
+            self.notify(f"{self.name}: {self.reason}")
+        m = re.match(r"(PC|SC)\s+trigger pause\b", line)
+        if m and self.state == "Printing":
+            self._pause.set(); self.state = "Paused"
+            self.reason = self.reason or ("paused from the touch screen" if m.group(1) == "SC" else "paused")
+            self.notify(f"{self.name}: {self.reason}")
+        if "trigger resume: ok" in low and self.state == "Paused":
+            self._pause.clear(); self.state = "Printing"; self.reason = None
+        for key in ("trigger stop: ok", "finish stop", "trigger work: ok", "pc start work"):
+            if key in low: self._flags.add(key)
+        m = re.search(r"Can't start work in current status:\s*(\d+)", line)
+        if m: self._flags.add(("cant_start", int(m.group(1))))
+        if "start work failed" in low: self._flags.add("start_failed")
 
     def _wait(self, predicate, timeout):
         end = self.clock() + timeout
         while self.clock() < end:
-            if self._cancel.is_set() and self.state != "Starting":
+            if self._cancel.is_set() and self.state not in ("Starting", "Stopping"):
                 return False
             line = self._readline()
             if not line:
                 continue
-            if line.lower().startswith(("error", "!!")):
+            if low_err(line):
                 raise RuntimeError(f"printer error: {line}")
             if predicate(line):
                 return True
-            # 'echo:busy: processing', temps etc. just keep the wait alive
-            if "busy" in line:
+            if "busy" in line:          # 'echo:busy: processing' during heating/homing
                 end = self.clock() + timeout
         raise TimeoutError("timed out waiting for printer")
 
-    def detect_firmware(self, wait=3):
-        if self.fw:
-            return self.fw
-        end = self.clock() + wait
+    def _drain(self, seconds):
+        end = self.clock() + seconds
         while self.clock() < end:
+            self._readline()
+
+    def handshake(self):
+        """Same queries IVI 3licer sends on connect: M2005 (versions), M2007 (position/origin/Working Status),
+        M105, M2155 S<n> (auto status report every n s, max 60)."""
+        for c in ("M2005", "M2007", "M105", f"M2155 S{int(self.report_interval)}"):
+            self._write(c)
+        end = self.clock() + 2
+        while self.clock() < end and "working" not in self.status:
             line = self._readline()
-            if "firmware" in line.lower() and parse_version(line):
-                self.fw = line; break
+            if not self.fw and "firmware" in line.lower() and parse_version(line):
+                self.fw = line
+        self._drain(0.2)
+        ws = self.status.get("working", "")
+        if ws == "WORKING_SCREEN":
+            raise RuntimeError("the printer is running a touch-screen job; finish or stop it there first")
+        if ws == "WORKING_PC":      # stale PC job: IVI 3licer sends M2411 S3 on connect
+            self._stop_stale()
+
+    def _stop_stale(self):
+        self._flags.discard("trigger stop: ok"); self._flags.discard("finish stop")
+        self._write("M2411 S3")
+        try: self._wait(lambda l: "trigger stop: ok" in l.lower() or "finish stop" in l.lower(), 10)
+        except TimeoutError: pass
+        self._drain(1)
+
+    def detect_firmware(self, wait=3):     # kept for callers; handshake() normally sets self.fw
         return self.fw
+
+    def _start(self):
+        for attempt in (1, 2):
+            self._flags = {f for f in self._flags if not (isinstance(f, tuple) or f in ("start_failed",))}
+            if needs_m1001(self.fw):
+                self._write("M1001 L")
+            self._write("M2411 S2")
+            end = self.clock() + 30
+            while self.clock() < end:
+                self._readline()
+                if "trigger work: ok" in self._flags or "pc start work" in self._flags:
+                    return
+                bad = [f for f in self._flags if isinstance(f, tuple)]
+                if bad or "start_failed" in self._flags:
+                    st = bad[0][1] if bad else None
+                    if st == 5 and self.auto_clear and attempt == 1:
+                        log("printer still holds a paused job (status 5); sending M2411 S3 to clear it")
+                        self._stop_stale(); break
+                    raise RuntimeError(f"printer refused to start (status {st}: {SYSTAT.get(st, '?')}). "
+                                       "A previous job is still paused/active - press Clear on the status page "
+                                       "or stop it on the touch screen.")
+            else:
+                raise TimeoutError("printer did not acknowledge M2411 S2")
 
     def run(self):
         try:
-            self.detect_firmware()
-            self._write("M2411 S2")
-            if needs_m1001(self.fw):
-                self._write("M1001 L")
-            self._wait(lambda l: "pc start work" in l.lower() or "trigger work: ok" in l.lower(), 30)
+            self.handshake()
+            for c in self.prelude:           # laser/CNC: G53, G28, [G0 Z focus], G54 (IVI 3licer behaviour)
+                self._write(c)
+                self._wait(lambda l: l == "ok" or l.startswith("ok "), self.line_timeout)
+            self._start()
             self.state, self.started = "Printing", self.clock()
             log(f"job {self.name}: started, {len(self.lines)} lines")
             for cmd in self.lines:
                 while self._pause.is_set() and not self._cancel.is_set():
-                    time.sleep(0.2)
+                    self._readline()          # keep watching for resume / kill while paused
                 if self._cancel.is_set():
                     break
                 self._write(cmd)
@@ -293,17 +391,22 @@ class SerialJob:
             log(f"job {self.name}: ERROR {e}")
 
     def _stop_printer(self):
-        # No dedicated stop code is verified; turn heaters off and stop sending.
-        for c in ("M104 S0", "M140 S0", "M107"):
+        # M2411 S3 = "trigger stop" in the firmware job state machine (also what IVI 3licer's Stop sends)
+        self.state = "Stopping"
+        self._write("M2411 S3")
+        try: self._wait(lambda l: "trigger stop: ok" in l.lower() or "finish stop" in l.lower()
+                        or "can't trigger stop" in l.lower(), 10)
+        except (TimeoutError, RuntimeError): pass
+        for c in ("M5", "M104 S0", "M140 S0", "M107"):
             self._write(c)
 
     def pause(self):
         if self.state == "Printing":
-            self._pause.set(); self._write("M2410"); self.state = "Paused"
+            self._pause.set(); self._write("M2410"); self.state = "Paused"; self.reason = "paused from the bridge"
 
     def resume(self):
         if self.state == "Paused":
-            self._write("M2411 S1"); self._pause.clear(); self.state = "Printing"
+            self._write("M2411 S1"); self._pause.clear(); self.state = "Printing"; self.reason = None
 
     def cancel(self):
         self._cancel.set(); self._pause.clear()
@@ -311,6 +414,26 @@ class SerialJob:
     @property
     def progress(self):
         return 100.0 * self.sent / len(self.lines) if self.lines else 0.0
+
+def low_err(line):
+    return line.lower().startswith(("error", "!!"))
+
+def job_prelude(cfg, kind, lines):
+    """Start moves IVI 3licer sends for laser/CNC (auto-home + workspace). Raises if a laser job would start
+    with a sideways move at the homed (top) height, which stalls a delta tower ('locked rotor')."""
+    if kind not in ("laser", "cnc"):
+        return []
+    pre = ["G53"]
+    if cfg.get("home_before_job", True):
+        pre.append("G28")
+    fz = cfg.get("laser_focus_z")
+    if kind == "laser" and fz not in (None, ""):
+        pre.append(f"G0 Z{float(fz):.2f} F1500")      # machine Z, like IVI 3licer's focus-height move
+    elif kind == "laser" and cfg.get("home_before_job", True) and not z_before_xy(lines):
+        raise RuntimeError("laser job has no Z move and the printer would start at the top after homing, which "
+                           "stalls the delta ('locked rotor'). Set laser_focus_z (machine Z in mm) in the config.")
+    pre.append("G54")
+    return pre
 
 # ------------------------------------------------- OctoPrint emulation ----
 class Bridge:
@@ -330,7 +453,21 @@ class Bridge:
         return None
 
     def busy(self):
-        return self.job is not None and self.job.state in ("Starting", "Printing", "Paused")
+        return self.job is not None and self.job.state in ("Starting", "Printing", "Paused", "Stopping")
+
+    def clear_printer(self):
+        """Clear a stale/paused PC job on the printer (M2411 S3), e.g. after 'Can't start work in current status: 5'."""
+        with self.lock:
+            if self.busy(): raise RuntimeError("a job is running; use Cancel")
+            ser = self.serial_factory()
+            try:
+                j = SerialJob(ser, [], "clear", report_interval=self.cfg.get("report_interval_s", 4))
+                j.handshake()
+                if "trigger stop: ok" not in j._flags and "finish stop" not in j._flags: j._stop_stale()
+                j.status.pop("working", None); j._write("M2007"); j._drain(1)
+                return f"sent M2411 S3; printer reports {j.status.get('working', 'unknown')}"
+            finally:
+                ser.close()
 
     def submit(self, path, name, start=True, mode=None):
         mode = mode or resolve_mode(self.cfg)
@@ -347,12 +484,19 @@ class Bridge:
             if self.busy():
                 raise RuntimeError("a job is already running")
             with open(path, errors="replace") as f:
-                lines = clean_gcode(f.read())
+                raw = f.read()
+            lines, kind = clean_gcode(raw), header_type(raw)
+            try: pre = job_prelude(self.cfg, kind, lines)
+            except Exception as e:
+                notify(self.cfg, f"Not starting {name}: {e}"); raise
             try: ser = self.serial_factory()
             except Exception as e:
                 notify(self.cfg, f"USB print of {name} failed: {e}"); raise
             self.job = SerialJob(ser, lines, name, self.cfg.get("firmware_version", ""),
-                                 self.cfg.get("line_timeout_s", 600))
+                                 self.cfg.get("line_timeout_s", 600), prelude=pre,
+                                 report_interval=self.cfg.get("report_interval_s", 4),
+                                 auto_clear=self.cfg.get("auto_clear_stale_job", True),
+                                 notify=lambda m: notify(self.cfg, m))
             awake = self.awake_factory()
             def runner(job=self.job):
                 try:
@@ -374,6 +518,7 @@ class Bridge:
         j = self.job
         state = j.state if j else "Operational"
         if j and j.error: state = f"Error: {j.error}"
+        elif j and j.reason and j.state == "Paused": state = f"Paused: {j.reason}"
         elapsed = (time.monotonic() - j.started) if j and j.started else None
         return {"job": {"file": {"name": j.name if j else self.last_file, "origin": "local"}},
                 "progress": {"completion": j.progress if j else None, "printTime": elapsed,
@@ -387,6 +532,7 @@ PAGE = """<!doctype html><meta charset=utf-8><title>IVI Bridge</title>
 <div class=bar><div id=pb></div></div><p id=pc></p><p id=tp></p>
 <button onclick="cmd('pause','pause')">Pause</button><button onclick="cmd('pause','resume')">Resume</button>
 <button onclick="if(confirm('Cancel print?'))cmd('cancel')">Cancel</button>
+<button title="Sends M2411 S3 to clear a stuck/paused PC job (e.g. 'current status: 5')" onclick="if(confirm('Clear a stuck job on the printer (M2411 S3)?'))fetch('/api/ivi/clear',{method:'POST',headers:H}).then(r=>r.json()).then(j=>alert(j.message||j.error))">Clear stuck job</button>
 <script>const K=__KEY__,H={'X-Api-Key':K,'Content-Type':'application/json'};
 async function cmd(c,a){await fetch('/api/job',{method:'POST',headers:H,body:JSON.stringify({command:c,action:a})});tick()}
 async function tick(){try{const j=await (await fetch('/api/job',{headers:H})).json(),p=await (await fetch('/api/printer',{headers:H})).json();
@@ -440,6 +586,9 @@ def make_handler(bridge):
             n = int(self.headers.get("Content-Length", 0)); body = self.rfile.read(n)
             if p in ("/api/files/local", "/api/files/sdcard"):
                 return self._upload(body)
+            if p == "/api/ivi/clear":
+                try: return self._json(200, {"message": bridge.clear_printer()})
+                except Exception as e: return self._json(409, {"error": str(e)})
             if p == "/api/job":
                 try: cmd = json.loads(body or b"{}")
                 except ValueError: return self._json(400, {"error": "bad json"})

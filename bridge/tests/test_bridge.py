@@ -6,15 +6,20 @@ import ivi_bridge as B
 class FakeSerial:
     """Answers like the IVI3D Marlin: banner, 'PC start work', 'ok' per line, busy while heating."""
     def __init__(self, banner="echo:Firmware V1.3.2-alpha"):
+        self.working = "IDLE"; self.paused5 = False
         self.out = [banner]; self.written = []; self.closed = False; self.lock = threading.Lock()
     def write(self, b):
         cmd = b.decode().strip()
         with self.lock:
             self.written.append(cmd)
-            if cmd == "M2411 S2": self.out += ["PC start work", "trigger work: ok"]
+            if cmd == "M2411 S2":
+                self.out += ["Can't start work in current status: 5", "start work failed, err= 200"] if self.paused5 else ["PC start work", "trigger work: ok"]
             elif cmd == "M1001 L": self.out += ["ok"]
             elif cmd.startswith("M109"): self.out += ["echo:busy: processing", "echo:busy: processing", "ok"]
-            elif cmd in ("M2410", "M2411 S1"): pass
+            elif cmd == "M2007": self.out += ["Working Status: " + self.working, "ok"]
+            elif cmd == "M2411 S3": self.out += ["PC trigger stop", "trigger stop: ok", "ok"]; self.working = "IDLE"; self.paused5 = False
+            elif cmd == "M2410": self.out += ["PC trigger pause", "trigger pause: ok"]
+            elif cmd == "M2411 S1": self.out += ["PC trigger resume", "trigger resume: ok"]
             else: self.out.append("ok")
     def readline(self):
         with self.lock:
@@ -28,6 +33,67 @@ class GcodeTests(unittest.TestCase):
     def test_m1001(self):
         self.assertFalse(B.needs_m1001("Firmware V1.3.2-alpha"))
         self.assertTrue(B.needs_m1001("V2.4.0")); self.assertFalse(B.needs_m1001(""))
+
+class FirmwareEventTests(unittest.TestCase):
+    def test_locked_rotor_pauses(self):
+        s = FakeSerial(); orig = s.write
+        def w(b):
+            orig(b)
+            if b.decode().strip() == "G1 X-49.75 Y-9.38": s.out.insert(0, "warning:DriveX locked rotor")
+        s.write = w; notes = []
+        j = B.SerialJob(s, ["G1 X-49.75 Y-9.38", "G1 X0 Y0"], line_timeout=2, notify=notes.append)
+        t = threading.Thread(target=j.run); t.start()
+        for _ in range(300):
+            if j.state == "Paused": break
+            time.sleep(0.01)
+        self.assertEqual(j.state, "Paused"); self.assertIn("M2410", s.written); self.assertIn("locked rotor", notes[0])
+        j.cancel(); t.join(5); self.assertEqual(j.state, "Cancelled"); self.assertIn("M2411 S3", s.written)
+    def test_kill(self):
+        s = FakeSerial(); orig = s.write
+        s.write = lambda b: (orig(b), s.out.insert(0, "Printer halted. kill() called!") if b.decode().startswith("G0") else None)
+        j = B.SerialJob(s, ["G0 Z10"], line_timeout=2); j.run()
+        self.assertEqual(j.state, "Error"); self.assertIn("power-cycle", j.error)
+    def test_status5_autoclear(self):
+        s = FakeSerial(); s.paused5 = True
+        j = B.SerialJob(s, ["G28"], line_timeout=2); j.run()
+        self.assertEqual(j.state, "Operational"); self.assertEqual(s.written.count("M2411 S2"), 2); self.assertIn("M2411 S3", s.written)
+    def test_status5_no_autoclear(self):
+        s = FakeSerial(); s.paused5 = True
+        j = B.SerialJob(s, ["G28"], line_timeout=2, auto_clear=False); j.run()
+        self.assertEqual(j.state, "Error"); self.assertIn("status 5", j.error)
+    def test_stale_pc_job_stopped_on_connect(self):
+        s = FakeSerial(); s.working = "WORKING_PC"
+        j = B.SerialJob(s, ["G28"], line_timeout=2); j.run()
+        self.assertEqual(s.written[4], "M2411 S3"); self.assertEqual(j.state, "Operational")
+    def test_screen_job_refused(self):
+        s = FakeSerial(); s.working = "WORKING_SCREEN"
+        j = B.SerialJob(s, ["G28"], line_timeout=2); j.run()
+        self.assertEqual(j.state, "Error"); self.assertNotIn("M2411 S2", s.written)
+    def test_screen_pause_and_resume(self):
+        s = FakeSerial(); j = B.SerialJob(s, ["G1 X%d" % i for i in range(100000)], line_timeout=2)
+        t = threading.Thread(target=j.run); t.start()
+        while j.state != "Printing": time.sleep(0.01)
+        s.out.append("SC trigger pause")
+        for _ in range(300):
+            if j.state == "Paused": break
+            time.sleep(0.01)
+        self.assertEqual(j.state, "Paused"); self.assertIn("touch screen", j.reason)
+        s.out.append("trigger resume: ok")
+        for _ in range(300):
+            if j.state == "Printing": break
+            time.sleep(0.01)
+        self.assertEqual(j.state, "Printing"); j.cancel(); t.join(5)
+
+class PreludeTests(unittest.TestCase):
+    def test_fdm_none(self): self.assertEqual(B.job_prelude({}, "3dp", ["G28"]), [])
+    def test_cnc(self): self.assertEqual(B.job_prelude({}, "cnc", ["G0 Z10.00 F400"]), ["G53", "G28", "G54"])
+    def test_laser_needs_focus(self):
+        with self.assertRaises(RuntimeError): B.job_prelude({}, "laser", ["G1 X-49.75 Y-9.38"])
+        self.assertEqual(B.job_prelude({"laser_focus_z": 120}, "laser", ["G1 X1 Y1"]), ["G53", "G28", "G0 Z120.00 F1500", "G54"])
+        self.assertEqual(B.job_prelude({}, "laser", ["G0 Z50", "G1 X1 Y1"]), ["G53", "G28", "G54"])
+        self.assertEqual(B.job_prelude({"home_before_job": False}, "laser", ["G1 X1 Y1"]), ["G53", "G54"])
+    def test_header_type(self):
+        self.assertEqual(B.header_type(";Header Start\n;header_type: laser\n"), "laser"); self.assertEqual(B.header_type("G28"), "3dp")
 
 class StatusTests(unittest.TestCase):
     def test_parse(self):
@@ -57,11 +123,11 @@ class SerialJobTests(unittest.TestCase):
     def test_stream(self):
         s = FakeSerial(); j = B.SerialJob(s, ["G28", "M109 S215", "G1 X1"], line_timeout=2); j.run()
         self.assertEqual(j.state, "Operational"); self.assertEqual(j.sent, 3)
-        self.assertEqual(s.written, ["M2411 S2", "G28", "M109 S215", "G1 X1"])  # no M1001 on 1.3.2
+        self.assertEqual(s.written, ["M2005", "M2007", "M105", "M2155 S4"] + ["M2411 S2", "G28", "M109 S215", "G1 X1"])  # no M1001 on 1.3.2
         self.assertEqual(j.progress, 100.0)
     def test_m1001_new_fw(self):
         s = FakeSerial("Firmware V2.4.1"); j = B.SerialJob(s, ["G28"], line_timeout=2); j.run()
-        self.assertEqual(s.written[:2], ["M2411 S2", "M1001 L"])
+        self.assertEqual(s.written[4:6], ["M1001 L", "M2411 S2"])
     def test_pause_resume_cancel(self):
         s = FakeSerial(); j = B.SerialJob(s, ["G1 X%d" % i for i in range(100000)], line_timeout=2)
         t = threading.Thread(target=j.run); t.start()
@@ -127,6 +193,10 @@ class OctoPrintApiTests(unittest.TestCase):
             def terminate(s): s.terminated = True
         a = A(); self.awake.append(a); return a
     def tearDown(self): self.srv.shutdown(); self.printer.shutdown()
+    def test_clear_endpoint(self):
+        self.ser.working = "WORKING_PC"
+        st, js = self.req("/api/ivi/clear", b"{}")
+        self.assertIn("M2411 S3", self.ser.written); self.assertIn("IDLE", js["message"])
     def test_status_page_no_key_needed(self):
         with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
         self.assertIn("IVI Bridge", page); self.assertIn('"KEY"', page)
@@ -167,7 +237,7 @@ class OctoPrintApiTests(unittest.TestCase):
         self.bridge.thread.join(5)
         job = self.req("/api/job")[1]
         self.assertEqual(job["state"], "Operational"); self.assertEqual(job["progress"]["completion"], 100.0)
-        self.assertEqual(self.ser.written, ["M2411 S2", "G28", "M109 S215", "G1 X1"]); self.assertTrue(self.ser.closed)
+        self.assertEqual(self.ser.written, ["M2005", "M2007", "M105", "M2155 S4"] + ["M2411 S2", "G28", "M109 S215", "G1 X1"]); self.assertTrue(self.ser.closed)
     def test_serial_pause_cancel_via_api(self):
         self.cfg["mode"] = "serial"
         self.upload("\n".join("G1 X%d" % i for i in range(100000)))

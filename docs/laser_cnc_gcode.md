@@ -108,14 +108,88 @@ Command forms: `G0 X Y`, `G0 Z`, `G0 Z F`, `G0 X Y F`, `G1 X Y`, `G1 Z F`, `M3 P
 Depth in passes of 0.40 mm down to Z-3.20 (8 passes). Z0 = stock top, cuts are negative.
 Note `G21` is absent from the CNC sample (mm assumed by default); the Fusion post adds it.
 
-Caveat: unknown whether the firmware also accepts `M3 S<rpm>` or `M3 S<percent>`; only `M3 P<percent>` is
-observed. Unknown whether the 3D-print `M106`/fan path is involved for CNC (it is not emitted).
+Caveat: the firmware's M3 handler **ignores P** (see findings below), so `M3 P100` behaves like a bare `M3`
+(re-uses the last power). `M3 S<percent>` is what the firmware actually reads; the Fusion CNC post emits S by default.
+
+## Start sequences seen on the printer (2026-11-01, USB, from IVI 3licer)
+
+| Step | Laser | CNC |
+|---|---|---|
+| On connect (IVI 3licer server code) | `M2005`, `M2051`, `M2007`, `M105`, `M2155 S4` | same |
+| Home button (app code `executeGcodeAutoHome`) | `G53`, `G28`, `G54`* | `G53`, `G28`, `G54` → `Select workspace 0` |
+| Start | `M1001 L` (fw ≥ 2.4.0 only), `M2411 S2` → `PC start work` / `trigger work: ok` | same |
+| File | `G90`, `G21`, `M106 P0`, `G1 F500`, `G1 X-49.75 Y-9.38`, `G4 P45 L100` … | `G90`, `G0 Z10 F400`, `G0 X-30 Y-22.35 F400` … |
+
+*Observed laser log had `G53`, `G28`, `G90` — no `G54`; the app sends `G54` only for laser/CNC head types it recognises.
+If "focus height" is enabled the app also sends `G53; G0 Z<focus+thickness> F1500; G54;` before the job.
+
+What happened: the laser job stalled at its **first** sideways move twice (`warning:DriveX locked rotor` ~2 s later, then
+`PC trigger pause`); the CNC job (which drops to Z10 first) moved normally until the user e-stopped (`Printer halted. kill() called!`).
+
+## Firmware findings (2026-11-01)
+
+From the motion firmware (`firmware.supx` → `supx_raw.bin`, base 0x08010000, Ghidra decompile) and IVI 3licer 1.6.2
+`server/index.js` / app bundle. **[C]** = confirmed in code, **[I]** = inferred.
+
+### Host commands
+| Command | Meaning | Evidence |
+|---|---|---|
+| `M2007` | Status block: position, origin offsets, `Working Status: IDLE / WORKING_PC / WORKING_SCREEN / ERROR` [C] | dispatcher 0x7D7 → FUN_08025D60 → FUN_08025C30 (strings 0x08035C66…0x08035C96) |
+| `M2155 S<n>` | Auto-report every *n* s (0 = off, max 60): temps, driver encoder `Count A/B/C`, the M2007 block [C]. This is the unsolicited status every ~4 s | FUN_080212DC stores n and deadline; timer FUN_0802601C calls FUN_08025D24, FUN_0802922C (Count), FUN_08025D60 |
+| `M2410` | Pause. Not in the normal dispatcher (FUN_08021390 is empty) — caught by the byte-level emergency parser (FUN_0801A510/FUN_08019928) → FUN_0801A748 prints `PC trigger pause` / `SC trigger pause` (port that sent it) [C] | strings 0x080347AB/0x080347BA |
+| `M2411 S1` | Resume (only from status 5, same port that owns the job) [C] | FUN_080267C0 |
+| `M2411 S2` | Start PC job (only from status 1) → `PC start work`, `trigger work: ok`; else `Can't start work in current status: N` + `start work failed, err= 200` [C] | FUN_080268FC, string 0x0803610B |
+| `M2411 S3` | **Stop** (from status 2, 5 or 8; owner port must match). From 5 → status 10 → `Finish stop` → 1. Turns the laser off [C]. IVI 3licer's Stop button sends it, and sends it on connect if `Working Status: WORKING_PC` [C] | FUN_08026708 (mask 0x124), FUN_08026858, server `gcode:stop` |
+| `M2411 S4` | Finish (status → 9) [C] | FUN_08021394 case 4 |
+| `M2411` other S | ignored (switch default) [C] | |
+| `M1001 L` / `M1001 U` | Sent by IVI 3licer only when firmware ≥ 2.4.0 (L on start/resume, U on pause) [C]; not in V1.3.2's dispatcher [I: Snapmaker 2.0 lock/unlock heritage] | server code |
+| `M20` | not implemented → just `ok`, no file list [C: no case 20 in dispatcher] | FUN_080230F8 |
+
+### Job status numbers (`current status: N`)
+0 INIT, 1 IDLE, 2 WORK, 3 PAUSE_TRIG, 4 PAUSE_STOPPED, **5 PAUSE_FINISH = paused**, 6 RESUME_TRIG, 7 RESUME_MOVING,
+8 RESUME_WAITING [C: IVI 3licer table `SYSTAT_*`; firmware transitions 2/8→3 (pause), 4→5 (`Finish pause`), 5→6 (resume)],
+9 stopping, 10 stopping-from-pause [C: FUN_08026708].
+**`Can't start work in current status: 5`** = the previous job is still paused. Clear it with `M2411 S3` from the same port
+(or resume with `M2411 S1`) [C]; the bridge does this automatically once. If the touch screen owns the job, the PC port
+gets `current working port is not PC!` — stop it on the screen [C].
+
+### Kill
+`Printer halted. kill() called!` is Marlin's `kill()` (e-stop, MAXTEMP etc.). Marlin's kill loop stops processing
+commands; recovery is a power-cycle/reset [I: standard Marlin; `M999` only clears the softer `Stopped` state].
+
+### "warning:DriveX locked rotor"
+- The **closed-loop driver** detects it and reports bit 1 of its status register 0x14 over UART; the mainboard just prints
+  `warning:` + `DriveX/Y/Z/E0 ` + `locked rotor` and disables further fault reports (FUN_0802DE40 → FUN_0802DD38) [C].
+  No threshold lives in the mainboard firmware — it is inside the driver [C for absence, I for location].
+- The mainboard does **not** pause by itself; IVI 3licer matches `^warning:Drive(.*) locked rotor$` with `shouldPause`
+  and sends `M2410` → `PC trigger pause` [C]. That is the pause seen today.
+- `Count A/B/C` in the auto report = encoder counts of the three tower drivers [I: printed by FUN_0802DAE4 from the driver table].
+- **Why the first laser move stalls [I, strong]:** this is a delta (L 357.5, R 160.31, H 233.2). After `G28` the carriages sit
+  at the top endstops. Moving to X-49.75 Y-9.38 at that height needs the X (A) carriage to rise **+19.4 mm above its
+  homed position** (Y −24.2, Z −8.8 mm) — physically impossible, so the X motor stalls. The laser file contains no Z move,
+  and without `G54`/focus-height Z the head stays at Z≈237. The CNC file drops to `G0 Z10` (workspace) first, so it moved.
+  Fix: lower the head before the first XY move (IVI 3licer's focus-height option, or the bridge's `laser_focus_z`).
+  Even a 5 mm sideways move at the top needs +2.1 mm carriage travel.
+
+### Laser / CNC power
+- `M3` [C, FUN_08021FB0]: head type 1 (laser [I]): `M3 S<n>` sets power n (byte, not clamped by the mainboard), bare `M3`
+  re-uses the last value; ignored for 3 s after a pause. Head type 2 (CNC [I]): `M3 S<n>` clamped to 100, enables the
+  head (CAN `B8 1`) and **ramps in 10 % steps every 300 ms**; bare `M3` re-uses the stored value. **P is never read** [C]
+  → `M3 P100` = bare `M3`. Power goes to the head as CAN `B1 <percent>` [C].
+  So S is **percent 0–100** [C for CNC clamp; I for laser, which passes the byte through].
+- `M5` [C, FUN_08022030]: laser power 0; CNC power 0 + `B8 2` (head off).
+- `G4 P<ms> L<n>` [C, FUN_080246D0]: Marlin dwell (P ms, S s); `L` is honoured only with the laser head: `L<n>` fires at
+  power n for the dwell, bare `L` re-uses the last power. So the bogus `P896745231` really would dwell ~10 days per dot.
+  The `G4 P45 L100` seen today is a sane 45 ms dot.
+- `M106 P<i> [S<0-255>]` [C, FUN_080256A4]: fan index 0/1 (P > 1 ignored), default S 255; `M106` without P turns both
+  fans on; `M107` both off. In laser jobs `M106 P0` = fan/air-assist on, not the laser [C].
+- IVI 3licer's UI parser shows `M3 P` as % and `M3 S` as S/255 % (Snapmaker convention) [C] — display only.
 
 ## Open questions (need a hardware test, low power / scrap / safety glasses)
-1. Laser `M3 S` scale (percent?) and minimum S that fires.
+1. Laser `M3 S` scale (decoded as percent passed to the head; confirm) and minimum S that fires.
 2. Do `G0 F` and `G1 F` keep separate feeds?
 3. Does the firmware reject files whose header bounds or line counts don't match?
 4. Point mode dwell units; does `L` without `G4` do anything?
-5. CNC: `M3 S` accepted? spindle ramp time before plunge?
+5. CNC: confirm `M3 S<percent>` spins (decoded: S read, P ignored, 10 %/300 ms ramp — so ~3 s to full before plunging).
 
 Fusion post processors that follow these formats: [../fusion/README.md](../fusion/README.md).

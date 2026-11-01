@@ -9,5 +9,9 @@
   "listen_host": "127.0.0.1",
   "listen_port": 5000,
   "api_key": "choose-any-string-and-paste-it-in-the-slicer",
+  "report_interval_s": 4,
+  "home_before_job": true,
+  "laser_focus_z": null,
+  "auto_clear_stale_job": true,
   "spool_dir": "~/Library/Application Support/ivi-bridge/jobs"
 }

@@ -101,7 +101,8 @@ The slicer never checks the flag. IVI 3licer's Wi-Fi **Run** does `execute_code`
 **USB serial (works, verified 2026-11-01):** USB-C CDC at 115200 baud. The printer reports Firmware V1.3.2-alpha, Tool Head
 FW V1.1, HW V1, `Head 3DP,0.3mm`. Start a PC job with `M2411 S2` (plus `M1001 L` if firmware ≥ 2.4.0) → `PC start work` /
 `trigger work: ok`, state `WORKING_PC`; then stream G-code line by line, one per `ok`. `M2410` pause, `M2411 S1` resume,
-`M2411 S3` rejoin a running job. An FDM print was started this way from IVI 3licer (G53, G28, M82, M104 S215, M140 S50,
+`M2411 S3` stop (firmware "trigger stop"; also what IVI 3licer sends on connect if a stale PC job exists). Job states,
+locked-rotor and kill handling: [docs/laser_cnc_gcode.md](docs/laser_cnc_gcode.md#firmware-findings-2026-11-01). An FDM print was started this way from IVI 3licer (G53, G28, M82, M104 S215, M140 S50,
 M109 S215 with `busy: processing` while heating, then printing). On macOS, allow the slicer under **Privacy & Security →
 Local Network**, or Wi-Fi requests fail with "No route to host".
 

@@ -22,7 +22,7 @@ class PostTests(unittest.TestCase):
         self.assertEqual(e, []); self.assertEqual(h["header_type"], "cnc")
         body = [l for l in g.splitlines() if l and not l.startswith(";")]
         self.assertEqual(body[:3], ["G90", "G21", "G0 Z10.00 F400"])
-        self.assertIn("M3 P100", body); self.assertEqual(body[-1], "M5")
+        self.assertIn("M3 S100", body); self.assertEqual(body[-1], "M5")
         self.assertIn("G1 Z-0.40 F300", body)   # plunge capped at 300
         self.assertTrue(any("Z-0.40" in x for x in w) or True)
 

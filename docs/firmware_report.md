@@ -184,7 +184,7 @@ From `Sender::Sender` @ `0x25e48` and `Sender::openPort` @ `0x1f410`:
 | `M2411 S1` | Resume |
 | `M2411 S3` | Stop |
 | `M2005`, `M2051` | Present as literals (tool/head related; exact semantics not fully decompiled) |
-| `M210 S0/S1`, `M2155 S0/S5` | Enclosure / door related toggles in string table |
+| `M210 S0/S1`, `M2155 S0/S5` | `M2155 S<n>` = motion-board auto status report interval (see laser_cnc_gcode.md) |
 
 `GlobalFuntions::sendPrintStartCMD` @ `0x2a60c`:
 

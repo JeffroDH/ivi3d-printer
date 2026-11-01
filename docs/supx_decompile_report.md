@@ -92,7 +92,7 @@ was not resolved [?].
 | M2001 [S] | re-open host serial at 115200; if S1, stop/hand over job (claims the PC port) |
 | M2005 | print firmware version, tool-head FW/HW version + SN |
 | M2006 [S0/1] | Auto Fan Switch |
-| M2007 | internal (thunk 0x08025D60, not decoded) |
+| M2007 | status report: position, origin offsets, `Working Status:` (FUN_08025D60 → FUN_08025C30); also sent by the M2155 timer |
 | M2010 [S0/1] | auto door check on/off; no S = report door opened/closed |
 | M2049 | load-cell report (" info:weight_0 / weight_1 ") |
 | M2050 / M2051 | internal (reset/settings helpers, not decoded) |
@@ -101,9 +101,9 @@ was not resolved [?].
 | M2060 / M2061 | self-test strings ("sensor: XMotor:ok …" / "Print:ok …") |
 | M2080 | report head type ("info:<n>") via CAN `A3` |
 | M2111 S/L | S0 print position_shift + current position; S1/S2 L0–6 set debug/error level |
-| M2155 S<sec> | set host-watchdog/timeout, max 60 s |
-| M2410 | **no-op** in the motion firmware (pause is handled by the UI host) |
-| M2411 S1/S2/S3/S4 | trigger resume / start work / stop / finish (job state machine; errors "Can't … in current status") |
+| M2155 S<sec> | auto-report interval, 0–60 s (FUN_080212DC; timer FUN_0802601C prints temps, driver `Count A/B/C`, M2007 block). IVI 3licer sends `M2155 S4` on connect |
+| M2410 | no-op in the normal dispatcher, but caught by the **emergency (byte-level) serial parser** (FUN_0801A510 / FUN_08019928) → FUN_0801A748 prints `PC|SC trigger pause` and calls the pause state machine FUN_0802665C |
+| M2411 S1/S2/S3/S4 | resume (FUN_080267C0) / start work (FUN_080268FC) / **stop** (FUN_08026708) / finish (FUN_08026708 src 7) — see docs/laser_cnc_gcode.md "Job state machine" |
 | M2910 [S] | driver info dump (Version/HDCP/HDCE/Sub/Mode/Dir/RS) |
 | M2911 X/Y/Z/E | set driver HDCP current (reg 4, HDCE fixed 1500) |
 | M2912 X/Y/Z/E | set driver direction (reg 3) |

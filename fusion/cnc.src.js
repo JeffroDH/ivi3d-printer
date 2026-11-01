@@ -1,8 +1,9 @@
 /**
   IVI3D CNC post processor for Autodesk Fusion (CC BY-NC-SA 4.0, JeffroDH/ivi3d-printer).
-  Emits the IVI 3licer CNC header + G-code: M3 P<percent> spindle on, M5 off, G0 Z safe heights.
-  UNVERIFIED on hardware. Whether "M3 S<rpm>" is accepted is unknown, so spindle speed is a
-  percentage property (IVI 3licer sample: M3 P100). See docs/laser_cnc_gcode.md.
+  Emits the IVI 3licer CNC header + G-code: M3 S<percent> spindle on, M5 off, G0 Z safe heights.
+  Firmware V1.3.2-alpha's M3 handler reads only S (0-100 %, clamped, ramped 10 %/300 ms) and ignores P,
+  so IVI 3licer's "M3 P100" acts like a bare M3 (re-uses the last power). S is the default here;
+  set "Spindle word" to P to copy IVI 3licer exactly. UNVERIFIED on hardware. See docs/laser_cnc_gcode.md.
   Origin: WCS X0 Y0 at the CENTRE of the stock, Z0 at the stock TOP (IVI cuts go to negative Z).
 */
 description = "IVI3D CNC";
@@ -25,7 +26,8 @@ allowHelicalMoves = false;
 allowedCircularPlanes = 0; // linearize all arcs (IVI files contain only G0/G1)
 
 properties = {
-  spindlePercent: {title: "Spindle power (%)", description: "Emitted as M3 P<percent> (IVI 3licer convention).", type: "integer", value: 100, scope: "post"},
+  spindlePercent: {title: "Spindle power (%)", description: "Emitted as M3 S<percent> (firmware reads S as percent).", type: "integer", value: 100, scope: "post"},
+  spindleWord:    {title: "Spindle word", description: "S (firmware-decoded, default) or P (IVI 3licer output; ignored by firmware).", type: "enum", values: ["S", "P"], value: "S", scope: "post"},
   safeZ:          {title: "Safe Z (mm)", description: "Clearance height at start/end (IVI 3licer: 10).", type: "number", value: 10, scope: "post"},
   retractZ:       {title: "Retract Z (mm)", description: "Height before spindle start (IVI 3licer: 5).", type: "number", value: 5, scope: "post"},
   jogSpeed:       {title: "Jog speed (mm/min)", description: "Header jog_speed and G0 time estimate.", type: "number", value: 3000, scope: "post"},
@@ -48,7 +50,7 @@ function onSection() {
   move("G0", null, null, getProperty("retractZ"));
   if (!spindleOn) {
     var pct = Math.max(1, Math.min(100, getProperty("spindlePercent")));
-    out("M3 P" + pct); spindleOn = true;
+    out("M3 " + (getProperty("spindleWord") == "P" ? "P" : "S") + pct); spindleOn = true;
   }
 }
 function onRapid(x, y, z) { move("G0", x, y, z); }
