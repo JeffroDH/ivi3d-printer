@@ -10,8 +10,10 @@
 ## Import
 1. OrcaSlicer → **File → Import → Import Configs…** → pick `IVI3D.orca_printer` (or the three `.json` files).
 2. Select printer **IVI3D 0.3 nozzle**, filament **IVI3D PLA**, process **IVI3D 0.15mm Standard** (or **0.20mm Fast** / **0.10mm High Quality**).
-3. Printer settings → Connection: the host is pre-set to OctoPrint `127.0.0.1:5000`; paste the API key from the
-   IVI Bridge installer ([../bridge/README.md](../bridge/README.md)) → Test.
+3. Quit Orca and run the IVI Bridge installer, or `bridge/Fix IVI Bridge Key.command` if the bridge is already
+   installed ([../bridge/README.md](../bridge/README.md)). It writes the bridge's API key over the
+   `PASTE-API-KEY-FROM-IVI-BRIDGE-INSTALLER` placeholder in the imported preset, the Device tab connection and the
+   plugin config. Do this again after every re-import. Optional: Connection icon on the Printer bar → Test.
 4. Optional header hook: Process → Others → Post-processing scripts:
    `/usr/bin/python3 "/Volumes/14TB/3D Printing Files/IVI3D/orca/ivi_fdm_header.py";`
    Not needed for USB printing through the bridge; may matter for files uploaded over Wi-Fi and started from the touch

@@ -1,5 +1,6 @@
 #!/bin/bash
 # Double-click to install the IVI Bridge as a login item (LaunchAgent). Safe to re-run (updates in place).
+# Keeps the existing API key; run with --new-key (from Terminal) to generate a fresh one.
 set -euo pipefail
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -16,10 +17,13 @@ if ! "$PY" -c 'import sys; assert sys.version_info >= (3, 8)' 2>/dev/null; then
 fi
 
 mkdir -p "$APP" "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
-cp "$HERE/ivi_bridge.py" "$APP/ivi_bridge.py"
+NEWKEY=""; [ "${1:-}" = "--new-key" ] && NEWKEY="--new-key"
+cp "$HERE/ivi_bridge.py" "$HERE/ivi_setup_keys.py" "$APP/"
+cp "$HERE/Fix IVI Bridge Key.command" "$APP/" && chmod +x "$APP/Fix IVI Bridge Key.command"
 INFO="$("$PY" "$APP/ivi_bridge.py" --config "$CFG" init-config)"
 HOSTPORT="$("$PY" -c 'import json,sys; print(json.loads(sys.argv[1])["host"])' "$INFO")"
-KEY="$("$PY" -c 'import json,sys; print(json.loads(sys.argv[1])["api_key"])' "$INFO")"
+# Create/keep the key in the bridge config (Orca files are patched further down, after the plugin copy)
+KEY="$("$PY" "$APP/ivi_setup_keys.py" --config "$CFG" --key-only $NEWKEY --print-key)"
 USB="$("$PY" -c 'import json,sys; print(json.loads(sys.argv[1])["usb_port"] or "not plugged in (Wi-Fi will be used)")' "$INFO")"
 
 cat > "$PLIST" <<PL
@@ -62,15 +66,27 @@ if [ -f "$PLUGIN_SRC" ]; then
     DEST="$ROOT/ivi3d_bridge_plugin.py"
     OLD="$ROOT/ivi3d_bridge"   # pre-0.1.1 location; same plugin key, so remove it to avoid a duplicate
     if [ -d "$OLD" ] && [ "$(ls -A "$OLD" | grep -v '^\.' | grep -vx 'ivi3d_bridge_plugin.py' || true)" = "" ]; then rm -rf "$OLD"; fi
-    mkdir -p "$DEST" && cp "$PLUGIN_SRC" "$DEST/ivi3d_bridge_plugin.py" && PLUGIN_NOTE="OrcaSlicer plugin copied to $DEST (restart Orca, enable it, paste the API key into the IVI3D Bridge tab settings)"
+    mkdir -p "$DEST" && cp "$PLUGIN_SRC" "$DEST/ivi3d_bridge_plugin.py" && PLUGIN_NOTE="OrcaSlicer plugin copied to $DEST (restart Orca and enable it; its API key is filled in for you)"
   fi
 fi
+# Write the key into Orca: printer presets, Device tab connection, plugin config
+ORCA_NOTE="Orca: API key filled in automatically (presets, Device tab, plugin)"
+while :; do
+  set +e; "$PY" "$APP/ivi_setup_keys.py" --config "$CFG"; RC=$?; set -e
+  [ $RC -ne 3 ] && break
+  ANS=$(osascript -e 'button returned of (display dialog "OrcaSlicer is open. Quit it (Cmd-Q) so the API key can be written into its settings, then click Retry." buttons {"Skip", "Retry"} default button "Retry" with title "IVI Bridge")' 2>/dev/null || echo Skip)
+  if [ "$ANS" != "Retry" ]; then ORCA_NOTE="Orca: NOT updated (Orca was open). Quit Orca and double-click \"Fix IVI Bridge Key.command\" in $APP"; break; fi
+done
+[ "${RC:-0}" -ne 0 ] && [ "${RC:-0}" -ne 3 ] && ORCA_NOTE="Orca: key update failed (see Terminal); run Fix IVI Bridge Key.command"
+
 MSG="IVI Bridge is installed and starts automatically at login.
 
-Orca Slicer → Printer settings → Connection (Use 3rd-party print host):
+$ORCA_NOTE
+Orca connection (Printer bar → Connection icon), already set by the IVI3D profile:
   Host type: OctoPrint
   Hostname/IP: $HOSTPORT
   API key: $KEY   (already copied to the clipboard)
+After importing IVI3D.orca_printer again, quit Orca and run Fix IVI Bridge Key.command.
 
 USB printer: $USB
 Status page: http://$HOSTPORT/

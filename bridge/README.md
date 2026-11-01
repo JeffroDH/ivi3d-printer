@@ -12,8 +12,16 @@ Double-click **`Install IVI Bridge.command`** (first time: right-click → Open 
 - copies the bridge to `~/Library/Application Support/ivi-bridge/app`, no extra packages (built-in termios serial, no pyserial);
 - writes `~/.config/ivi-bridge/config.json` (mode 600) if missing: `mode: auto`, printer `192.168.50.85:8080`, stock token, random API key;
 - installs/loads the LaunchAgent `com.ivi3d.bridge` (starts at login, restarts on crash; log `~/Library/Logs/ivi-bridge.log`);
+- writes the API key into OrcaSlicer for you (`ivi_setup_keys.py`): the IVI3D printer presets (`printhost_apikey`),
+  the Device tab's saved connection (`OrcaSlicer.conf` → `local_machines` → `127.0.0.1:5000`) and the IVI3D Bridge
+  plugin's config (`orca_plugins/config.json`). Each Orca file is backed up (`*.bak-<date>`) first. Orca must be
+  closed — the installer asks you to quit it and retry (or skip);
 - shows the Orca settings in a dialog and copies the API key to the clipboard.
-Re-run it after updating the repo. **`Uninstall IVI Bridge.command`** removes it (optionally the settings).
+Re-run it after updating the repo; the existing key is kept (`"Install IVI Bridge.command" --new-key` from Terminal
+makes a new one and updates Orca too).
+**After importing `IVI3D.orca_printer` again** (it ships with a placeholder key), quit Orca and double-click
+**`Fix IVI Bridge Key.command`** (in this folder or `~/Library/Application Support/ivi-bridge/app`). Same as
+`/usr/bin/python3 bridge/ivi_setup_keys.py --wait`; add `--dry-run` to only list what would change. **`Uninstall IVI Bridge.command`** removes it (optionally the settings).
 If macOS asks, allow Python under **Privacy & Security → Local Network**.
 
 **Automatic mode:** USB printer plugged in (`/dev/tty.usbmodem*`) → USB print starts immediately (Mac kept awake via `caffeinate -i` for the job); otherwise → Wi-Fi upload, start on the touch screen. Override with `"mode": "wifi"` or `"serial"` in the config.
@@ -21,8 +29,10 @@ If macOS asks, allow Python under **Privacy & Security → Local Network**.
 **Status page:** http://127.0.0.1:5000/ — state, temperatures, progress, Pause/Resume/Cancel. Temperatures come from the printer's USB reports during a job (the port is released between jobs so IVI 3licer can still use it), and also appear in Orca's device tab via `/api/printer`.
 
 ## Orca Slicer
-1. Printer settings → Basic information → enable **Use 3rd-party print host** (or the Wi-Fi/network icon next to the printer).
-2. Host type **OctoPrint**, Hostname/IP `127.0.0.1:5000`, API key = `api_key` from the config → **Test**.
+1. Import `IVI3D.orca_printer` (see [../orca/README.md](../orca/README.md)); it pre-sets OctoPrint `127.0.0.1:5000`,
+   and the installer / `Fix IVI Bridge Key.command` fills in the API key. Nothing to paste.
+2. Optional check: Prepare sidebar → **Printer** title bar → Connection (Wi-Fi) icon → **Test**. (Hidden while the
+   experimental "Use printer agents instead of print hosts" option is on.)
 3. Slice → **Send** (wifi: upload, then press start on the touch screen) or **Print** (serial: starts now).
 
 Alternative without the service in wifi mode: Process → Others → Post-processing scripts:

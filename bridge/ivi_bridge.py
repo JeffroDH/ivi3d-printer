@@ -555,7 +555,9 @@ def make_handler(bridge):
             self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
         def _auth(self):
             key = cfg.get("api_key")
-            if key and self.headers.get("X-Api-Key") != key and \
+            # Orca's Device-tab webview sends X-Api-Key twice -> merged as "key, key"
+            sent = [k.strip() for k in (self.headers.get("X-Api-Key") or "").split(",")]
+            if key and key not in sent and \
                self.headers.get("Authorization", "") != f"Bearer {key}":
                 self._json(403, {"error": "Invalid API key"}); return False
             return True

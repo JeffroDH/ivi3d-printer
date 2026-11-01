@@ -34,8 +34,9 @@ Reinstalling resets the plugin's granted permissions, so Orca asks again.
 ## Enable
 1. Start OrcaSlicer 2.5 and open the **Plugins** dialog. Tick **Activate** for **IVI3D Bridge** and accept the
    localhost permission dialog. Both capabilities should be listed (Slicing Pipeline + Pages).
-2. Select the **IVI3D Bridge** capability, open the **Config** tab, and paste the API key into `api_key` (the
-   installer copied it to the clipboard; it's also in `~/.config/ivi-bridge/orca-settings.txt`).
+2. `api_key` on the **IVI3D Bridge** Config tab is filled in by the bridge installer / `Fix IVI Bridge Key.command`
+   (run with Orca closed). If it's empty or wrong, quit Orca and run that again; pasting the key from
+   `~/.config/ivi-bridge/orca-settings.txt` also works.
 3. Optional: in the **IVI3D FDM Header** Config tab, set `"enabled": false` to turn the header off.
 4. If you previously added `ivi_fdm_header.py` as a post-processing script, remove it (harmless if not; the header is
    only added once).

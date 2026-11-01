@@ -226,6 +226,12 @@ class OctoPrintApiTests(unittest.TestCase):
         self.assertIn("OctoPrint", self.req("/api/version")[1]["text"])
         with self.assertRaises(urllib.error.HTTPError) as e: self.req("/api/version", key="bad")
         self.assertEqual(e.exception.code, 403)
+    def test_duplicated_key_header(self):
+        self.assertEqual(self.req("/api/version", key="KEY, KEY")[0], 200)
+        self.assertEqual(self.req("/api/version", key="bad, KEY")[0], 200)
+        for k in ("bad, worse", "", "KEYKEY", "KEY;KEY"):
+            with self.assertRaises(urllib.error.HTTPError) as e: self.req("/api/version", key=k)
+            self.assertEqual(e.exception.code, 403)
     def test_wifi_upload(self):
         st, js = self.upload("G28\n")
         self.assertEqual(st, 201); self.assertIn("touch screen", js["message"])
