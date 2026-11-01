@@ -267,6 +267,7 @@ class MonitorSerial:
             if cmd == "M105": self.out.append("ok T:%.1f /%.1f B:50.0 /60.0" % (21.0 + self.t, self.t))
             elif cmd == "M2007": self.out += ["Working Status: " + ("WORKING_SCREEN" if self.systat in (2, 5) else "IDLE"),
                                               "job status: %d" % self.systat, "ok"]
+            elif cmd == "M114": self.out += ["X:0.00 Y:0.00 Z:237.51 E:0.00 Count A:0 B:0 C:0", "ok"]
             elif cmd.startswith("M104 S"): self.t = float(cmd[6:]); self.out.append("ok")
             else: self.out.append("ok")
     def readline(self):
@@ -291,7 +292,7 @@ class MonitorTests(unittest.TestCase):
         def boom(b): raise OSError("serial port closed")
         s.write = boom; self.assertFalse(m.poll_once()); self.assertFalse(m.connected); self.assertIn("USB lost", m.error)
     def test_command_whitelist(self):
-        for bad in ("G28", "M104 S400", "M220 S5", "M140 S200", "M104 S200\nG28", "M2411 S2"):
+        for bad in ("G29", "M104 S400", "G1 X200", "G1 E-500", "G1 X1 X2", "G1 F0", "G1 F9000", "G0 X1", "M106 S300", "M220 S5", "M140 S200", "M104 S200\nG28", "M2411 S2"):
             with self.assertRaises(ValueError): B.check_command(bad)
         self.assertEqual(B.check_command("M221 S95"), "M221 S95")
     def test_upload_mode(self):
@@ -333,7 +334,7 @@ class MonitorApiTests(OctoPrintApiTests):
         self.post("/api/printer/printhead", {"command": "feedrate", "factor": 110})
         self.post("/api/printer/tool", {"command": "flowrate", "factor": 98})
         for g in ("M104 S205", "M140 S55", "M220 S90", "M221 S105", "M220 S110", "M221 S98"): self.assertIn(g, self.ms.written)
-        with self.assertRaises(urllib.error.HTTPError) as e: self.post("/api/printer/command", {"command": "G28"})
+        with self.assertRaises(urllib.error.HTTPError) as e: self.post("/api/printer/command", {"command": "M502"})
         self.assertEqual(e.exception.code, 400)
     def test_pause_resume_screen_job_over_usb(self):
         self.ms.systat = 2; self.bridge.monitor.poll_once()
@@ -345,6 +346,21 @@ class MonitorApiTests(OctoPrintApiTests):
         self.bridge.monitor.release()
         with self.assertRaises(urllib.error.HTTPError) as e: self.post("/api/printer/bed", {"command": "target", "target": 50})
         self.assertEqual(e.exception.code, 409); self.assertFalse(self.req("/api/printer")[1]["ivi"]["usb"])
+    def test_allowlist_new_codes(self):
+        for c in ("G28", "G90", "G91", "M114", "M701", "M702", "M83", "M82", "G1 X-10 F1500", "G1 Z0.05 F200",
+                  "G1 E-100 F1000", "M106 S255", "M107"): self.assertEqual(B.check_command(c), c)
+    def test_position_and_jog(self):
+        self.assertEqual(self.req("/api/printer")[1]["position"], {"x": 0.0, "y": 0.0, "z": 237.51})
+        self.post("/api/printer/command", {"commands": ["G91", "G1 Z-10 F1500", "G90"]})
+        i = self.ms.written.index("G91"); self.assertEqual(self.ms.written[i:i + 3], ["G91", "G1 Z-10 F1500", "G90"])
+        with self.assertRaises(urllib.error.HTTPError) as e: self.post("/api/printer/command", {"commands": ["G1 Z-500"]})
+        self.assertEqual(e.exception.code, 400)
+    def test_page_matches_touchscreen_spec(self):
+        with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
+        for s in (">Control<", "Load Filament", "Unload Filament", ">210°C<", ">240°C<", ">270°C<", ">60°C<", ">80°C<", ">100°C<",
+                  ">Fan ", "Cooldown", "Extrude", "Retract", ">1000<", ">0.05<", ">1500<", ">3000<", "Home", "Y+", "X/Y",
+                  "Z+", "Z-", "'G91'", "'G90'", "M701", "M702", "M83", "M107", "Pause", "Resume", "Cancel"):
+            self.assertIn(s, page)
     def test_page_has_panels(self):
         with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
         for s in ("Toolhead", "Filament", "M220 S", "M221 S", "min-width:1100px"): self.assertIn(s, page)

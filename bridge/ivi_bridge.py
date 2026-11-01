@@ -18,7 +18,9 @@ VERSION = "0.1.0"
 DEFAULT_CONFIG = {
     "mode": "auto",                     # uploads: "auto"/"wifi" = Wi-Fi upload (default); "serial" = USB streaming
     "serial_monitor": True,             # use the USB port (if free) for live status + temp/speed controls
-    "monitor_interval_s": 3,            # M105/M2007 poll period of the monitor
+    "monitor_interval_s": 3,
+    "filament_load": "m701",            # Load/Unload buttons: "m701" (M701/M702) or "extrude" (E moves)
+    "filament_load_mm": 100,            # length for "extrude" load/unload (<=150)            # M105/M2007 poll period of the monitor
     "notify": True,                     # macOS notifications via osascript
     "caffeinate": True,                 # keep the Mac awake during USB jobs
     "printer_host": "192.168.50.85",
@@ -230,6 +232,8 @@ def parse_status(line, status):
     if m: status["systat"] = int(m.group(1)); hit = True
     m = re.search(r"(?:progress|percent)\s*[:=]\s*([\d.]+)", line, re.I)
     if m: status["progress"] = float(m.group(1)); hit = True
+    m = re.match(r"X:\s*(-?[\d.]+)\s+Y:\s*(-?[\d.]+)\s+Z:\s*(-?[\d.]+)", line)
+    if m: status["position"] = dict(zip("xyz", (float(v) for v in m.groups()))); hit = True
     m = re.search(r"Working Status:\s*(\S+)", line, re.I)
     if m: status["working"] = m.group(1); hit = True
     return hit
@@ -449,15 +453,27 @@ def job_prelude(cfg, kind, lines):
 # ---------------------------------------------------------- monitor -------
 # Commands the bridge lets the UI / Orca send over USB. M104/M140/M220/M221 are standard Marlin and
 # NOT yet verified on firmware V1.3.2-alpha.
-ALLOWED_CMD = re.compile(r"^(M104 S\d{1,3}|M140 S\d{1,3}|M220 S\d{1,3}|M221 S\d{1,3}|M105|M2007|M2410|M2411 S[13]|M106( S\d{1,3})?|M107)$")
-LIMITS = {"M104": 300, "M140": 120, "M220": 300, "M221": 200}
+ALLOWED_CMD = re.compile(r"^(M104 S\d{1,3}|M140 S\d{1,3}|M220 S\d{1,3}|M221 S\d{1,3}|M105|M2007|M2410|M2411 S[13]"
+                         r"|M106( S\d{1,3})?|M107|M114|M701|M702|M82|M83|G90|G91|G28( X)?( Y)?( Z)?"
+                         r"|G1( [XYZEF]-?\d{1,4}(\.\d{1,3})?)+)$")
+LIMITS = {"M104": 300, "M140": 120, "M220": 300, "M221": 200, "M106": 255}
+G1_LIMITS = {"X": 150.0, "Y": 150.0, "Z": 300.0, "E": 150.0, "F": 6000.0}   # |value| caps (mm, mm/min)
 
 def check_command(cmd):
     c = " ".join(cmd.strip().upper().split())
     if not ALLOWED_CMD.match(c):
         raise ValueError(f"command not allowed: {cmd!r}")
+    if c.startswith("G1 "):
+        seen = set()
+        for w in c.split()[1:]:
+            k, v = w[0], float(w[1:])
+            if k in seen: raise ValueError(f"duplicate {k} in {c}")
+            seen.add(k)
+            if abs(v) > G1_LIMITS[k]: raise ValueError(f"{k}{v:g} exceeds limit {G1_LIMITS[k]:g}")
+            if k == "F" and v <= 0: raise ValueError("feed rate must be > 0")
+        return c
     code, _, arg = c.partition(" S")
-    if code in LIMITS and int(arg) > LIMITS[code]:
+    if code in LIMITS and arg and int(arg) > LIMITS[code]:
         raise ValueError(f"{code} S{arg} exceeds limit {LIMITS[code]}")
     if code in ("M220", "M221") and int(arg) < 10:
         raise ValueError(f"{code} S{arg} below 10%")
@@ -511,7 +527,7 @@ class SerialMonitor:
         if not self.ser and not self._open(): return False
         try:
             with self.lock:
-                self.ser.write(b"M105\n"); self.ser.write(b"M2007\n")
+                self.ser.write(b"M105\n"); self.ser.write(b"M114\n"); self.ser.write(b"M2007\n")
                 end = self.clock() + 0.5
                 while self.clock() < end:
                     line = self.ser.readline().decode(errors="replace").strip()
@@ -657,45 +673,110 @@ class Bridge:
                              "printTimeLeft": None, "filepos": j.sent if j else None},
                 "state": state}
 
-PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>IVI Bridge</title>
-<style>body{font:15px -apple-system,sans-serif;max-width:1400px;margin:1.5em auto;padding:0 1em}button{font-size:15px;margin:.2em .4em .2em 0}
-.bar{height:14px;background:#ddd;border-radius:7px}.bar>div{height:100%;background:#3a7;border-radius:7px;width:0}
-.tabs{display:flex;gap:.3em;margin:1em 0 0}.tabs button{border:1px solid #bbb;background:#f4f4f4;border-radius:6px 6px 0 0;padding:.4em 1.2em;margin:0}
-.tabs button.on{background:#fff;border-bottom-color:#fff;font-weight:600}
-.panels{display:block}.panel{border:1px solid #bbb;border-radius:0 8px 8px 8px;padding:1em;display:none}.panel.on{display:block}
-.panel h3{margin-top:0}input[type=number]{width:5em;font-size:15px}.row{margin:.6em 0}.note{color:#777;font-size:13px}
-@media (min-width:1100px){.tabs{display:none}.panels{display:grid;grid-template-columns:1fr 1fr;gap:1em;margin-top:1em}.panel{display:block;border-radius:8px}}</style>
-<h2>IVI Bridge</h2><p>Uploads: <b>__MODE__</b> &nbsp; USB: <b id=usb>…</b></p><p>State: <b id=st>…</b> &nbsp; File: <span id=fn></span></p>
-<div class=bar><div id=pb></div></div><p id=pc></p><p id=tp></p>
-<div class=tabs><button id=t_tool class=on onclick="tab('tool')">Toolhead</button><button id=t_fil onclick="tab('fil')">Filament</button></div>
+PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>IVI Bridge - Control</title>
+<style>
+:root{--b:#1a5cf0;--lb:#dbe8fb;--sel:#a9c8f5;--t:#1a3d8f}
+*{box-sizing:border-box}body{font:15px -apple-system,Helvetica,sans-serif;margin:0;background:#fff;color:#223}
+.top{background:var(--lb);color:#123;text-align:center;font-size:22px;padding:.55em;border-bottom:1px solid #b8cdee;position:relative}
+.top a{position:absolute;right:.8em;top:.45em;font-size:14px;color:var(--t);text-decoration:none}
+.info{display:flex;flex-wrap:wrap;gap:.4em 1.4em;padding:.5em 1em;font-size:13px;color:#456;background:#f4f8fe}
+.info b{color:#123}.bar{height:6px;background:#e3ebf7}.bar>div{height:100%;background:var(--b);width:0}
+.panels{padding:1em;max-width:1500px;margin:0 auto}.panel{display:none}.panel.on{display:block}
+button{font:inherit;cursor:pointer;border:0}button:disabled{opacity:.4;cursor:default}
+.big{background:var(--b);color:#fff;border-radius:999px;padding:.6em 1em;font-size:17px;width:100%}
+.lite{background:var(--lb);color:var(--t);border-radius:999px;padding:.6em 1em;font-size:17px;width:100%}
+.btn{background:var(--b);color:#fff;border-radius:999px;padding:.55em 1.2em;font-size:16px;min-width:8em}
+.opts{display:flex;background:#eef4fd;border-radius:6px;overflow:hidden}.opts button{flex:1;background:none;color:#334;padding:.6em .3em;font-size:16px}
+.opts button.sel{background:var(--sel);color:#012;font-weight:600}.opts button.pm{background:#c9dbf6;color:var(--t);font-size:18px}
+.lbl{font-size:12px;color:#567}.val{font-size:17px;font-weight:600;color:#123}
+.fgrid{display:grid;grid-template-columns:7.5em 1fr 10em;gap:.7em 1em;align-items:center}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:1.2em;margin-bottom:1em}
+.side{display:flex;flex-direction:column;gap:.7em;grid-row:span 4}
+.fan{display:flex;align-items:center;justify-content:space-between;color:var(--t)}
+.tog{width:3.4em;height:1.8em;border-radius:999px;background:#c9d3e2;position:relative}.tog:after{content:"";position:absolute;top:.2em;left:.2em;width:1.4em;height:1.4em;border-radius:50%;background:#fff;transition:.15s}
+.tog.on{background:var(--b)}.tog.on:after{left:1.8em}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:1em 1.5em;align-items:start}
+.pos{border:1px solid #c9d7ee;border-radius:6px;padding:.7em 1em;display:flex;justify-content:space-between;color:#345}
+.pad{display:grid;grid-template-columns:repeat(3,4.2em) 1.2em 4.2em;grid-template-rows:repeat(3,3.4em);gap:.35em;justify-content:center}
+.pad button{background:var(--lb);color:var(--t);border-radius:6px;font-size:16px}
+.compact{display:flex;flex-wrap:wrap;gap:.6em;align-items:center;margin-top:1.2em;padding-top:.9em;border-top:1px solid #e0e8f5;font-size:14px}
+.compact input{width:4.2em;font:inherit;padding:.3em;border:1px solid #bcd;border-radius:6px}
+.compact button{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .9em}
+h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
+.tabs{display:flex;position:sticky;bottom:0;background:#fff;border-top:1px solid #c9d7ee}
+.tabs button{flex:1;background:#fff;color:var(--b);font-size:20px;padding:.6em}.tabs button.on{background:var(--sel)}
+.note{font-size:12px;color:#789;padding:0 1em 1em}
+@media (min-width:1100px){.tabs{display:none}.panels{display:grid;grid-template-columns:1fr 1fr;gap:2em}
+.panel{display:block;border:1px solid #d3e0f3;border-radius:10px;padding:1em}}
+</style>
+<div class=top>Control<a href=# onclick="tick();return false">&#8635;</a></div>
+<div class=info><span>Uploads: <b>__MODE__</b></span><span>USB: <b id=usb>…</b></span><span>State: <b id=st>…</b></span><span>File: <b id=fn></b></span><span id=pc></span></div>
+<div class=bar><div id=pb></div></div>
 <div class=panels>
-<div class="panel on" id=p_tool><h3>Toolhead</h3>
-<div class=row>Nozzle <input id=nz type=number min=0 max=300 value=215> °C <button onclick="g('M104 S'+nz.value)">Set</button></div>
-<div class=row>Bed <input id=bd type=number min=0 max=120 value=60> °C <button onclick="g('M140 S'+bd.value)">Set</button></div>
-<div class=row><button onclick="g('M104 S0');g('M140 S0')">Cooldown</button></div>
-<div class=row>Speed <input id=sp type=number min=10 max=300 value=100> % <button onclick="g('M220 S'+sp.value)">Set</button></div>
-<div class=row><button onclick="cmd('pause','pause')">Pause</button><button onclick="cmd('pause','resume')">Resume</button>
-<button onclick="if(confirm('Cancel print?'))cmd('cancel')">Cancel</button>
-<button title="Sends M2411 S3 to clear a stuck/paused PC job (e.g. 'current status: 5')" onclick="if(confirm('Clear a stuck job on the printer (M2411 S3)?'))fetch('/api/ivi/clear',{method:'POST',headers:H}).then(r=>r.json()).then(j=>alert(j.message||j.error))">Clear stuck job</button></div></div>
+<div class=panel id=p_tool><h3>Toolhead</h3>
+<div class=tgrid>
+ <div><div class=pos><span id=px>X: –</span><span id=py>Y: –</span><span id=pz>Z: –</span></div>
+  <p class=lbl>Jog Speed(mm/min)</p><div class=opts data-g=tspd><button>200</button><button>500</button><button class=sel>1500</button><button>3000</button></div>
+  <p class=lbl>Jog Distance (mm)</p><div class=opts data-g=tdst><button>0.05</button><button>1</button><button class=sel>10</button><button>50</button></div></div>
+ <div><button class="lite u" onclick="g(['G28'])">Home</button>
+  <div class=pad style="margin-top:1em">
+   <span></span><button class=u onclick="jog('Y',1)">Y+</button><span></span><span></span><button class=u onclick="jog('Z',1)">Z+</button>
+   <button class=u onclick="jog('X',-1)">X-</button><button class=u title="Move to X0 Y0" onclick="g(['G90','G1 X0 Y0 F'+sel('tspd')])">X/Y</button><button class=u onclick="jog('X',1)">X+</button><span></span><button class=u title="Home (G28)" onclick="g(['G28'])">Z</button>
+   <span></span><button class=u onclick="jog('Y',-1)">Y-</button><span></span><span></span><button class=u onclick="jog('Z',-1)">Z-</button></div></div>
+</div>
+<div class=compact>Speed <input id=sp type=number min=10 max=300 value=100>% <button class=u onclick="g(['M220 S'+sp.value])">Set</button>
+ Flow <input id=fl type=number min=10 max=200 value=100>% <button class=u onclick="g(['M221 S'+fl.value])">Set</button>
+ <button onclick="cmd('pause','pause')">Pause</button><button onclick="cmd('pause','resume')">Resume</button>
+ <button onclick="if(confirm('Cancel print?'))cmd('cancel')">Cancel</button>
+ <button title="M2411 S3: clear a stuck/paused PC job" onclick="if(confirm('Clear a stuck job on the printer (M2411 S3)?'))fetch('/api/ivi/clear',{method:'POST',headers:H}).then(r=>r.json()).then(j=>say(j.message||j.error))">Clear stuck job</button></div>
+</div>
 <div class=panel id=p_fil><h3>Filament</h3>
-<div class=row>Flow <input id=fl type=number min=10 max=200 value=100> % <button onclick="g('M221 S'+fl.value)">Set</button></div>
-<div class=row>Preheat <button onclick="g('M104 S210');g('M140 S60')">PLA 210/60</button><button onclick="g('M104 S240');g('M140 S80')">PETG 240/80</button><button onclick="g('M104 S250');g('M140 S100')">ABS 250/100</button></div>
-<div class=row><button onclick="g('M104 S0')">Nozzle off</button></div>
-<p class=note>Manual filament swap: the slicer pauses with M2410; swap, then Resume (M2411 S1).</p></div>
-</div><p class=note id=msg>Controls use USB (M104/M140/M220/M221; not yet verified on this firmware).</p>
-<script>const K=__KEY__,H={'X-Api-Key':K,'Content-Type':'application/json'};
+<div class=two><button class="big u" onclick="load(1)">Load Filament</button><button class="big u" onclick="load(-1)">Unload Filament</button></div>
+<div class=fgrid>
+ <div><div class=lbl>Nozzle</div><div class=val id=nzv>–</div></div>
+ <div class=opts data-g=nz data-c=M104><button>210°C</button><button>240°C</button><button>270°C</button><button class=pm data-d=-5>-</button><button class=pm data-d=5>+</button></div>
+ <div class=side><div class=fan>Fan <button class="tog u" id=fan onclick="fanT()"></button></div>
+  <button class="btn u" onclick="g(['M104 S0','M140 S0'])">Cooldown</button>
+  <button class="btn u" onclick="ext(1)">Extrude</button><button class="btn u" onclick="ext(-1)">Retract</button></div>
+ <div><div class=lbl>Bed</div><div class=val id=bdv>–</div></div>
+ <div class=opts data-g=bd data-c=M140><button>60°C</button><button>80°C</button><button>100°C</button><button class=pm data-d=-5>-</button><button class=pm data-d=5>+</button></div>
+ <div class=lbl>Jog Speed<br>(mm/min)</div><div class=opts data-g=fspd><button class=sel>100</button><button>200</button><button>500</button><button>1000</button></div>
+ <div class=lbl>Jog Distance<br>(mm)</div><div class=opts data-g=fdst><button class=sel>10</button><button>20</button><button>50</button><button>100</button></div>
+</div></div>
+</div>
+<p class=note id=msg>Controls need USB. M104/M140/M220/M221, G1 jogs, M701/M702 load/unload and M106/M107 fan are standard Marlin and not yet verified on this firmware.</p>
+<div class=tabs><button id=t_tool class=on onclick="tab('tool')">Toolhead</button><button id=t_fil onclick="tab('fil')">Filament</button></div>
+<script>const K=__KEY__,LOAD=__LOAD__,LOADMM=__LOADMM__,H={'X-Api-Key':K,'Content-Type':'application/json'};let T={},fanOn=false;
 function tab(t){for(const n of['tool','fil']){document.getElementById('t_'+n).classList.toggle('on',n==t);document.getElementById('p_'+n).classList.toggle('on',n==t)}}
-async function g(c){const r=await fetch('/api/printer/command',{method:'POST',headers:H,body:JSON.stringify({command:c})});msg.textContent=r.ok?'Sent '+c:'Failed: '+((await r.json()).error||r.status)}
-async function cmd(c,a){await fetch('/api/job',{method:'POST',headers:H,body:JSON.stringify({command:c,action:a})});tick()}
+tab('tool');
+function say(m){msg.textContent=m}
+function sel(gr){const b=document.querySelector('[data-g='+gr+'] .sel');return b?b.textContent:''}
+document.querySelectorAll('.opts').forEach(o=>o.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+ const c=o.dataset.c;
+ if(b.dataset.d){const cur=(T[o.dataset.g]||0)+(+b.dataset.d);return g([c+' S'+Math.max(0,cur)])}
+ o.querySelectorAll('button').forEach(x=>x.classList.toggle('sel',x==b));if(c)g([c+' S'+parseInt(b.textContent)])}));
+async function g(cs){const r=await fetch('/api/printer/command',{method:'POST',headers:H,body:JSON.stringify({commands:cs})});
+ say(r.ok?'Sent '+cs.join(' · '):'Failed: '+((await r.json().catch(()=>({}))).error||r.status));setTimeout(tick,300)}
+function jog(a,s){g(['G91','G1 '+a+(s*sel('tdst'))+' F'+sel('tspd'),'G90'])}
+function ext(s){g(['M83','G1 E'+(s*sel('fdst'))+' F'+sel('fspd'),'M82'])}
+function load(s){if(LOAD=='m701')g([s>0?'M701':'M702']);else g(['M83','G1 E'+(s*LOADMM)+' F'+sel('fspd'),'M82'])}
+function fanT(){fanOn=!fanOn;fan.classList.toggle('on',fanOn);g([fanOn?'M106 S255':'M107'])}
+async function cmd(c,a){const r=await fetch('/api/job',{method:'POST',headers:H,body:JSON.stringify({command:c,action:a})});say(r.ok?c+' sent':'Failed: '+((await r.json()).error||r.status));tick()}
 async function tick(){try{const j=await (await fetch('/api/job',{headers:H})).json(),p=await (await fetch('/api/printer',{headers:H})).json();
-usb.textContent=p.ivi&&p.ivi.usb?'connected':'not connected'+(p.ivi&&p.ivi.usb_error?' ('+p.ivi.usb_error+')':'');
-st.textContent=j.state;fn.textContent=j.job.file.name||'';const c=j.progress.completion;pb.style.width=(c||0)+'%';
-pc.textContent=c==null?'':c.toFixed(1)+'%';tp.textContent=Object.entries(p.temperature||{}).map(([k,v])=>k+': '+v.actual+' / '+v.target+' °C').join('   ')}catch(e){st.textContent='bridge offline'}}
+ const u=p.ivi&&p.ivi.usb;usb.textContent=u?'connected':'not connected'+(p.ivi&&p.ivi.usb_error?' ('+p.ivi.usb_error+')':'');
+ document.querySelectorAll('.u,.opts[data-c] button').forEach(b=>b.disabled=!u);
+ st.textContent=j.state;fn.textContent=j.job.file.name||'–';const c=j.progress.completion;pb.style.width=(c||0)+'%';pc.textContent=c==null?'':c.toFixed(1)+'%';
+ const t=p.temperature||{},f=v=>v?Math.round(v.actual)+'°C/'+Math.round(v.target)+'°C':'–';nzv.textContent=f(t.tool0);bdv.textContent=f(t.bed);
+ T.nz=t.tool0?t.tool0.target:0;T.bd=t.bed?t.bed.target:0;
+ for(const[g2,v]of[['nz',T.nz],['bd',T.bd]])document.querySelectorAll('[data-g='+g2+'] button:not(.pm)').forEach(b=>b.classList.toggle('sel',parseInt(b.textContent)==v));
+ const q=p.position;px.textContent='X: '+(q?q.x.toFixed(2):'–');py.textContent='Y: '+(q?q.y.toFixed(2):'–');pz.textContent='Z: '+(q?q.z.toFixed(2):'–')
+}catch(e){st.textContent='bridge offline';document.querySelectorAll('.u').forEach(b=>b.disabled=true)}}
 tick();setInterval(tick,2000)</script>"""
 
 def status_page(cfg):
     m = "USB streaming" if upload_mode(cfg) == "serial" else "Wi-Fi (start on the touch screen)"
-    return PAGE.replace("__MODE__", html.escape(m)).replace(
+    return PAGE.replace("__MODE__", html.escape(m)).replace("__LOAD__", json.dumps(cfg.get("filament_load", "m701"))).replace(
+        "__LOADMM__", json.dumps(float(cfg.get("filament_load_mm", 100)))).replace(
         "__KEY__", json.dumps(cfg.get("api_key", "")).replace("<", "\\u003c"))
 
 def octo_printer_cmds(path, cmd):
@@ -747,7 +828,7 @@ def make_handler(bridge):
                 return self._json(200, {"state": {"text": st, "flags": {"operational": True,
                                    "printing": st == "Printing", "paused": st.startswith("Paused"),
                                    "ready": not bridge.busy()}},
-                                   "temperature": temps,
+                                   "temperature": temps, "position": bridge.live_status().get("position"),
                                    "ivi": {"usb": bool(bridge.busy() or (mon and mon.connected)),
                                            "usb_error": mon.error if mon else "serial_monitor off"}})
             if p == "/" or p == "/index.html":
