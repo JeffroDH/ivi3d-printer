@@ -1,4 +1,6 @@
-# Orca Slicer Bridge (planned, on hold)
+# Orca Slicer Bridge
+
+**Status (2026-11-01): v0.1 implemented in [`bridge/`](../bridge/README.md)** — OctoPrint-compatible service, Wi-Fi upload + USB serial streaming, post-processing/watch-folder CLI for Anycubic Slicer Next. Unit-tested with fakes; not yet run against the printer.
 
 ## Goal
 Slice in Orca Slicer and send jobs directly to the IVI3D, replacing the discontinued IVI slicer. Runs locally on a Mac, no cloud.
@@ -19,6 +21,7 @@ Slice in Orca Slicer and send jobs directly to the IVI3D, replacing the disconti
 - Prototype in Python (requests, pyserial, python-can); possibly a Rust/Go standalone build later.
 
 ## Blockers
+1. ~~Bridge code~~ done (`bridge/`); needs a real-hardware test.
 1. ~~Port 8080 API~~ tested 2026-11-01: upload only; start/pause/stop 404 → use USB serial. Laser/CNC header and power scale still unverified.
 2. Linux shell via UGUART console pads (CP2102 adapter).
 3. Toolhead CAN command map (CANable PRO capture).

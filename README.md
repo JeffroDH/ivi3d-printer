@@ -39,6 +39,7 @@ Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/mar
 
 | Path | Contents |
 |---|---|
+| `bridge/` | Orca Slicer / Anycubic Next bridge: OctoPrint-compatible service, Wi-Fi upload + USB serial streaming, tests |
 | `ivi-control.sh` | Command-line client for the HTTP API (discover, status, print, pause, G-code, …) |
 | `docs/slicer_report.md` | How IVI 3licer 1.6.2 (a rebranded Snapmaker Luban) talks to the printer — best map of the API |
 | `docs/firmware_report.md` | Analysis of the UI-board app (`firmware`): discovery, serial link to the motion board, update flow |
@@ -135,7 +136,7 @@ bootloader) with an ST-Link on the SWD pads.
 ## Status and roadmap
 
 - ✅ Discovery, serial link, and update format documented. Wi-Fi API tested: upload/execute_code work; print control is 404 on current firmware (USB serial works).
-- ⏳ **Orca Slicer bridge (idea):** a small local service that looks like an OctoPrint server to Orca and streams jobs over **USB serial** (`M2411 S2` + line-by-line G-code); Wi-Fi can only upload until firmware enables print control. Orca would use a delta profile built from the M665 values above. Snapmaker Luban can't be used directly: it only connects to Snapmaker machines.
+- ✅ **Orca Slicer / Anycubic Next bridge (v0.1, [`bridge/`](bridge/README.md), untested on hardware):** a small local service that looks like an OctoPrint server to Orca and streams jobs over **USB serial** (`M2411 S2` + line-by-line G-code); Wi-Fi can only upload until firmware enables print control. Orca would use a delta profile built from the M665 values above. Snapmaker Luban can't be used directly: it only connects to Snapmaker machines.
 - 🔍 **Modern Marlin:** feasible but a big job. The delta motion, pins and endstops port directly; the smart-driver UART link, CAN tool-head link (including hotend temperature control via the head) and touchscreen compatibility must be written. Estimate **~3–5 weeks for FDM-only, ~2–3 months** for full laser/CNC/UI parity. Open items need hardware: mapping driver UART pads to STM32 pins (multimeter), bed/`FAN24V` switching, full CAN frame meanings (CANable capture), bootloader behaviour (SWD backup).
 - ❓ The HTTP server binary on the Linux side hasn't been recovered yet. Next step: try the `UGUART` console pads with a 3.3 V USB-serial adapter (see [docs/mainboard.md](docs/mainboard.md)).
 
@@ -153,4 +154,4 @@ Original work in this repo (documentation, scripts, `supx_pack.py`) is licensed 
 `Beta Test Program/` documents are IVI's material. They are included here for preservation and interoperability
 because the company no longer exists.
 
-- Orca Slicer bridge plan: see [docs/orca_bridge.md](docs/orca_bridge.md)
+- Orca Slicer bridge: [bridge/README.md](bridge/README.md), plan [docs/orca_bridge.md](docs/orca_bridge.md)

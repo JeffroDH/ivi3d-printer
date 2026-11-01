@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Copy to ~/Library/LaunchAgents/com.ivi3d.bridge.plist, fix the paths, then:
+     launchctl load ~/Library/LaunchAgents/com.ivi3d.bridge.plist -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.ivi3d.bridge</string>
+  <key>ProgramArguments</key><array>
+    <string>/usr/bin/python3</string>
+    <string>/PATH/TO/ivi3d-printer/bridge/ivi_bridge.py</string>
+    <string>--config</string><string>/Users/YOU/.config/ivi-bridge/config.json</string>
+    <string>serve</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardErrorPath</key><string>/tmp/ivi-bridge.log</string>
+  <key>StandardOutPath</key><string>/tmp/ivi-bridge.log</string>
+</dict></plist>

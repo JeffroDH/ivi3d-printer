@@ -1,0 +1,13 @@
+{
+  "mode": "wifi",
+  "printer_host": "192.168.50.85",
+  "printer_port": 8080,
+  "printer_token": "PUT-YOUR-PRINTER-TOKEN-HERE",
+  "serial_port": "/dev/tty.usbmodem*",
+  "baud": 115200,
+  "firmware_version": "",
+  "listen_host": "127.0.0.1",
+  "listen_port": 5000,
+  "api_key": "choose-any-string-and-paste-it-in-the-slicer",
+  "spool_dir": "~/Library/Application Support/ivi-bridge/jobs"
+}
