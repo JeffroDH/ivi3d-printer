@@ -54,10 +54,15 @@ printf '%s' "$KEY" | pbcopy
 PLUGIN_SRC="$HERE/../orca/plugin/ivi3d_bridge_plugin.py"
 PLUGIN_NOTE="OrcaSlicer plugin: not installed"
 if [ -f "$PLUGIN_SRC" ]; then
-  ANS=$(osascript -e 'button returned of (display dialog "Also copy the IVI3D Bridge plugin into OrcaSlicer 2.5 (orca_plugins)? Enable it afterwards in Orca → Plugins." buttons {"Skip", "Copy plugin"} default button "Copy plugin" with title "IVI Bridge")' 2>/dev/null || echo Skip)
+  ANS=$(osascript -e 'button returned of (display dialog "Also copy the IVI3D Bridge plugin into OrcaSlicer 2.5 (orca_plugins)? Enable it afterwards in the Orca Plugins dialog." buttons {"Skip", "Copy plugin"} default button "Copy plugin" with title "IVI Bridge")' 2>/dev/null || echo Skip)
   if [ "$ANS" = "Copy plugin" ]; then
-    DEST="$HOME/Library/Application Support/OrcaSlicer/orca_plugins/ivi3d_bridge"
-    mkdir -p "$DEST" && cp "$PLUGIN_SRC" "$DEST/" && PLUGIN_NOTE="OrcaSlicer plugin copied to $DEST (restart Orca, enable it, paste the API key into the IVI3D Bridge tab settings)"
+    # Same layout Orca's own "Install local plugin" uses: orca_plugins/<entry file name>/<entry file>
+    # (PluginLoader.cpp local_plugin_install_dir). A single .py has no OS/arch suffix; that only applies to .whl tags.
+    ROOT="$HOME/Library/Application Support/OrcaSlicer/orca_plugins"
+    DEST="$ROOT/ivi3d_bridge_plugin.py"
+    OLD="$ROOT/ivi3d_bridge"   # pre-0.1.1 location; same plugin key, so remove it to avoid a duplicate
+    if [ -d "$OLD" ] && [ "$(ls -A "$OLD" | grep -v '^\.' | grep -vx 'ivi3d_bridge_plugin.py' || true)" = "" ]; then rm -rf "$OLD"; fi
+    mkdir -p "$DEST" && cp "$PLUGIN_SRC" "$DEST/ivi3d_bridge_plugin.py" && PLUGIN_NOTE="OrcaSlicer plugin copied to $DEST (restart Orca, enable it, paste the API key into the IVI3D Bridge tab settings)"
   fi
 fi
 MSG="IVI Bridge is installed and starts automatically at login.

@@ -6,7 +6,7 @@
 # name = "IVI3D Bridge"
 # description = "IVI3D printer helpers: adds the IVI 3licer FDM header on export and shows IVI Bridge status (Pause/Resume/Cancel/Clear) in a tab."
 # author = "JeffroDH/ivi3d-printer (CC BY-NC-SA 4.0)"
-# version = "0.1.0"
+# version = "0.1.1"
 # ///
 """OrcaSlicer 2.5 plugin ("Option A"): talks only to the local IVI Bridge (http://127.0.0.1:5000), never to the printer.
 

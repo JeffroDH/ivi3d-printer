@@ -6,7 +6,7 @@ It only talks to the local **IVI Bridge** (`bridge/`, http://127.0.0.1:5000) —
 not use the experimental Printer Agent.
 
 ## What it adds
-| Capability | Type | What it does | Settings (JSON, Plugins → ⚙) |
+| Capability | Type | What it does | Settings (Plugins dialog → Config tab, JSON) |
 |---|---|---|---|
 | **IVI3D FDM Header** | Slicing Pipeline (`psGCodePostProcess`) | Prepends the IVI 3licer `;Header Start … header_type: 3dp` block to exported G-code in place (same logic as `orca/ivi_fdm_header.py`). Idempotent: skips files that already start with `;Header Start`. | `enabled` (true/false), `nozzle` (fallback, `"0.3"`) |
 | **IVI3D Bridge** | Pages (main-window tab) | State, file, progress bar, temperatures, plain-language alerts for *locked rotor*, *kill/halted* and *status 5*; buttons Pause / Resume / Cancel / Clear stuck job. Polls every 3 s only while the tab is visible; shows "IVI Bridge is not running…" when it can't connect. | `bridge_url` (`http://127.0.0.1:5000`), `api_key`, `poll_seconds` (≥2) |
@@ -15,16 +15,31 @@ Permissions are declared up front (one dialog at load): HTTP to `http://127.0.0.
 and socket `('127.0.0.1', 5000)`. Nothing else. (If you change `bridge_url`, Orca asks once for the new address.)
 
 ## Install (macOS)
-Easiest: run `bridge/Install IVI Bridge.command` and click **Copy plugin**. Manually:
-1. Quit OrcaSlicer.
-2. Create `~/Library/Application Support/OrcaSlicer/orca_plugins/ivi3d_bridge/` (each plugin must be in its own subfolder containing exactly one `.py`).
-3. Copy `orca/plugin/ivi3d_bridge_plugin.py` into it.
+A single-file `.py` plugin has **no OS/architecture suffix** in its name. Orca's docs only require platform tags
+for wheel (`.whl`) plugins, e.g. `name-1.0-py3-none-any.whl` (pure Python, any OS) or a matching
+`-macosx_…`/`-win_…`/`-linux_…` tag for compiled wheels. This plugin is pure Python, so it stays one `.py` file.
+
+Pick one of these (don't use both, or you'll get two copies with the same plugin key):
+- **From Orca (recommended):** open the Plugins dialog, then **Browse plugins ▾ → Install local plugin**, and pick
+  `orca/plugin/ivi3d_bridge_plugin.py`.
+- **Installer:** run `bridge/Install IVI Bridge.command` and click **Copy plugin**. It copies the file to the same place
+  Orca's own installer uses and removes the old `orca_plugins/ivi3d_bridge/` folder from 0.1.0.
+- **Manually:** quit Orca, create
+  `~/Library/Application Support/OrcaSlicer/orca_plugins/ivi3d_bridge_plugin.py/` (a folder named after the file, the
+  same layout Orca uses), and copy `ivi3d_bridge_plugin.py` into it. The folder must hold exactly one `.py`.
+
+The plugin key is the file stem (`ivi3d_bridge_plugin`), so keep the file name the same when you update it.
+Reinstalling resets the plugin's granted permissions, so Orca asks again.
 
 ## Enable
-1. Start OrcaSlicer 2.5 → **Plugins** (plugin manager). Find **IVI3D Bridge** and enable it; accept the localhost permission dialog.
-2. Open the settings (⚙) of the **IVI3D Bridge** capability and paste the API key (the installer copied it to the clipboard; also in `~/.config/ivi-bridge/orca-settings.txt`).
-3. Optional: in **IVI3D FDM Header** settings set `"enabled": false` to turn the header off.
-4. If you previously added `ivi_fdm_header.py` as a post-processing script, remove it (harmless if not — the header is only added once).
+1. Start OrcaSlicer 2.5 and open the **Plugins** dialog. Tick **Activate** for **IVI3D Bridge** and accept the
+   localhost permission dialog. Both capabilities should be listed (Slicing Pipeline + Pages).
+2. Select the **IVI3D Bridge** capability, open the **Config** tab, and paste the API key into `api_key` (the
+   installer copied it to the clipboard; it's also in `~/.config/ivi-bridge/orca-settings.txt`).
+3. Optional: in the **IVI3D FDM Header** Config tab, set `"enabled": false` to turn the header off.
+4. If you previously added `ivi_fdm_header.py` as a post-processing script, remove it (harmless if not; the header is
+   only added once).
+5. If the plugin doesn't load, check the **Diagnostics** tab and `~/Library/Application Support/OrcaSlicer/log/python_*.log`.
 
 ## Use
 - Slice and send/export as usual (bridge as OctoPrint host). The header is added automatically.
@@ -42,3 +57,4 @@ compares header output with `orca/ivi_fdm_header.py`, checks idempotence/toggle,
 - Pipeline step during network upload (vs file export) and interaction with classic post-processing scripts.
 - Pause/Resume/Cancel/Clear against the live bridge and printer from inside Orca.
 - Installer's plugin-copy dialog on the Mac.
+- Whether the header capability also has to be selected in the process preset (`post_process_plugin`) to run on export.
