@@ -1,0 +1,17 @@
+Parameter           |     Value                  |     Meaning
+
+Units               |     G21                    |     mm (standard)
+Filament            |     D1.75                  |     1.75 mm (Bowden)
+Steps/mm            |     X800 Y800 Z800 E1150   |     High-res microstepping — 0.8° motors + 16T pulleys
+Max Speed           |     500 mm/s               |     Very fast — closed-loop enables this
+Max Accel           |     3000 mm/s²             |     Aggressive — tuned for delta
+Jerk                |     X10 Y10 Z10 E5         |     Smooth, low vibration
+Diagonal Rod        |     L357.50                |     Long arms — large delta
+Delta Radius        |     R160.31                |     Print radius ~160 mm
+Tower Height        |     H233.22                |     Z height at center
+Segments/sec        |     S200                   |     Smooth arcs
+Tower Angle Trim    |     X0.11 Y-0.07 Z-0.04    |     Fine mechanical correction
+PID                 |     P22.20 I1.08 D114.00   |     Hotend tuning
+Z-Probe Offset      |     Z-14.29                |     Probe below nozzle
+Bed Leveling        |     G29 W grid             |     7×7 probe matrix — highly detailed
+Load/Unload Lengths |     M603 L0.00 U100.00     |     No auto loading, Unload 100mm with M702
