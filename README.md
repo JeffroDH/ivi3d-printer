@@ -12,7 +12,7 @@ machines, so this repo collects what's needed to keep them running and to drive 
 |---|---|
 | Kinematics | **Delta** — `M665 L357.50 R160.31 H233.22` (rod, radius, height). Homes to MAX endstops. |
 | Motion controller | STM32F407VET6, **Marlin "V1.3.2-alpha"** (vendor build of Marlin 2.0.x, Mar 2021), 64 KB bootloader + app at `0x08010000` |
-| UI board | Linux (Rockchip RK3128-class) running a Qt touchscreen app (`firmware`, v1.222) plus a separate HTTP server |
+| Main board | One combined board, `A33_407MB_200916`: **Allwinner A33** (Cortex-A7) Linux running a Qt touchscreen app (`firmware`, v1.222) plus a separate HTTP server, and the STM32F407 on the same PCB. SWD pads located. See [docs/mainboard.md](docs/mainboard.md) |
 | Motors | Smart **closed-loop** drivers (the closed loop lives in the drivers; the STM32 still sends STEP/DIR and reads faults over UART) |
 | Tool heads | 3D print (0.15–0.4 mm nozzles; beta shipped 0.3 mm), laser, CNC (BLDC spindle). Each head has its own MCU on **CAN**; hotend heating/sensing, head fan, laser power and spindle are controlled through it |
 | Other sensors | Door switch, filament runout, temp/humidity, load cell, probe/auto-level, thermal runaway protection |

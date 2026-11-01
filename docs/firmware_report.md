@@ -254,7 +254,7 @@ No password/HMAC on the discovery datagram. Treat LAN trust as the boundary (sam
 
 | Artifact | MD5 (matches config) | Role |
 |----------|----------------------|------|
-| `firmware.bin` | `1339cf97f887753b618c6cf7f2af1e73` → `config.ini` `version=1.222` | ELF32 ARM Qt5 UI (`INTERP /lib/ld-linux.so.3`), board hostname hints `sinlinx` / `rk312x` / `RK3128` |
+| `firmware.bin` | `1339cf97f887753b618c6cf7f2af1e73` → `config.ini` `version=1.222` | ELF32 ARM Qt5 UI (`INTERP /lib/ld-linux.so.3`), contains `sinlinx` / `rk312x` / `RK3128` strings, but the board photos show an **Allwinner A33** (see mainboard.md); these are SDK leftovers |
 | `firmware.supx` | `f83207e8cafffcd0a4d955f37631d702` → `config2.ini` `version=1.3.2` | Motion-controller image: LE size word `0x28c40` (166976) at offset 0; vector table with `0x0800xxxx` Thumb addresses (STM32-style). **Not** an ELF. |
 
 Update packaging names in UI: `IVI3DPrinterFirmware`, `IVI3DPrinterFirmwarePack`, scripts `/userapp/script/unzipFirmware.sh`, `CpIVI-Main-Controller.sh`. UI verifies MD5 (`checkFileMD5`) against `config.ini` / `config2.ini` before applying.
@@ -263,7 +263,7 @@ Update packaging names in UI: `IVI3DPrinterFirmware`, `IVI3DPrinterFirmwarePack`
 
 ## 6. Uncertainties / next steps on-device
 
-> Hardware cross-reference: [hardware_research.md](hardware_research.md) covers the 4-board architecture (ARM A7 UI board, motion board, power and switch PCBs), the per-motor magnetic encoders and driver boards, the toolhead ID chip, and the 8-pad head connector (pin roles guessed).
+> Hardware cross-reference: [hardware_research.md](hardware_research.md) covers the board architecture (combined `A33_407MB` main board with Allwinner A33 + STM32F407, driver boards, power and switch PCBs; see [mainboard.md](mainboard.md)), the per-motor magnetic encoders and driver boards, the toolhead ID chip, and the 8-pad head connector (pin roles guessed).
 
 
 1. **HTTP server binary** is not this Qt ELF and has not been recovered. A network scan of the printer shows **only TCP 8080 open** (it answers `{"status":"IDLE"}`); SSH/Telnet/FTP are closed, so the server binary can't currently be pulled over the network. Getting it would need a UART console on the Linux board.  

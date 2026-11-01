@@ -1,9 +1,9 @@
 # IVI hardware research
 
-Compiled 2026-10-31 from public sources. **No internal board photos of the IVI were found online.** Labels: **[C]** confirmed by a source, **[F]** confirmed in firmware (see `supx_decompile_report.md`), **[G]** guess.
+Compiled 2026-10-31 from public sources. No internal board photos were found online; an owner has since photographed the main board, see [mainboard.md](mainboard.md). Labels: **[P]** read from owner board photos, **[C]** confirmed by a source, **[F]** confirmed in firmware (see `supx_decompile_report.md`), **[G]** guess.
 
 ## Architecture
-- **At least 4 boards [C]:** the IVI forum's December 2020 update lists an "ARM A7 control board (Related with LCD)" (Linux/Qt UI), "the fourth version of the motion control board" (STM32F407, Marlin), and a separate "power PCB and switch PCB".
+- **Boards [C][P]:** owner photos show one **combined main board, `A33_407MB_200916`**, carrying both the Allwinner A33 (Cortex-A7, Linux/Qt UI; this is the forum's "ARM A7 control board (Related with LCD)") and the STM32F407 motion MCU. Separately there are per-motor closed-loop driver boards and, per the forum's December 2020 update, a "power PCB and switch PCB". See [mainboard.md](mainboard.md).
 - **November 2020 [C]:** the first version of the main board was finished, with small affiliated PCBs.
 - **June 2019 [C]:** control board parts were sourced through Allchips.
 - **Closed-loop motors [C][F]:** IVI's FAQ says each motor has a magnetic angle sensor and a separate motor drive board. The firmware talks to each driver over its own UART, using a custom protocol.
@@ -13,6 +13,7 @@ Compiled 2026-10-31 from public sources. **No internal board photos of the IVI w
 
 ## Images
 - `images/renders/`: 14 BackerKit product renders (heads, base plate, full printer). See `SOURCES.md` there.
+- `images/board/`: owner photos of the main board.
 - `images/archive/`: renders retrieved from the Wayback Machine.
 
 All images are IVI's material, included for preservation.
@@ -30,8 +31,8 @@ The Wayback Machine listed `ivi3d.com` images named like `mcu-*.jpg`, `closed-lo
 ## Open questions
 - Which pins drive the heater, fans, and outputs, and which pin pairs the driver UARTs are remapped to (see `supx_decompile_report.md` §8)
 - The head connector pinout and pitch, and the full CAN message set (needs a CAN capture)
-- Whether STM32 readout protection is enabled, and where the SWD pads are
-- The ARM A7 board's SoC and its serial console header
+- Whether STM32 readout protection is enabled (SWD pads now located, see mainboard.md)
+- The A33 serial console header (SoC now identified as Allwinner A33)
 
 ## Contributing board photos
 If you own an IVI, please open an issue or PR with:
