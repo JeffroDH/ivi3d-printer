@@ -32,7 +32,7 @@ The Wayback Machine listed `ivi3d.com` images named like `mcu-*.jpg`, `closed-lo
 - Which pins drive the heater, fans, and outputs, and which pin pairs the driver UARTs are remapped to (see `supx_decompile_report.md` §8)
 - The head connector pinout and pitch, and the full CAN message set (needs a CAN capture)
 - Whether STM32 readout protection is enabled (SWD pads now located, see mainboard.md)
-- The A33 serial console header (SoC now identified as Allwinner A33)
+- Confirm the likely A33 console pads `UGUART_RX/TX` (found, untested; see mainboard.md)
 - What `INP/INN` measures (load cell for probing? **[G]**) and why each axis has both `LIMITSW_` and `LIMIT_` pads
 - Part numbers of the 8-pin SOIC near the SWD pads and the QFN by the second SWD port (second MCU? **[G]**)
 - Resolved: all four driver connectors (X, Y, Z, F = extruder) and the CAN+/CAN- head cable are now photo-confirmed, see mainboard.md

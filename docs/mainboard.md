@@ -10,6 +10,10 @@ Photos taken by an owner on 2026-10-31 (EXIF/GPS stripped). Labels: **[P]** read
 |---|---|
 | ![left close-up](images/board/mainboard_left_closeup.jpg) | ![right edge](images/board/mainboard_right_edge.jpg) |
 
+| Debug / SD area (lower center-right) |
+|---|
+| ![debug area](images/board/mainboard_debug_area.jpg) |
+
 ## What the board marking tells us
 - `A33_407MB_200916` **[P]**: one **combined main board** carrying an **Allwinner A33** (quad Cortex-A7, runs Linux + the Qt UI + the HTTP server) and the **STM32F407** motion MCU (Marlin). `200916` is probably the design date, 2020-09-16 **[G]**.
 - The forum's "ARM A7 control board (Related with LCD)" is this A33 side. Earlier notes guessing a Rockchip RK3128 (from `rk312x`/`sinlinx` strings in `firmware.bin`) were wrong; those strings likely come from a reused vendor SDK/toolchain **[G]**.
@@ -39,12 +43,14 @@ Photos taken by an owner on 2026-10-31 (EXIF/GPS stripped). Labels: **[P]** read
 | `VBUS_5V`, `USBH_D+`, `USBH_D-` | right edge, lower connector | USB **host** port (front USB stick?) **[P]** (use **[G]**) |
 | `CMD_USB`, `GND_USB` | right edge, lower connector | likely the USB-C device port to the STM32 **[G]** |
 | `BUTTON`, `LED_CTL` | right edge, lower connector | front power/user button and LED **[P]** (use **[G]**) |
-| second `DIO`, `CLK`, `RST#`, `3V3`, `GND` set | bottom right, next to small QFN chip | second SWD port, so the QFN is probably a second MCU, perhaps a USB-serial bridge **[G]** |
+| second `DIO`, `CLK`, `RST#`, `3V3`, `GND` set | bottom right, next to small QFN chip (logo, part unreadable) | second SWD port, so the QFN is probably a second MCU, perhaps a USB-serial bridge **[G]**; the `7133` SOT-89 beside it is a 3.3 V LDO **[P]** (HT7133-class **[G]**) |
+| `UGUART_RX`, `UGUART_TX` | below `VBAT`, lower center | very likely the **A33 Linux debug console** (3.3 V TTL, usually 115200 8N1) **[P]** (role **[G]**, untested) |
+| `D2`, `D3`, `CMD`, `CLK`, `D0`, `D1`, `CD#` | lower center | SD/MMC bus test pads; likely the A33's Linux boot storage (SD/eMMC) **[P]** (role **[G]**) |
 | `CTP_SDA/SCL/RST/INT`, `CTPVCC_3V3` | top | capacitive touch controller (I²C) **[P]** |
 | `LCDVCCIN`, `VGH_18V`, `VGL_-8V`, `DVDD_3V3`, `AVDD_10V3`, `VCOM_3V5`, `VLED+/-` | top | LCD panel bias and backlight rails **[P]** |
 | shielded module + antenna lead | center/bottom | Wi-Fi **[P]** |
 
-The `_TX`/`_RX` fragments seen at the far left of the center photo are the `F_UART`/`Z_UART` pads above, not a separate console. **No A33 Linux UART console header has been identified yet**; look for unpopulated 3–4 pin pads near the A33 (`UART0` on A33 is usually PF2/PF4 via the SD pins or PB0/PB1).
+The `_TX`/`_RX` fragments at the far left of the center photo are the `F_UART`/`Z_UART` pads. The likely **A33 console is `UGUART_RX`/`UGUART_TX`** below `VBAT` (see how-to below).
 
 ## Confirms vs. decompile
 - One UART per closed-loop driver, plus STEP/DIR/EN from the STM32 **confirmed**.
@@ -57,12 +63,12 @@ The `_TX`/`_RX` fragments seen at the far left of the center photo are the `F_UA
 - Which STM32 pins / USART remap each `*_UART` pad uses (resolves §8 of the decompile report)
 - `CHA/CHB` role; `INP/INN` sensor type (load cell?); why each axis has `LIMITSW_` + `LIMIT_`
 - 8-pin SOIC and bottom-right QFN part numbers; what the second SWD port programs
-- A33 serial console location; boot media (eMMC/NAND/SD)
+- Confirm `UGUART` is the A33 console; boot media behind the SD/MMC pads (eMMC vs SD)
 - STM32 RDP level (read via ST-Link: `st-info --probe`, or STM32CubeProgrammer)
 
 ## Multimeter tracing guide (power OFF)
 1. Continuity mode. Put one probe on a labeled pad (e.g. `Z_UART_TX`), drag the other along the STM32F407VET6 (LQFP100) pins; pin 1 is at the dot.
 2. Map pin number → port with the STM32F407 datasheet LQFP100 pinout (e.g. pin 47 = PB10 = USART3_TX).
 3. Record in a table here: pad → pin → port → peripheral. Do the same for `F_*`, X/Y pads, `CHA/CHB`, `INP/INN`, `BEDTEMP`, `LIMITSW_*`, `LIMIT_*`, `DOOR_STAUS`.
-4. For the A33 console: with power ON, measure unknown 3-pin pad groups to GND; a pad idling at 3.3 V that flickers at boot is TX. Use a 3.3 V USB-serial adapter at 115200.
+4. A33 console (`UGUART`): use a **3.3 V** USB-serial adapter (CP2102/FT232/CH340 set to 3.3 V). Wire adapter RX → `UGUART_TX`, adapter TX → `UGUART_RX`, adapter GND → any board `GND`. **Never connect the adapter's VCC/5V.** Open 115200 8N1 (`screen /dev/tty.usbserial-* 115200`) and power on; boot logs should appear, then possibly a login/root shell. If garbled, try 9600/57600 or swap TX/RX.
 5. Never apply 5 V adapters; SWD and UART are 3.3 V.
