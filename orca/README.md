@@ -20,14 +20,14 @@
 The bed is a 105 mm-radius circle with the origin at the centre; the delta homes to the top, so the start G-code homes
 then drops to Z15 at the bed edge before the purge line (same as IVI 3licer).
 
-### Bed texture
-`bed/ivi3d_bed.png` (1024 px, plus `ivi3d_bed.svg`) shows the perforated build plate with a dashed blue circle marking
-the 210 mm printable area. Orca stretches a texture over the bounding box of the printable area, so the image covers
-exactly ±105 mm; `bed/ivi3d_plate_full.svg` is the whole plate for reference. Regenerate with `python3 bed/make_bed.py`.
-The preset sets `bed_custom_texture` to the Mac mirror path
-(`/Volumes/14TB/3D Printing Files/IVI3D/orca/bed/ivi3d_bed.png`) because Orca keeps an absolute path and config bundles
-do not carry images. On another machine, set `IVI3D_BED_TEXTURE` before running `build_profiles.py`, or pick the PNG under
-Printer settings → Bed shape → Texture. No 3D plate model (`bed_custom_model` empty).
+### Bed texture and model
+`bed/IVI_plate.stl` (bed model) and `bed/IVI_plate.svg` (bed texture) show the whole IVI plate (~300 mm wide at the front,
+~190 mm at the flat back, ~240 mm deep; traced from a photo against the 20 mm grid, so expect a few mm of error), centred
+on the 210 mm printable circle with the wide edge at the front. The printable area stays a 210 mm circle.
+The preset sets `bed_custom_model` and `bed_custom_texture` to the Mac mirror paths
+(`/Volumes/14TB/3D Printing Files/IVI3D/orca/bed/IVI_plate.stl` / `.svg`) because Orca keeps absolute paths and config
+bundles do not carry them. On another machine, set `IVI3D_BED_MODEL` / `IVI3D_BED_TEXTURE` before running
+`build_profiles.py`, or pick the files under Printer settings → Bed shape.
 
 Scale is **estimated**: the only plate image (ivi3d.com product photo `bk11`) is a perspective render with no dimensions.
 Its outline is a rounded triangle, modelled as an equilateral triangle (inradius 45 mm) offset by 70 mm (plate inradius
