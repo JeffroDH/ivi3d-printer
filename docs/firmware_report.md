@@ -1,5 +1,7 @@
 # IVI 3D Printer — Interface / Protocol Spec
 
+> **Update (later findings):** the printer is a **delta** (M665 L357.50 R160.31 H233.22), not a Cartesian/A150-style machine. The "closed loop" is implemented inside the smart stepper drivers, which the STM32 firmware talks to over UART (see `supx_decompile_report.md` §3a). The STM32 speaks plain line G-code only; `AA 55` framing is the slicer↔UI-board protocol.
+
 **Target:** `/workspace/ivi/firmware.bin` (ELF32 ARM Qt5 touchscreen/controller UI)  
 **Also used:** IVI 3licer 1.6.2 macOS app (from DMG), `firmware.supx`, `config.ini` / `config2.ini`  
 **Method:** strings + Ghidra/REA decompilation of `networkManager`, `Sender`, print CMD helpers; client JS from the slicer  
@@ -261,11 +263,11 @@ Update packaging names in UI: `IVI3DPrinterFirmware`, `IVI3DPrinterFirmwarePack`
 
 ## 6. Uncertainties / next steps on-device
 
-1. **HTTP server binary** is not this Qt ELF. On the printer (SSH), locate the process listening on **8080** (e.g. `ss -lntp`, `ps`) to confirm package name and whether it shares status with the Qt UI.  
+1. **HTTP server binary** is not this Qt ELF and has not been recovered. A network scan of the printer shows **only TCP 8080 open** (it answers `{"status":"IDLE"}`); SSH/Telnet/FTP are closed, so the server binary can't currently be pulled over the network. Getting it would need a UART console on the Linux board.  
 2. Exact mapping of every `setUdpInfo` field → discovery `NAME` vs `Model:` under all firmware builds (ctor default is `IVI3D-Zoom-Mammoth`; live capture shows `IVI3D` / `IVI 3D Printer`). Wire format is solid; field provenance can vary by version.  
 3. Full semantics of `M2005` / `M2051` / `M210` / `M2155` not fully traced.  
 4. Whether `/prepare_print` vs `/upload` + `/start_print` differs for FDM-only Orca jobs — both exist; Luban-style clients typically `prepare_print` then `start_print`.  
-5. Slicer DMG also supports **direct serial** from the PC (`serialport:open` events); optional fallback if Wi-Fi HTTP is down, using the same G-code dialect at 115200.
+5. Slicer DMG also supports **direct serial** from the PC (`serialport:open` events). Note: the printer's external **USB-C port connects directly to the STM32 motion controller** (Marlin, 115200, line G-code), not to this Linux UI board.
 
 ---
 
@@ -293,6 +295,6 @@ Implement a **Snapmaker/IVI HTTP client**:
 
 1. Discover: UDP broadcast `"discover"` → **20050**, parse `NAME@IP|Model:…|status:…`.  
 2. Control: HTTP **`IP:8080`**, token auth, `/api/v1/{connect,upload|prepare_print,start_print,status,pause_print,resume_print,stop_print,disconnect}`.  
-3. Optional: USB serial **115200** G-code if you want a non-Wi-Fi path (same dialect the onboard UI uses).
+3. Optional: USB-C serial **115200** G-code straight to the STM32 Marlin (bypasses the UI board and its job tracking).
 
 Do **not** invent a proprietary TCP binary protocol based on this Qt binary — the control plane the official slicer uses is HTTP on 8080 after UDP discovery.
