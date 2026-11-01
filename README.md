@@ -23,7 +23,15 @@ Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/mar
 
 ## Hardware research
 
-What's known about the board architecture (4+ boards, magnetic-encoder closed-loop motors, CAN toolheads identified by an onboard chip, and an 8-pad head connector), plus product renders and how to contribute board photos: see [docs/hardware_research.md](docs/hardware_research.md).
+**Main board map:** [docs/mainboard.md](docs/mainboard.md) has labeled photos of the combined `A33_407MB_200916` board and a pad/connector table. Highlights:
+
+- Four closed-loop motor drivers (X, Y, Z, F = filament feeder), each wired with step/dir/enable **plus its own UART**, powered from `MTX/MTY/MTZ/MTF_24V`.
+- Tool head on **CAN** (`CAN+`/`CAN-`, 3-wire cable) with its own `HEADVCC24V` supply; main input `VCCIN24V`; separate `BEDVCC24V` and `FAN24V`.
+- **STM32 SWD pads** (`RST#`, `DIO`, `CLK`, `3V3`, `GND`) for an ST-Link backup or reflash, plus a second SWD set beside a small unidentified MCU.
+- **Likely Linux console:** `UGUART_RX`/`UGUART_TX` pads near the A33 (3.3 V, probably 115200 8N1, untested). This is the most promising way to get a shell and back up the Linux side.
+- `INP`/`INN` differential input with its own analog supply, probably the load cell used for probing (firmware has `M2049` load cell), plus SD/eMMC lines, USB host pads, `BUTTON` and `LED_CTL`.
+
+**Background research:** board history, magnetic-encoder motors, head ID chips, the 8-pad head connector, and product renders are in [docs/hardware_research.md](docs/hardware_research.md).
 
 ## Repo layout
 
@@ -111,8 +119,8 @@ bootloader) with an ST-Link on the SWD pads.
 
 - ✅ Wi-Fi API, discovery, serial link, and update format documented; command-line client working from the same endpoints the stock slicer uses.
 - ⏳ **Orca Slicer bridge (idea):** a small local service that looks like an OctoPrint server to Orca and forwards jobs to `prepare_print` + `start_print`. Orca would use a delta profile built from the M665 values above. Snapmaker Luban can't be used directly: it only connects to Snapmaker machines.
-- 🔍 **Modern Marlin:** feasible but a big job. The delta motion, pins and endstops port directly; the smart-driver UART link, CAN tool-head link (including hotend temperature control via the head) and touchscreen compatibility must be written. Estimate **~3–5 weeks for FDM-only, ~2–3 months** for full laser/CNC/UI parity. Open items need hardware: some UART pins, heater/fan outputs, full CAN frame meanings (needs a CAN capture), bootloader behaviour (needs SWD).
-- ❓ The HTTP server binary on the UI board hasn't been recovered (no network shell; would need a UART console).
+- 🔍 **Modern Marlin:** feasible but a big job. The delta motion, pins and endstops port directly; the smart-driver UART link, CAN tool-head link (including hotend temperature control via the head) and touchscreen compatibility must be written. Estimate **~3–5 weeks for FDM-only, ~2–3 months** for full laser/CNC/UI parity. Open items need hardware: mapping driver UART pads to STM32 pins (multimeter), heater/fan outputs, full CAN frame meanings (needs a CAN capture), bootloader behaviour (needs SWD).
+- ❓ The HTTP server binary on the Linux side hasn't been recovered yet. Next step: try the `UGUART` console pads with a 3.3 V USB-serial adapter (see [docs/mainboard.md](docs/mainboard.md)).
 
 ## Contributing
 
