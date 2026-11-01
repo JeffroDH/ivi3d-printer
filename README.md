@@ -39,6 +39,8 @@ Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/mar
 
 | Path | Contents |
 |---|---|
+| `fusion/` | Autodesk Fusion post processors for the laser and CNC heads + header checker ([fusion/README.md](fusion/README.md)) |
+| `docs/laser_cnc_gcode.md` | Laser (line/point) and CNC G-code + header format from IVI 3licer test files |
 | `bridge/` | Orca Slicer / Anycubic Next bridge: OctoPrint-compatible service, Wi-Fi upload + USB serial streaming, tests |
 | `ivi-control.sh` | Command-line client for the HTTP API (discover, status, print, pause, G-code, …) |
 | `docs/slicer_report.md` | How IVI 3licer 1.6.2 (a rebranded Snapmaker Luban) talks to the printer — best map of the API |
@@ -104,8 +106,9 @@ M109 S215 with `busy: processing` while heating, then printing). On macOS, allow
 Local Network**, or Wi-Fi requests fail with "No route to host".
 
 The stock slicer prepends a `;Header Start … ;Header End` block to jobs (see `docs/slicer_report.md`). Laser jobs are `.nc`
-(`M3 S…` power), CNC jobs are `.cnc` (`M3 S…` spindle). The laser/CNC header and power scale are **not yet verified** on
-hardware (plan: capture a small test job from IVI 3licer over USB).
+(`M3 S<percent>` on / `M5` off per segment; `M106 P0`/`M107 P0` = fan), CNC jobs are `.cnc` (`M3 P<percent>` / `M5`), both
+centre-origin. Decoded from IVI 3licer test files in [docs/laser_cnc_gcode.md](docs/laser_cnc_gcode.md) (point mode has a
+bogus-dwell slicer bug); Fusion posts in [fusion/](fusion/README.md). Not yet run on hardware.
 
 ## Firmware findings (summary)
 
