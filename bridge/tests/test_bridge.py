@@ -427,6 +427,32 @@ class FilamentTests(unittest.TestCase):
         self.cfg["filament_load"] = "m701"; self.b.start_filament("unload", 210); self.wait("done")
         self.assertIn("M702", self.hs.written)
 
+class JogExtrudeTests(FilamentTests):
+    test_default_extrude = test_unload = test_load_custom_length = test_cancel_while_heating = None
+    test_timeout_and_bad_input = test_no_usb_error = test_m701_option = None
+    def test_cold_heats_to_235_then_moves_and_stays_hot(self):
+        self.b.start_jog_extrude("retract", 10, 200); self.wait("done")
+        self.assertIn("M104 S235", self.hs.written); self.assertGreaterEqual(self.hs.actual, 232)
+        self.assertEqual(self.moves(), ["M83", "G1 E-10 F200", "M82"]); self.assertNotIn("M104 S0", self.hs.written)
+        self.assertIn("235°C", self.b.filament.info()["note"])
+    def test_hot_moves_immediately(self):
+        self.hs.write(b"M104 S240\n"); self.hs.actual = 239.0; self.b.monitor.poll_once(); n = len([c for c in self.hs.written if c.startswith("M104")])
+        info = self.b.start_jog_extrude("extrude", 20, 100); self.assertIn(info["state"], ("moving", "done")); self.wait("done")
+        self.assertEqual(len([c for c in self.hs.written if c.startswith("M104")]), n)   # no new M104
+        self.assertEqual(self.moves(), ["M83", "G1 E20 F100", "M82"])
+    def test_low_target_counts_as_cold(self):
+        self.hs.write(b"M104 S150\n"); self.hs.actual = 150.0; self.b.monitor.poll_once()
+        self.b.start_jog_extrude("extrude", 10, 100); self.wait("done"); self.assertIn("M104 S235", self.hs.written)
+    def test_cancel_restores_previous_target(self):
+        self.hs.write(b"M104 S150\n"); self.hs.actual = 30.0; self.hs.hold = True; self.b.monitor.poll_once()
+        self.b.start_jog_extrude("extrude", 10, 100); time.sleep(0.05); self.b.filament.cancel(); self.wait("cancelled")
+        self.assertEqual(self.hs.written[-1], "M104 S150"); self.assertEqual(self.moves(), [])
+    def test_custom_temp_and_limits(self):
+        self.cfg["jog_extrude_temp"] = 220; self.b.start_jog_extrude("extrude", 5, 100); self.wait("done")
+        self.assertIn("M104 S220", self.hs.written)
+        for a, d, f in (("spin", 1, 1), ("extrude", 0, 100), ("extrude", 500, 100), ("extrude", 10, 9000)):
+            with self.assertRaises(ValueError): self.b.start_jog_extrude(a, d, f)
+
 class FilamentApiTests(MonitorApiTests):
     test_auto_print_true_uploads_over_wifi_only = test_live_status = test_octoprint_control_endpoints = None
     test_pause_resume_screen_job_over_usb = test_no_usb_controls_fail_gracefully = test_allowlist_new_codes = None
@@ -449,6 +475,13 @@ class FilamentApiTests(MonitorApiTests):
         self.assertEqual(e.exception.code, 400)
         with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
         self.assertIn('[["PLA", 215], ["PETG", 240]]', page); self.assertIn("Heating…", page); self.assertIn("Custom", page)
-        for t in ("Filament coming out of the nozzle?", "Yes, done", "No, extrude more"): self.assertIn(t, page)
+        st, j = self.req("/api/ivi/filament", json.dumps({"action": "retract", "distance": 10, "feed": 200}).encode())
+        self.assertEqual(j["state"], "heating")          # "Yes, done" turned the nozzle off
+        self.req("/api/ivi/filament", json.dumps({"action": "cancel"}).encode())
+        for _ in range(300):
+            if self.req("/api/ivi/filament")[1]["state"] == "cancelled": break
+            time.sleep(0.01)
+        self.assertEqual(self.req("/api/ivi/filament")[1]["state"], "cancelled")
+        for t in ("Retracting…", "Filament coming out of the nozzle?", "Yes, done", "No, extrude more"): self.assertIn(t, page)
 
 if __name__ == "__main__": unittest.main()

@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {
     "filament_tolerance_c": 3,          # start moving once the nozzle is within this of target
     "filament_heat_timeout_s": 900,
     "filament_poll_s": 1,
+    "jog_extrude_temp": 235,            # Extrude/Retract on a cold nozzle (<170 °C target or below target) heat to this first
     "notify": True,                     # macOS notifications via osascript
     "caffeinate": True,                 # keep the Mac awake during USB jobs
     "printer_host": "192.168.50.85",
@@ -563,13 +564,24 @@ class SerialMonitor:
 class FilamentChange:
     """Touch-screen style load/unload: M104 S<t>, poll temps (no blocking M109, so the monitor keeps
     running) until within tolerance, then M83 + E moves + M82. States: heating, moving, done, cancelled, error."""
-    def __init__(self, bridge, action, temp, clock=time.monotonic):
+    def __init__(self, bridge, action, temp, clock=time.monotonic, distance=None, feed=None, heat=True, prev=0):
         self.b, self.action, self.temp, self.clock = bridge, action, temp, clock
-        self.state, self.error, self.actual = "heating", None, None
+        self.distance, self.feed, self.heat, self.prev = distance, feed, heat, prev
+        self.state, self.error, self.actual, self.note = ("heating" if heat else "moving"), None, None, None
         self._cancel = threading.Event(); self.thread = None
 
     def info(self):
-        return {"action": self.action, "target": self.temp, "actual": self.actual, "state": self.state, "error": self.error}
+        return {"action": self.action, "target": self.temp, "actual": self.actual, "state": self.state,
+                "error": self.error, "note": self.note}
+
+    @property
+    def jog(self): return self.action in ("extrude", "retract")
+
+    def _restore(self):
+        """Cancel: jog extrude puts the nozzle back to its previous target; load/unload turn it off."""
+        if not self.jog: return self._off()
+        try: self.b.send_command("M104 S%d" % int(round(self.prev)))
+        except Exception as e: log("filament: restore failed:", e)
 
     def _off(self):
         try: self.b.send_command("M104 S0")          # like the touch screen: nozzle off at the end
@@ -594,6 +606,8 @@ class FilamentChange:
 
     def moves(self):
         n = float(self.b.cfg.get("filament_load_mm", 100))
+        if self.jog:
+            return ["M83", "G1 E%g F%g" % (self.distance if self.action == "extrude" else -self.distance, self.feed), "M82"]
         if self.action == "unload":
             return ["M83", "G1 E10 F300", "G1 E-%g F1500" % n, "M82"]  # then M104 S0
         return ["M83", "G1 E%g F300" % n, "M82"]
@@ -604,14 +618,14 @@ class FilamentChange:
     def run(self):
         cfg, mon = self.b.cfg, self.b.monitor
         try:
-            if self.b.cfg.get("filament_load") == "m701":
+            if self.b.cfg.get("filament_load") == "m701" and not self.jog:
                 self.state = "moving"; self.b.send_command("M104 S%d" % self.temp)
                 self.b.send_command("M701" if self.action == "load" else "M702"); self.state = "done"; return
-            self.b.send_command("M104 S%d" % self.temp)
+            if self.heat: self.b.send_command("M104 S%d" % self.temp)
             tol = float(cfg.get("filament_tolerance_c", 3)); end = self.clock() + float(cfg.get("filament_heat_timeout_s", 900))
-            while True:
+            while self.heat:
                 if self._cancel.is_set():
-                    self._off(); self.state = "cancelled"; return
+                    self._restore(); self.state = "cancelled"; return
                 if mon and not (mon.thread and mon.thread.is_alive()): mon.poll_once()   # no monitor thread (tests/CLI)
                 t = self.b.live_status().get("temps", {}).get("tool0")
                 if t: self.actual = t["actual"]
@@ -621,9 +635,11 @@ class FilamentChange:
                 self._cancel.wait(float(cfg.get("filament_poll_s", 1)))
             self.state = "moving"
             for c in self.moves():
-                if self._cancel.is_set(): self._off(); self.state = "cancelled"; return
+                if self._cancel.is_set(): self._restore(); self.state = "cancelled"; return
                 self.b.send_command(c)
-            if self.action == "load": self.state = "confirm"
+            if self.jog:
+                self.note = "Nozzle left at %d°C – Cooldown to turn off" % self.temp; self.state = "done"
+            elif self.action == "load": self.state = "confirm"
             else: self._off(); self.state = "done"
         except Exception as e:
             self.state, self.error = "error", str(e); log("filament:", e)
@@ -657,6 +673,26 @@ class Bridge:
         f = self.filament
         if f and f.state in ("heating", "moving", "confirm"): raise RuntimeError("a filament change is already running")
         self.filament = FilamentChange(self, action, temp); self.filament.start(); return self.filament.info()
+
+    def start_jog_extrude(self, action, distance, feed):
+        """Extrude/Retract button: heat to jog_extrude_temp first unless the nozzle is already hot
+        (target >= 170 °C and within tolerance of it); the nozzle is left hot afterwards."""
+        if action not in ("extrude", "retract"): raise ValueError("action must be extrude or retract")
+        distance, feed = float(distance), float(feed)
+        if not 0 < distance <= G1_LIMITS["E"]: raise ValueError("distance must be 0-%g mm" % G1_LIMITS["E"])
+        if not 0 < feed <= G1_LIMITS["F"]: raise ValueError("feed must be 0-%g mm/min" % G1_LIMITS["F"])
+        if self.busy(): raise RuntimeError("a USB job is running")
+        f = self.filament
+        if f and f.state in ("heating", "moving", "confirm"): raise RuntimeError("a filament change is already running")
+        mon = self.monitor
+        if mon and not (mon.thread and mon.thread.is_alive()): mon.poll_once()
+        t = self.live_status().get("temps", {}).get("tool0") or {}
+        tgt, act = float(t.get("target", 0)), t.get("actual")
+        tol = float(self.cfg.get("filament_tolerance_c", 3))
+        hot = tgt >= 170 and act is not None and act >= tgt - tol
+        temp = int(round(tgt)) if hot else int(self.cfg.get("jog_extrude_temp", 235))
+        self.filament = FilamentChange(self, action, temp, distance=distance, feed=feed, heat=not hot, prev=tgt)
+        self.filament.actual = act; self.filament.start(); return self.filament.info()
 
     def live_status(self):
         if self.busy(): return self.job.status
@@ -840,7 +876,7 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
 <div id=v_pick><p class=lbl>Which filament is loaded?</p><div id=fp class=fgrid2></div>
 <div style="display:flex;gap:.6em;align-items:center;margin-top:1em">Custom <input id=fcu type=number min=150 max=300 value=220 style="width:5em;font:inherit;padding:.4em;border:1px solid #bcd;border-radius:6px"> °C
 <button class=btn onclick="run(+fcu.value)">Start</button><span style="flex:1"></span><button class=lite style="width:auto" onclick="fclose()">Close</button></div></div>
-<div id=v_heat style="display:none"><div id=hs class=hs>Heating…</div><div class=hbar><div id=hb></div></div><div id=ht class=val style="text-align:center">–</div>
+<div id=v_heat style="display:none"><div id=hs class=hs>Heating…</div><div class=hbar><div id=hb></div></div><div id=ht class=val style="text-align:center">–</div><div id=hn class=lbl style="text-align:center;margin-top:.4em"></div>
 <div style="display:flex;justify-content:center;gap:.8em;margin-top:1.2em"><button id=fy class=btn style="display:none" onclick="fans('yes')">Yes, done</button><button id=fm class=btn style="display:none" onclick="fans('more')">No, extrude more</button><button id=fc class=btn onclick="fcancel()">Cancel</button><button id=fk class=btn style="display:none" onclick="fclose()">OK</button></div></div>
 </div></div></div>
 <script>const K=__KEY__,FIL=__FIL__,H={'X-Api-Key':K,'Content-Type':'application/json'};let T={},fanOn=false;
@@ -855,7 +891,11 @@ document.querySelectorAll('.opts').forEach(o=>o.querySelectorAll('button').forEa
 async function g(cs){const r=await fetch('/api/printer/command',{method:'POST',headers:H,body:JSON.stringify({commands:cs})});
  say(r.ok?'Sent '+cs.join(' · '):'Failed: '+((await r.json().catch(()=>({}))).error||r.status));setTimeout(tick,300)}
 function jog(a,s){g(['G91','G1 '+a+(s*sel('tdst'))+' F'+sel('tspd'),'G90'])}
-function ext(s){g(['M83','G1 E'+(s*sel('fdst'))+' F'+sel('fspd'),'M82'])}
+async function ext(s){FA=s>0?'extrude':'retract';
+ const r=await fetch('/api/ivi/filament',{method:'POST',headers:H,body:JSON.stringify({action:FA,distance:+sel('fdst'),feed:+sel('fspd')})});
+ const j=await r.json();if(!r.ok){say('Failed: '+j.error);return}
+ if(j.state=='heating'){mt.textContent=s>0?'Extrude':'Retract';fv('heat');dlg.style.display='flex';show(j);clearInterval(FT);FT=setInterval(fpoll,1000)}
+ else{say((s>0?'Extruding ':'Retracting ')+sel('fdst')+' mm (nozzle already hot)');setTimeout(async()=>{const k=await (await fetch('/api/ivi/filament',{headers:H})).json();if(k.note)say(k.note);else if(k.error)say('Error: '+k.error)},800)}}
 let FA=null,FT=null;
 function pick(a){FA=a;mt.textContent=(a=='load'?'Load':'Unload')+' Filament';fp.innerHTML='';
  FIL.forEach(([n,t])=>{const b=document.createElement('button');b.className='fbtn';b.innerHTML='<b>'+n+'</b><span>'+t+'°C</span>';b.onclick=()=>run(t);fp.appendChild(b)});
@@ -866,8 +906,8 @@ async function run(t){const r=await fetch('/api/ivi/filament',{method:'POST',hea
 async function fpoll(){show(await (await fetch('/api/ivi/filament',{headers:H})).json())}
 function show(j){const a=j.actual,t=j.target,pct=a==null?0:Math.max(0,Math.min(100,100*a/t));
  hb.style.width=pct+'%';ht.textContent=(a==null?'–':Math.round(a))+'°C / '+t+'°C';
- hs.textContent={heating:'Heating…',moving:(j.action=='load'?'Loading…':'Unloading…'),confirm:'Filament coming out of the nozzle?',done:'Done',cancelled:'Cancelled',error:'Error: '+j.error}[j.state]||j.state;
- hs.className='hs '+j.state;const fin=['done','cancelled','error'].includes(j.state);const cf=j.state=='confirm';fy.style.display=fm.style.display=cf?'':'none';fc.style.display=fin?'none':'';fk.style.display=fin?'':'none';if(fin)clearInterval(FT)}
+ hs.textContent={heating:'Heating…',moving:({load:'Loading…',unload:'Unloading…',extrude:'Extruding…',retract:'Retracting…'}[j.action]),confirm:'Filament coming out of the nozzle?',done:'Done',cancelled:'Cancelled',error:'Error: '+j.error}[j.state]||j.state;
+ hs.className='hs '+j.state;const fin=['done','cancelled','error'].includes(j.state);const cf=j.state=='confirm';fy.style.display=fm.style.display=cf?'':'none';fc.style.display=fin?'none':'';fk.style.display=fin?'':'none';hn.textContent=j.note||'';if(fin)clearInterval(FT)}
 async function fans(a){const r=await fetch('/api/ivi/filament',{method:'POST',headers:H,body:JSON.stringify({action:a})});show(await r.json())}
 async function fcancel(){await fetch('/api/ivi/filament',{method:'POST',headers:H,body:JSON.stringify({action:'cancel'})});fpoll()}
 function fclose(){dlg.style.display='none';clearInterval(FT)}
@@ -968,7 +1008,10 @@ def make_handler(bridge):
                 if cmd.get("action") == "cancel":
                     if bridge.filament: bridge.filament.cancel()
                     return self._json(200, bridge.filament.info() if bridge.filament else {"state": "idle"})
-                try: return self._json(200, bridge.start_filament(cmd.get("action"), cmd.get("temp", 0)))
+                try:
+                    if cmd.get("action") in ("extrude", "retract"):
+                        return self._json(200, bridge.start_jog_extrude(cmd["action"], cmd.get("distance", 0), cmd.get("feed", 0)))
+                    return self._json(200, bridge.start_filament(cmd.get("action"), cmd.get("temp", 0)))
                 except (ValueError, TypeError) as e: return self._json(400, {"error": str(e)})
                 except Exception as e: return self._json(409, {"error": str(e)})
             if p == "/api/ivi/clear":
