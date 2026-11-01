@@ -121,6 +121,42 @@ fast = variant("IVI3D 0.20mm Fast", 0.2, 0.9, 5, 3, 3, 15, 50, 60, 80, 40, 100)
 hq = variant("IVI3D 0.10mm High Quality", 0.1, 1.2, 12, 6, 3, 20, 30, 45, 50, 30, 60)
 PROCESSES = [process, fast, hq]
 
+# Extra filaments. Baseline = Anycubic's own OrcaSlicer vendor profiles (OrcaSlicer resources/profiles/Anycubic/filament,
+# "Anycubic <X> @Anycubic Kobra S1 0.4 nozzle" / "TPU 95A @Kobra S1 Max 0.4"). Max volumetric speed scaled for the
+# 0.3 nozzle at ~0.55x (nozzle area ratio (0.3/0.4)^2 = 0.56) and capped at the PLA value (8). See README for sources.
+def fil(name, ftype, density, t, t0, lo, hi, bed, fmin, fmax, nofan, vol, layer_time, retract=None, rspeed=None, extra=None):
+    f = dict(filament, name=name, filament_settings_id=[name], filament_type=[ftype], filament_density=[str(density)],
+             nozzle_temperature=[str(t)], nozzle_temperature_initial_layer=[str(t0)],
+             nozzle_temperature_range_low=[str(lo)], nozzle_temperature_range_high=[str(hi)],
+             fan_min_speed=[str(fmin)], fan_max_speed=[str(fmax)], close_fan_the_first_x_layers=[str(nofan)],
+             filament_max_volumetric_speed=[str(vol)], slow_down_layer_time=[str(layer_time)])
+    for k in ("hot_plate_temp", "cool_plate_temp", "textured_plate_temp", "eng_plate_temp"):
+        f[k] = [str(bed)]; f[k + "_initial_layer"] = [str(bed)]
+    if retract is not None: f["filament_retraction_length"] = [str(retract)]
+    if rspeed is not None: f["filament_retraction_speed"] = [str(rspeed)]; f["filament_deretraction_speed"] = [str(rspeed)]
+    f.update(extra or {})
+    return f
+
+EXTRA_FILAMENTS = [
+    # Anycubic ABS: 250/250 C, bed 90, fan 10-80 (off 5 layers), 15 mm3/s @0.4
+    fil("IVI3D ABS", "ABS", 1.04, 250, 250, 240, 280, 90, 10, 80, 5, 8, 30),
+    # Anycubic ASA: 260/260 C, bed 100, fan 10-60 (off 5 layers), 12 mm3/s @0.4
+    fil("IVI3D ASA", "ASA", 1.07, 260, 260, 240, 280, 100, 10, 60, 5, 7, 35),
+    # Anycubic PETG: 250/250 C, bed 70, fan 30-90 (off 3), retract 1.5 mm @0.4 direct drive (machine 6.5 kept: Bowden)
+    fil("IVI3D PETG", "PETG", 1.27, 240, 245, 220, 260, 70, 30, 90, 3, 7, 30),
+    # Tangled TUFF Pro PCTG baseline: nozzle 250-280, bed 70-90, fan <=25 %, 30-60 mm/s
+    fil("IVI3D PCTG (Tangled TUFF)", "PCTG", 1.27, 260, 260, 250, 280, 80, 10, 25, 3, 6, 20),
+    # Anycubic TPU 95A: 205 / 215 first layer, bed 35, fan 100, retract 1 mm @30, 3.2 mm3/s @0.4
+    fil("IVI3D TPU 95A", "FLEX", 1.21, 215, 220, 190, 240, 35, 100, 100, 1, 1.5, 10, retract=1.0, rspeed=20),
+    # EXPERIMENTAL: Stratasys SR-30 soluble support (alkaline-soluble, NOT PVA). Printed alone on a single nozzle.
+    fil("IVI3D SR-30 Soluble (EXPERIMENTAL)", "PVA", 1.2, 255, 260, 245, 265, 100, 0, 20, 3, 4, 20,
+        extra={"filament_soluble": ["1"], "filament_is_support": ["1"],
+               "filament_notes": ["EXPERIMENTAL. Stratasys SR-30 (alkaline-soluble terpolymer, NOT PVA). Dissolve in "
+                                  "heated NaOH bath ~70 C. Pairs with ABS/ASA; single nozzle = whole-part tests only. "
+                                  "Dry before use; enclosure recommended."]}),
+]
+FILAMENTS = [filament] + EXTRA_FILAMENTS
+
 def write(sub, obj):
     os.makedirs(os.path.join(D, sub), exist_ok=True)
     p = os.path.join(D, sub, obj["name"] + ".json")
@@ -128,14 +164,16 @@ def write(sub, obj):
     return p
 
 if __name__ == "__main__":
-    paths = [write("machine", machine), write("filament", filament), ] + [write("process", p) for p in PROCESSES]
+    mpath = write("machine", machine); fpaths = [write("filament", f) for f in FILAMENTS]
+    ppaths = [write("process", p) for p in PROCESSES]; paths = [mpath] + fpaths + ppaths
     bundle = os.path.join(D, "IVI3D.orca_printer")
     structure = {"bundle_id": "ivi3d_" + VERSION, "bundle_type": "printer config bundle", "version": VERSION,
                  "printer_preset_name": PRINTER,
-                 "printer_config": [f"printer/{PRINTER}.json"], "filament_config": [f"filament/{FILAMENT}.json"],
+                 "printer_config": [f"printer/{PRINTER}.json"], "filament_config": [f"filament/{f['name']}.json" for f in FILAMENTS],
                  "process_config": [f"process/{p['name']}.json" for p in PROCESSES]}
     with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("bundle_structure.json", json.dumps(structure, indent=4))
-        z.write(paths[0], f"printer/{PRINTER}.json"); z.write(paths[1], f"filament/{FILAMENT}.json")
-        for p, path in zip(PROCESSES, paths[2:]): z.write(path, f"process/{p['name']}.json")
+        z.write(mpath, f"printer/{PRINTER}.json")
+        for f, path in zip(FILAMENTS, fpaths): z.write(path, f"filament/{f['name']}.json")
+        for p, path in zip(PROCESSES, ppaths): z.write(path, f"process/{p['name']}.json")
     print("\n".join(paths + [bundle]))

@@ -2,8 +2,8 @@
 
 | File | What |
 |---|---|
-| `IVI3D.orca_printer` | Bundle: printer + PLA filament + 3 processes: 0.15 Standard, 0.20 Fast, 0.10 High Quality (one import) |
-| `machine/IVI3D 0.3 nozzle.json`, `filament/IVI3D PLA.json`, `process/IVI3D 0.15mm Standard.json`, `process/IVI3D 0.20mm Fast.json`, `process/IVI3D 0.10mm High Quality.json` | Same presets as separate user-preset JSON |
+| `IVI3D.orca_printer` | Bundle: printer + 7 filaments (PLA, ABS, ASA, PETG, PCTG, TPU 95A, SR-30 experimental) + 3 processes: 0.15 Standard, 0.20 Fast, 0.10 High Quality (one import) |
+| `machine/IVI3D 0.3 nozzle.json`, `filament/*.json`, `process/IVI3D 0.15mm Standard.json`, `process/IVI3D 0.20mm Fast.json`, `process/IVI3D 0.10mm High Quality.json` | Same presets as separate user-preset JSON |
 | `ivi_fdm_header.py` | Optional post-processing hook that adds the IVI 3licer `;Header Start … header_type: 3dp` block |
 | `build_profiles.py` | Regenerates everything (edit values here) · `tests/` validates JSON, geometry, bundle, header |
 
@@ -56,3 +56,22 @@ then drops to Z15 at the bed edge before the purge line (same as IVI 3licer).
 aligned; grid infill; pause G-code `M2410`; PLA range 190–230 °C; thumbnails off. Today's observed start used
 `M140 S50` — the profile uses the IVI default bed 60 °C. Firmware delta values (M665 L357.5 R160.31 H233.22, M666, M851
 Z-14.29) live in the printer, not in Orca.
+
+## Extra filament presets
+
+Baseline: Anycubic's own OrcaSlicer vendor profiles (`resources/profiles/Anycubic/filament/`, the "Anycubic ABS/ASA/PETG @Anycubic Kobra S1 0.4 nozzle" and "Anycubic TPU 95A @Anycubic Kobra S1 Max 0.4 nozzle" JSONs). Max volumetric speed is scaled ~0.55x for the 0.3 nozzle (area ratio (0.3/0.4)^2 = 0.56) and capped at the PLA preset's 8 mm³/s. Retraction is inherited from the machine preset (6.5 mm @ 25 mm/s, from IVI 3licer) except TPU. All values are starting points; calibrate temperature, flow, and retraction per spool.
+
+| Preset | Nozzle (1st layer) °C | Bed °C | Fan min–max (off first n layers) | Retraction | Max vol. mm³/s | Source |
+|---|---|---|---|---|---|---|
+| IVI3D ABS | 250 (250) | 90 | 10–80 % (5) | machine 6.5 mm | 8 (AC 15) | Anycubic ABS |
+| IVI3D ASA | 260 (260) | 100 | 10–60 % (5) | machine 6.5 mm | 7 (AC 12) | Anycubic ASA |
+| IVI3D PETG | 240 (245) | 70 | 30–90 % (3) | machine 6.5 mm | 7 (AC 12) | Anycubic PETG (250 °C, lowered 10 °C for this slower printer) |
+| IVI3D PCTG (Tangled TUFF) | 260 (260) | 80 | 10–25 % (3) | machine 6.5 mm | 6 | Tangled TUFF Pro PCTG label: nozzle 250–280, bed 70–90, fan ≤25 %, 30–60 mm/s |
+| IVI3D TPU 95A | 215 (220) | 35 | 100 % (1) | 1.0 mm @ 20 mm/s | 1.5 (AC 3.2) | Anycubic TPU 95A (205/215, retract 1 mm @ 30) |
+| IVI3D SR-30 Soluble (EXPERIMENTAL) | 255 (260) | 100 | 0–20 % (3) | machine 6.5 mm | 4 | Stratasys / MakerBot SR-30 docs (support for ABS/ASA, ~250–260 °C class); assumed values |
+
+Caveats:
+- **ABS / ASA / SR-30:** enclosure strongly recommended (warping, fumes; ventilate). Bed 90–100 °C: the IVI bed's max temperature is not yet verified; if it can't reach it, use the highest stable value plus a brim/adhesive.
+- **PCTG / PETG:** stick very hard to smooth PEI/glass; use glue stick as a release agent.
+- **TPU 95A:** keep slow (≈15–20 mm/s; 1.5 mm³/s cap enforces this). If the extruder path is Bowden, TPU may buckle — test first.
+- **SR-30:** NOT PVA. Stratasys alkaline-soluble terpolymer, dissolved in a heated NaOH bath (~70 °C, Stratasys/MakerBot). Single nozzle means it can't be support under another material here; whole-part tests only. Hygroscopic: dry before use. Values are untested guesses.

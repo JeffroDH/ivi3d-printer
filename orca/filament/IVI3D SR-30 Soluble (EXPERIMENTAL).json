@@ -1,0 +1,85 @@
+{
+    "type": "filament",
+    "name": "IVI3D SR-30 Soluble (EXPERIMENTAL)",
+    "from": "User",
+    "inherits": "",
+    "version": "2.3.0.0",
+    "filament_settings_id": [
+        "IVI3D SR-30 Soluble (EXPERIMENTAL)"
+    ],
+    "compatible_printers": [
+        "IVI3D 0.3 nozzle"
+    ],
+    "filament_type": [
+        "PVA"
+    ],
+    "filament_diameter": [
+        "1.75"
+    ],
+    "filament_flow_ratio": [
+        "1"
+    ],
+    "filament_density": [
+        "1.2"
+    ],
+    "nozzle_temperature": [
+        "255"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "260"
+    ],
+    "nozzle_temperature_range_low": [
+        "245"
+    ],
+    "nozzle_temperature_range_high": [
+        "265"
+    ],
+    "hot_plate_temp": [
+        "100"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "100"
+    ],
+    "cool_plate_temp": [
+        "100"
+    ],
+    "cool_plate_temp_initial_layer": [
+        "100"
+    ],
+    "textured_plate_temp": [
+        "100"
+    ],
+    "textured_plate_temp_initial_layer": [
+        "100"
+    ],
+    "eng_plate_temp": [
+        "100"
+    ],
+    "eng_plate_temp_initial_layer": [
+        "100"
+    ],
+    "fan_min_speed": [
+        "0"
+    ],
+    "fan_max_speed": [
+        "20"
+    ],
+    "close_fan_the_first_x_layers": [
+        "3"
+    ],
+    "filament_max_volumetric_speed": [
+        "4"
+    ],
+    "slow_down_layer_time": [
+        "20"
+    ],
+    "filament_soluble": [
+        "1"
+    ],
+    "filament_is_support": [
+        "1"
+    ],
+    "filament_notes": [
+        "EXPERIMENTAL. Stratasys SR-30 (alkaline-soluble terpolymer, NOT PVA). Dissolve in heated NaOH bath ~70 C. Pairs with ABS/ASA; single nozzle = whole-part tests only. Dry before use; enclosure recommended."
+    ]
+}
