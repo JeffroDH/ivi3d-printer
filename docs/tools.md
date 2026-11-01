@@ -33,3 +33,7 @@ Software for macOS: `brew install stlink` (`st-info --probe`) or OpenOCD. Do a r
 | 3.3V / 5V | **leave unconnected** |
 
 Run `screen /dev/tty.usbserial-* 115200`, then power on the printer. If the output is garbled, try 57600 or 9600, or swap TX and RX.
+
+## Oscilloscope vs CANable
+
+A scope (especially one with a CAN decode option) can confirm the bus is alive and measure the bit rate (~500 kbit/s). It is a poor substitute for hours of frame logging. Prefer the CANable for mapping heater/fan/laser/spindle messages.

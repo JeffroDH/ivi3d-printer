@@ -266,7 +266,7 @@ Update packaging names in UI: `IVI3DPrinterFirmware`, `IVI3DPrinterFirmwarePack`
 > Hardware cross-reference: [hardware_research.md](hardware_research.md) covers the board architecture (combined `A33_407MB` main board with Allwinner A33 + STM32F407, driver boards, power and switch PCBs; see [mainboard.md](mainboard.md)), the per-motor magnetic encoders and driver boards, the toolhead ID chip, and the 8-pad head connector (pin roles guessed).
 
 
-1. **HTTP server binary** is not this Qt ELF and has not been recovered. A network scan of the printer shows **only TCP 8080 open** (it answers `{"status":"IDLE"}`); SSH/Telnet/FTP are closed, so the server binary can't currently be pulled over the network. Getting it would need a UART console on the Linux board.  
+1. **HTTP server binary** is not this Qt ELF and has not been recovered. A full TCP port scan (2026-10-31) shows **only TCP 8080 open** (kore; see [network.md](network.md)); SSH/Telnet/FTP do not answer on any port. The HTTP server binary can't be pulled over the network. Recover it via the `UGUART` console or by imaging the A33 storage.  
 2. Exact mapping of every `setUdpInfo` field → discovery `NAME` vs `Model:` under all firmware builds (ctor default is `IVI3D-Zoom-Mammoth`; live capture shows `IVI3D` / `IVI 3D Printer`). Wire format is solid; field provenance can vary by version.  
 3. Full semantics of `M2005` / `M2051` / `M210` / `M2155` not fully traced.  
 4. Whether `/prepare_print` vs `/upload` + `/start_print` differs for FDM-only Orca jobs — both exist; Luban-style clients typically `prepare_print` then `start_print`.  

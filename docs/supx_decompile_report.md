@@ -153,7 +153,7 @@ better from Orca/Luban — remains far cheaper.
 > Hardware cross-reference: [hardware_research.md](hardware_research.md) covers the board architecture (combined `A33_407MB` main board with Allwinner A33 + STM32F407, driver boards, power and switch PCBs; see [mainboard.md](mainboard.md)), the per-motor magnetic encoders and driver boards, the toolhead ID chip, and the 8-pad head connector (pin roles guessed).
 
 - Exact UART TX/RX pins (needs board photo/continuity), role of PB13/PB14/PD0/PD1/PC9/PD15/PE4/PD3.
-- Heater/fan timer-channel mapping; thermistor table type.
+- Bed heater / `FAN24V` switching pins on the main board (hotend heater and head fan are on the toolhead over CAN); thermistor table type.
 - Full CAN head-frame field meanings (needs live CAN sniff); probe signal path.
 - Bootloader behaviour (entry window, app validity check, RDP level) — needs SWD read.
 - Meaning of the A1/A3 control-block bytes in the .supx (reproduced exactly, so not blocking).

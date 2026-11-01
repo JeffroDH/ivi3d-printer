@@ -67,7 +67,7 @@ Response handling (`_getResult`): status 200, 201, 203, or 204 is OK. Any other 
 - `api_server: "http://3licer....` is the update/version server (`/api/version/latest`).
 
 ## Verified / open on the real printer
-- **Verified:** port 8080 is live and answers `{"status":"IDLE"}`; it is the only open TCP port.
+- **Verified (2026-10-31):** port 8080 is live (kore); a full 1–65535 TCP scan found no other open ports. Details: [network.md](network.md).
 - **Verified:** the printer's USB-C port is a direct serial link to the STM32 Marlin (115200, plain line G-code, no `AA 55` framing). The `AA 55` screen protocol above is for the slicer↔UI-board path.
 - **Open:** whether the default token is accepted without on-screen confirmation on every firmware build.
 - Note: the bundled CuraEngine definition says 210×210×220 with center origin, but the printer is a **delta** (M665 L357.50 R160.31 H233.22); treat the volume as a round bed.

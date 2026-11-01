@@ -16,7 +16,7 @@ machines, so this repo collects what's needed to keep them running and to drive 
 | Motors | Smart **closed-loop** drivers (the closed loop lives in the drivers; the STM32 still sends STEP/DIR and reads faults over UART) |
 | Tool heads | 3D print (0.15–0.4 mm nozzles; beta shipped 0.3 mm), laser, CNC (BLDC spindle). Each head has its own MCU on **CAN**; hotend heating/sensing, head fan, laser power and spindle are controlled through it |
 | Other sensors | Door switch, filament runout, temp/humidity, load cell, probe/auto-level, thermal runaway protection |
-| Network | Only **TCP 8080** (HTTP API) is open; no SSH/Telnet/FTP. UDP 20050 for discovery |
+| Network | Full TCP scan (2026-10-31): **only port 8080** open (kore HTTP API). No SSH/Telnet/FTP on any port. Many ports filtered (possible firewall). UDP 20050 for discovery. See [docs/network.md](docs/network.md) |
 | USB-C | Direct serial link to the STM32 Marlin, **115200 8N1**, plain line G-code |
 
 Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/marlin_M503_settings.txt`](docs/marlin_M503_settings.txt).
@@ -121,7 +121,7 @@ bootloader) with an ST-Link on the SWD pads.
 
 - ✅ Wi-Fi API, discovery, serial link, and update format documented; command-line client working from the same endpoints the stock slicer uses.
 - ⏳ **Orca Slicer bridge (idea):** a small local service that looks like an OctoPrint server to Orca and forwards jobs to `prepare_print` + `start_print`. Orca would use a delta profile built from the M665 values above. Snapmaker Luban can't be used directly: it only connects to Snapmaker machines.
-- 🔍 **Modern Marlin:** feasible but a big job. The delta motion, pins and endstops port directly; the smart-driver UART link, CAN tool-head link (including hotend temperature control via the head) and touchscreen compatibility must be written. Estimate **~3–5 weeks for FDM-only, ~2–3 months** for full laser/CNC/UI parity. Open items need hardware: mapping driver UART pads to STM32 pins (multimeter), heater/fan outputs, full CAN frame meanings (needs a CAN capture), bootloader behaviour (needs SWD).
+- 🔍 **Modern Marlin:** feasible but a big job. The delta motion, pins and endstops port directly; the smart-driver UART link, CAN tool-head link (including hotend temperature control via the head) and touchscreen compatibility must be written. Estimate **~3–5 weeks for FDM-only, ~2–3 months** for full laser/CNC/UI parity. Open items need hardware: mapping driver UART pads to STM32 pins (multimeter), bed/`FAN24V` switching, full CAN frame meanings (CANable capture), bootloader behaviour (SWD backup).
 - ❓ The HTTP server binary on the Linux side hasn't been recovered yet. Next step: try the `UGUART` console pads with a 3.3 V USB-serial adapter (see [docs/mainboard.md](docs/mainboard.md)).
 
 ## Contributing
