@@ -49,6 +49,17 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   sleep 1
 done
 printf '%s' "$KEY" | pbcopy
+
+# Optional: OrcaSlicer 2.5 plugin (each plugin lives in its own folder under orca_plugins/)
+PLUGIN_SRC="$HERE/../orca/plugin/ivi3d_bridge_plugin.py"
+PLUGIN_NOTE="OrcaSlicer plugin: not installed"
+if [ -f "$PLUGIN_SRC" ]; then
+  ANS=$(osascript -e 'button returned of (display dialog "Also copy the IVI3D Bridge plugin into OrcaSlicer 2.5 (orca_plugins)? Enable it afterwards in Orca → Plugins." buttons {"Skip", "Copy plugin"} default button "Copy plugin" with title "IVI Bridge")' 2>/dev/null || echo Skip)
+  if [ "$ANS" = "Copy plugin" ]; then
+    DEST="$HOME/Library/Application Support/OrcaSlicer/orca_plugins/ivi3d_bridge"
+    mkdir -p "$DEST" && cp "$PLUGIN_SRC" "$DEST/" && PLUGIN_NOTE="OrcaSlicer plugin copied to $DEST (restart Orca, enable it, paste the API key into the IVI3D Bridge tab settings)"
+  fi
+fi
 MSG="IVI Bridge is installed and starts automatically at login.
 
 Orca Slicer → Printer settings → Connection (Use 3rd-party print host):
@@ -60,6 +71,7 @@ USB printer: $USB
 Status page: http://$HOSTPORT/
 Anycubic Next post-processing line:
   /usr/bin/python3 \"$APP/ivi_bridge.py\" postprocess;
+$PLUGIN_NOTE
 Running now: $OK   (log: ~/Library/Logs/ivi-bridge.log)"
 echo "$MSG" | tee "$HOME/.config/ivi-bridge/orca-settings.txt"
 osascript - "$MSG" <<'AS' >/dev/null || true
