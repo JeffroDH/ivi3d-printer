@@ -10,13 +10,15 @@ can upload to it, and forwards jobs to the printer over:
 Commands:  serve | send FILE | postprocess FILE | watch DIR      (see --help)
 License: CC BY-NC-SA 4.0 (same as the repo).
 """
-import argparse, email.parser, email.policy, glob, json, os, re, shutil, sys, threading, time
+import argparse, email.parser, fcntl, html, secrets, select, subprocess, termios, email.policy, glob, json, os, re, shutil, sys, threading, time
 import urllib.error, urllib.parse, urllib.request, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 VERSION = "0.1.0"
 DEFAULT_CONFIG = {
-    "mode": "wifi",                     # "wifi" or "serial"
+    "mode": "auto",                     # "auto" (USB if plugged in, else Wi-Fi), "wifi" or "serial"
+    "notify": True,                     # macOS notifications via osascript
+    "caffeinate": True,                 # keep the Mac awake during USB jobs
     "printer_host": "192.168.50.85",
     "printer_port": 8080,
     "printer_token": "",                # kore API token (keep out of git)
@@ -34,9 +36,12 @@ DEFAULT_CONFIG = {
 def log(*a):
     print(time.strftime("%H:%M:%S"), *a, file=sys.stderr, flush=True)
 
+def config_path(path=None):
+    return path or os.environ.get("IVI_BRIDGE_CONFIG") or os.path.expanduser("~/.config/ivi-bridge/config.json")
+
 def load_config(path=None):
     cfg = dict(DEFAULT_CONFIG)
-    path = path or os.environ.get("IVI_BRIDGE_CONFIG") or os.path.expanduser("~/.config/ivi-bridge/config.json")
+    path = config_path(path)
     if path and os.path.exists(path):
         with open(path) as f:
             cfg.update(json.load(f))
@@ -44,6 +49,37 @@ def load_config(path=None):
         cfg["printer_token"] = os.environ["IVI_PRINTER_TOKEN"]
     cfg["spool_dir"] = os.path.expanduser(cfg["spool_dir"])
     return cfg
+
+def init_config(path=None, token="e0cf19a3-e0a4-4740-825f-bdffb49e58b8"):
+    """Write a config with defaults if none exists (installer). Returns (path, cfg). The token
+    default is the stock IVI 3licer token documented in docs/slicer_report.md."""
+    path = config_path(path)
+    if not os.path.exists(path):
+        cfg = {k: DEFAULT_CONFIG[k] for k in ("mode", "printer_host", "printer_port", "serial_port",
+                                             "baud", "listen_host", "listen_port", "notify", "caffeinate")}
+        cfg.update(printer_token=token, api_key=secrets.token_hex(16))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f: json.dump(cfg, f, indent=2)
+    return path, load_config(path)
+
+def notify(cfg, msg, title="IVI Bridge"):
+    log("notify:", msg)
+    if cfg.get("notify") and sys.platform == "darwin":
+        q = lambda t: t.replace("\\", "\\\\").replace('"', '\\"')
+        try: subprocess.Popen(["osascript", "-e", f'display notification "{q(msg)}" with title "{q(title)}"'])
+        except OSError: pass
+
+def find_usb_port(pattern):
+    if not any(c in pattern for c in "*?["):
+        return pattern if os.path.exists(pattern) else None
+    hits = sorted(glob.glob(pattern)); return hits[0] if hits else None
+
+def resolve_mode(cfg):
+    m = cfg.get("mode", "auto")
+    if m == "auto":
+        return "serial" if find_usb_port(cfg["serial_port"]) else "wifi"
+    return m
 
 # ---------------------------------------------------------------- Wi-Fi ----
 def encode_multipart(fields, files):
@@ -122,18 +158,66 @@ def needs_m1001(version):
     v = parse_version(version)
     return bool(v and v >= (2, 4, 0))
 
+class TermiosSerial:
+    """Minimal raw 8N1 serial port (no pyserial). Exclusive via flock + TIOCEXCL."""
+    def __init__(self, port, baud=115200, timeout=1.0):
+        self.fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+        try:
+            fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if hasattr(termios, "TIOCEXCL"): fcntl.ioctl(self.fd, termios.TIOCEXCL)
+            a = termios.tcgetattr(self.fd)
+            speed = getattr(termios, f"B{baud}")
+            a[0] = 0; a[1] = 0                                    # iflag, oflag raw
+            a[2] = termios.CS8 | termios.CREAD | termios.CLOCAL   # 8N1, no flow control
+            a[3] = 0; a[4] = a[5] = speed
+            termios.tcsetattr(self.fd, termios.TCSANOW, a)
+            termios.tcflush(self.fd, termios.TCIOFLUSH)
+        except Exception:
+            os.close(self.fd); raise
+        self.timeout, self.buf = timeout, b""
+    def write(self, data):
+        view = memoryview(data)
+        while view:
+            select.select([], [self.fd], [], self.timeout)
+            try: n = os.write(self.fd, view); view = view[n:]
+            except BlockingIOError: pass
+    def readline(self):
+        end = time.monotonic() + self.timeout
+        while b"\n" not in self.buf:
+            left = end - time.monotonic()
+            if left <= 0: break
+            r, _, _ = select.select([self.fd], [], [], left)
+            if r:
+                try: chunk = os.read(self.fd, 4096)
+                except BlockingIOError: continue
+                if not chunk: raise OSError("serial port closed (USB unplugged?)")
+                self.buf += chunk
+        if b"\n" in self.buf:
+            line, self.buf = self.buf.split(b"\n", 1); return line + b"\n"
+        return b""
+    def close(self):
+        if self.fd is not None: os.close(self.fd); self.fd = None
+
 def open_serial(cfg):
-    import serial  # pyserial; imported lazily so tests run without it
-    port = cfg["serial_port"]
-    if any(c in port for c in "*?["):
-        hits = sorted(glob.glob(port))
-        if not hits:
-            raise RuntimeError(f"no serial port matches {port} (is USB-C plugged in?)")
-        port = hits[0]
+    port = find_usb_port(cfg["serial_port"])
+    if not port:
+        raise RuntimeError(f"no serial port matches {cfg['serial_port']} (is USB-C plugged in?)")
     try:
-        return serial.Serial(port, cfg["baud"], timeout=1, exclusive=True)
+        return TermiosSerial(port, cfg["baud"])
     except Exception as e:
         raise RuntimeError(f"cannot open {port}: {e}. Disconnect IVI 3licer (only one program may own the port).")
+
+TEMP_RE = re.compile(r"\b([TB]\d?):\s*(-?[\d.]+)\s*/\s*(-?[\d.]+)")
+def parse_status(line, status):
+    """Update status dict from unsolicited reports like ' T:215.0 /215.0 B:50.1 /50.0' or
+    'Working Status: IDLE'. Returns True if the line was a status report."""
+    hit = False
+    for k, cur, tgt in TEMP_RE.findall(line):
+        name = {"T": "tool0", "B": "bed"}.get(k, "tool" + k[1:] if k[0] == "T" else k)
+        status.setdefault("temps", {})[name] = {"actual": float(cur), "target": float(tgt)}; hit = True
+    m = re.search(r"Working Status:\s*(\S+)", line, re.I)
+    if m: status["working"] = m.group(1); hit = True
+    return hit
 
 class SerialJob:
     """Streams one job. State: Operational -> Starting -> Printing <-> Paused -> Operational/Cancelled/Error."""
@@ -142,7 +226,7 @@ class SerialJob:
         self.fw = firmware_version
         self.line_timeout, self.clock = line_timeout, clock
         self.sent = 0; self.state = "Starting"; self.error = None
-        self.started = None
+        self.started = None; self.status = {}
         self._pause = threading.Event(); self._cancel = threading.Event()
         self._pending = []   # out-of-band commands (pause/resume) sent between lines
 
@@ -150,7 +234,9 @@ class SerialJob:
         self.ser.write((cmd + "\n").encode())
 
     def _readline(self):
-        return self.ser.readline().decode(errors="replace").strip()
+        line = self.ser.readline().decode(errors="replace").strip()
+        if line: parse_status(line, self.status)
+        return line
 
     def _wait(self, predicate, timeout):
         end = self.clock() + timeout
@@ -228,23 +314,33 @@ class SerialJob:
 
 # ------------------------------------------------- OctoPrint emulation ----
 class Bridge:
-    def __init__(self, cfg, wifi_factory=None, serial_factory=None):
+    def __init__(self, cfg, wifi_factory=None, serial_factory=None, awake_factory=None):
         self.cfg = cfg
+        self.awake_factory = awake_factory or self._caffeinate
         self.wifi_factory = wifi_factory or (lambda: WifiPrinter(cfg["printer_host"], cfg["printer_port"],
                                                                  cfg["printer_token"], cfg["retries"]))
         self.serial_factory = serial_factory or (lambda: open_serial(cfg))
         self.job = None; self.thread = None; self.last_file = None
         self.lock = threading.Lock()
 
+    def _caffeinate(self):
+        if self.cfg.get("caffeinate") and sys.platform == "darwin":
+            try: return subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
+            except OSError: pass
+        return None
+
     def busy(self):
         return self.job is not None and self.job.state in ("Starting", "Printing", "Paused")
 
     def submit(self, path, name, start=True, mode=None):
-        mode = mode or self.cfg["mode"]
+        mode = mode or resolve_mode(self.cfg)
         self.last_file = name
         if mode == "wifi":
-            self.wifi_factory().upload(path, name)
-            return f"Uploaded {name} to the printer over Wi-Fi. Start it on the touch screen."
+            try: self.wifi_factory().upload(path, name)
+            except Exception as e:
+                notify(self.cfg, f"Wi-Fi upload of {name} failed: {e}"); raise
+            m = f"Uploaded {name} to the printer over Wi-Fi. Start it on the touch screen."
+            notify(self.cfg, m); return m
         if not start:
             return f"Stored {name} in the spool folder (serial mode; print=false)."
         with self.lock:
@@ -252,16 +348,26 @@ class Bridge:
                 raise RuntimeError("a job is already running")
             with open(path, errors="replace") as f:
                 lines = clean_gcode(f.read())
-            ser = self.serial_factory()
+            try: ser = self.serial_factory()
+            except Exception as e:
+                notify(self.cfg, f"USB print of {name} failed: {e}"); raise
             self.job = SerialJob(ser, lines, name, self.cfg.get("firmware_version", ""),
                                  self.cfg.get("line_timeout_s", 600))
+            awake = self.awake_factory()
             def runner(job=self.job):
                 try:
                     job.run()
                 finally:
                     try: ser.close()
                     except Exception: pass
+                    if awake:
+                        try: awake.terminate()
+                        except Exception: pass
+                    msg = {"Operational": f"Finished {job.name}", "Cancelled": f"Cancelled {job.name}"}.get(
+                        job.state, f"Print {job.name} stopped: {job.error}")
+                    notify(self.cfg, msg)
             self.thread = threading.Thread(target=runner, daemon=True); self.thread.start()
+        notify(self.cfg, f"Printing {name} over USB")
         return f"Printing {name} over USB serial."
 
     def job_info(self):
@@ -273,6 +379,24 @@ class Bridge:
                 "progress": {"completion": j.progress if j else None, "printTime": elapsed,
                              "printTimeLeft": None, "filepos": j.sent if j else None},
                 "state": state}
+
+PAGE = """<!doctype html><meta charset=utf-8><title>IVI Bridge</title>
+<style>body{font:15px -apple-system,sans-serif;max-width:520px;margin:2em auto}button{font-size:15px;margin-right:.5em}
+.bar{height:14px;background:#ddd;border-radius:7px}.bar>div{height:100%;background:#3a7;border-radius:7px;width:0}</style>
+<h2>IVI Bridge</h2><p>Mode: <b>__MODE__</b></p><p>State: <b id=st>…</b> &nbsp; File: <span id=fn></span></p>
+<div class=bar><div id=pb></div></div><p id=pc></p><p id=tp></p>
+<button onclick="cmd('pause','pause')">Pause</button><button onclick="cmd('pause','resume')">Resume</button>
+<button onclick="if(confirm('Cancel print?'))cmd('cancel')">Cancel</button>
+<script>const K=__KEY__,H={'X-Api-Key':K,'Content-Type':'application/json'};
+async function cmd(c,a){await fetch('/api/job',{method:'POST',headers:H,body:JSON.stringify({command:c,action:a})});tick()}
+async function tick(){try{const j=await (await fetch('/api/job',{headers:H})).json(),p=await (await fetch('/api/printer',{headers:H})).json();
+st.textContent=j.state;fn.textContent=j.job.file.name||'';const c=j.progress.completion;pb.style.width=(c||0)+'%';
+pc.textContent=c==null?'':c.toFixed(1)+'%';tp.textContent=Object.entries(p.temperature||{}).map(([k,v])=>k+': '+v.actual+' / '+v.target+' °C').join('   ')}catch(e){st.textContent='bridge offline'}}
+tick();setInterval(tick,2000)</script>"""
+
+def status_page(cfg):
+    return PAGE.replace("__MODE__", html.escape(cfg.get("mode", "auto"))).replace(
+        "__KEY__", json.dumps(cfg.get("api_key", "")).replace("<", "\\u003c"))
 
 def make_handler(bridge):
     cfg = bridge.cfg
@@ -290,8 +414,8 @@ def make_handler(bridge):
                 self._json(403, {"error": "Invalid API key"}); return False
             return True
         def do_GET(self):
-            if not self._auth(): return
             p = self.path.split("?")[0]
+            if p not in ("/", "/index.html") and not self._auth(): return
             if p == "/api/version":
                 return self._json(200, {"api": "0.1", "server": "1.9.0", "text": f"OctoPrint (ivi-bridge {VERSION})"})
             if p == "/api/server":
@@ -301,7 +425,12 @@ def make_handler(bridge):
             if p == "/api/printer":
                 st = bridge.job_info()["state"]
                 return self._json(200, {"state": {"text": st, "flags": {"operational": True,
-                                   "printing": st == "Printing", "paused": st == "Paused", "ready": not bridge.busy()}}})
+                                   "printing": st == "Printing", "paused": st == "Paused", "ready": not bridge.busy()}},
+                                   "temperature": (bridge.job.status.get("temps", {}) if bridge.job else {})})
+            if p == "/" or p == "/index.html":
+                b = status_page(cfg).encode()
+                self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(b))); self.end_headers(); return self.wfile.write(b)
             if p.startswith("/api/files"):
                 return self._json(200, {"files": [], "free": 0})
             self._json(404, {"error": "not found"})
@@ -354,8 +483,8 @@ def serve(cfg, bridge=None):
     bridge = bridge or Bridge(cfg)
     srv = ThreadingHTTPServer((cfg["listen_host"], cfg["listen_port"]), make_handler(bridge))
     log(f"ivi-bridge {VERSION} on http://{cfg['listen_host']}:{cfg['listen_port']} mode={cfg['mode']}")
-    if cfg["mode"] == "serial":
-        log("serial mode: disconnect IVI 3licer first - only one program can own the USB port")
+    if cfg["mode"] in ("serial", "auto"):
+        log("USB jobs: disconnect IVI 3licer first - only one program can own the USB port")
     return srv
 
 # ----------------------------------------------------------------- CLI -----
@@ -375,21 +504,27 @@ def send_file(cfg, path, name=None):
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"bridge refused: HTTP {e.code} {e.read()[:200]!r}")
     except (urllib.error.URLError, OSError):
-        if cfg["mode"] != "wifi":
+        if resolve_mode(cfg) != "wifi":
             raise RuntimeError("bridge service not running; serial mode needs `ivi_bridge.py serve`")
         return Bridge(cfg).submit(path, name)
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--config"); ap.add_argument("--mode", choices=["wifi", "serial"])
+    ap.add_argument("--config"); ap.add_argument("--mode", choices=["auto", "wifi", "serial"])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("serve", help="run the OctoPrint-compatible service")
     s = sub.add_parser("send", help="send a G-code file now"); s.add_argument("file")
     pp = sub.add_parser("postprocess", help="slicer post-processing hook (file path is last arg)")
     pp.add_argument("file")
+    sub.add_parser("init-config", help="create the config with defaults if missing; print Orca settings as JSON")
     w = sub.add_parser("watch", help="send every new .gcode file that appears in DIR (for Anycubic Next exports)")
     w.add_argument("dir"); w.add_argument("--interval", type=float, default=3)
     a = ap.parse_args(argv)
+    if a.cmd == "init-config":
+        path, cfg = init_config(a.config)
+        print(json.dumps({"config": path, "host": f"127.0.0.1:{cfg['listen_port']}", "api_key": cfg["api_key"],
+                          "usb_port": find_usb_port(cfg["serial_port"])}))
+        return 0
     cfg = load_config(a.config)
     if a.mode: cfg["mode"] = a.mode
     if a.cmd == "serve":

@@ -7,14 +7,18 @@ A small local Python service that looks like an **OctoPrint** server to the slic
 | `wifi` (default) | kore API `:8080` | `connect` → `upload` (201) → `disconnect`. **Start the job on the touch screen** — `start_print` is 404 on firmware V1.3.2-alpha. Future/custom firmware may enable Wi-Fi start. |
 | `serial` | USB-C, 115200 | `M2411 S2` (+`M1001 L` only if fw ≥ 2.4.0) → wait for `PC start work` → stream G-code per `ok`. Pause `M2410`, resume `M2411 S1`, cancel = stop streaming + heaters off. Progress at `/api/job`. **Only one program can own the port — disconnect IVI 3licer.** The Mac must stay awake for the whole print. |
 
-## Install (macOS)
-```sh
-python3 -m pip install --user pyserial          # only needed for serial mode
-mkdir -p ~/.config/ivi-bridge
-cp bridge/config.example.json ~/.config/ivi-bridge/config.json   # set printer_token, api_key, mode
-python3 bridge/ivi_bridge.py serve               # http://127.0.0.1:5000
-```
-The token can also come from `IVI_PRINTER_TOKEN`. Never commit your config. To run at login, adapt `com.ivi3d.bridge.plist.example` into `~/Library/LaunchAgents/`. Allow Python under **System Settings → Privacy & Security → Local Network** (else "No route to host").
+## Install (macOS) — one time, no Terminal
+Double-click **`Install IVI Bridge.command`** (first time: right-click → Open if Gatekeeper complains). It:
+- copies the bridge to `~/Library/Application Support/ivi-bridge/app`, no extra packages (built-in termios serial, no pyserial);
+- writes `~/.config/ivi-bridge/config.json` (mode 600) if missing: `mode: auto`, printer `192.168.50.85:8080`, stock token, random API key;
+- installs/loads the LaunchAgent `com.ivi3d.bridge` (starts at login, restarts on crash; log `~/Library/Logs/ivi-bridge.log`);
+- shows the Orca settings in a dialog and copies the API key to the clipboard.
+Re-run it after updating the repo. **`Uninstall IVI Bridge.command`** removes it (optionally the settings).
+If macOS asks, allow Python under **Privacy & Security → Local Network**.
+
+**Automatic mode:** USB printer plugged in (`/dev/tty.usbmodem*`) → USB print starts immediately (Mac kept awake via `caffeinate -i` for the job); otherwise → Wi-Fi upload, start on the touch screen. Override with `"mode": "wifi"` or `"serial"` in the config.
+**Notifications** for upload done / print started / finished / cancelled / errors (`"notify": false` to silence).
+**Status page:** http://127.0.0.1:5000/ — state, temperatures, progress, Pause/Resume/Cancel. Temperatures come from the printer's USB reports during a job (the port is released between jobs so IVI 3licer can still use it), and also appear in Orca's device tab via `/api/printer`.
 
 ## Orca Slicer
 1. Printer settings → Basic information → enable **Use 3rd-party print host** (or the Wi-Fi/network icon next to the printer).

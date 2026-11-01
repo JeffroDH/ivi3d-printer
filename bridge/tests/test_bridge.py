@@ -29,6 +29,30 @@ class GcodeTests(unittest.TestCase):
         self.assertFalse(B.needs_m1001("Firmware V1.3.2-alpha"))
         self.assertTrue(B.needs_m1001("V2.4.0")); self.assertFalse(B.needs_m1001(""))
 
+class StatusTests(unittest.TestCase):
+    def test_parse(self):
+        st = {}
+        self.assertTrue(B.parse_status("ok T:20.5 /0.0 B:21.0 /0.0 @:0 B@:0", st))
+        self.assertEqual(st["temps"]["bed"], {"actual": 21.0, "target": 0.0})
+        self.assertTrue(B.parse_status("Working Status: IDLE", st)); self.assertEqual(st["working"], "IDLE")
+        self.assertFalse(B.parse_status("ok", st))
+    def test_init_config(self):
+        p = os.path.join(tempfile.mkdtemp(), "c", "config.json")
+        _, c1 = B.init_config(p); _, c2 = B.init_config(p)
+        self.assertEqual(len(c1["api_key"]), 32); self.assertEqual(c1["api_key"], c2["api_key"])
+        self.assertEqual(oct(os.stat(p).st_mode & 0o777), "0o600"); self.assertEqual(c1["mode"], "auto")
+
+class TermiosSerialTests(unittest.TestCase):
+    def test_pty_roundtrip(self):
+        import pty
+        m, sl = pty.openpty(); name = os.ttyname(sl)
+        s = B.TermiosSerial(name, 115200, timeout=0.5)
+        s.write(b"M105\n"); self.assertEqual(os.read(m, 100).strip(), b"M105")
+        os.write(m, b"ok T:20 /0\npartial"); self.assertEqual(s.readline(), b"ok T:20 /0\n")
+        self.assertEqual(s.readline(), b"")  # incomplete line -> timeout
+        with self.assertRaises(OSError): B.TermiosSerial(name)  # exclusive lock
+        s.close(); os.close(m); os.close(sl)
+
 class SerialJobTests(unittest.TestCase):
     def test_stream(self):
         s = FakeSerial(); j = B.SerialJob(s, ["G28", "M109 S215", "G1 X1"], line_timeout=2); j.run()
@@ -90,12 +114,38 @@ class OctoPrintApiTests(unittest.TestCase):
     def setUp(self):
         FakePrinter.calls = []; self.printer = start(FakePrinter); self.tmp = tempfile.mkdtemp()
         self.cfg = dict(B.DEFAULT_CONFIG, printer_host="127.0.0.1", printer_port=self.printer.server_port,
-                        printer_token="tok123", api_key="KEY", spool_dir=self.tmp, listen_port=0)
+                        printer_token="tok123", api_key="KEY", spool_dir=self.tmp, listen_port=0,
+                        mode="wifi", notify=False)
+        self.awake = []
         self.ser = FakeSerial()
-        self.bridge = B.Bridge(self.cfg, serial_factory=lambda: self.ser)
+        self.bridge = B.Bridge(self.cfg, serial_factory=lambda: self.ser, awake_factory=self._awake)
         self.srv = B.serve(self.cfg, self.bridge); threading.Thread(target=self.srv.serve_forever, daemon=True).start()
         self.url = f"http://127.0.0.1:{self.srv.server_port}"
+    def _awake(self):
+        class A:
+            terminated = False
+            def terminate(s): s.terminated = True
+        a = A(); self.awake.append(a); return a
     def tearDown(self): self.srv.shutdown(); self.printer.shutdown()
+    def test_status_page_no_key_needed(self):
+        with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
+        self.assertIn("IVI Bridge", page); self.assertIn('"KEY"', page)
+    def test_auto_mode_picks_usb_when_present(self):
+        self.cfg["mode"] = "auto"; port = os.path.join(self.tmp, "tty.usbmodemX"); open(port, "w").close()
+        self.cfg["serial_port"] = os.path.join(self.tmp, "tty.usbmodem*")
+        self.assertEqual(B.resolve_mode(self.cfg), "serial")
+        self.cfg["serial_port"] = os.path.join(self.tmp, "nothing*"); self.assertEqual(B.resolve_mode(self.cfg), "wifi")
+    def test_temps_and_caffeinate(self):
+        self.cfg["mode"] = "serial"
+        orig = self.ser.write
+        def w(b):
+            orig(b)
+            if b.decode().startswith("M109"): self.ser.out.insert(0, " T:214.8 /215.0 B:50.1 /50.0 @:0")
+        self.ser.write = w
+        self.upload("G28\nM109 S215\n"); self.bridge.thread.join(5)
+        t = self.req("/api/printer")[1]["temperature"]
+        self.assertEqual(t["tool0"], {"actual": 214.8, "target": 215.0}); self.assertEqual(t["bed"]["actual"], 50.1)
+        self.assertEqual(len(self.awake), 1); self.assertTrue(self.awake[0].terminated)
     def req(self, path, data=None, ctype="application/json", key="KEY"):
         r = urllib.request.Request(self.url + path, data=data, headers={"X-Api-Key": key, "Content-Type": ctype})
         with urllib.request.urlopen(r, timeout=5) as resp: return resp.status, json.loads(resp.read())
