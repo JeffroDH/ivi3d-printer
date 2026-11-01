@@ -62,6 +62,9 @@ Status page button **Clear stuck job** (`POST /api/ivi/clear`) sends `M2411 S3`.
 Laser jobs without a Z move are refused when `home_before_job` is on unless `laser_focus_z` is set: after `G28` a delta sits at the top
 and the first sideways move stalls a tower (see docs/laser_cnc_gcode.md).
 
+## IVI file header (touch-screen time / material)
+On every upload (Wi-Fi and USB spool), if the file has no `;Header Start`, the bridge prepends IVI 3licer's block (format from its `server/index.js`): `;header_type: 3dp,<nozzle>mm`, `;file_total_lines`, `;file_valid_lines`, `;estimated_time(s)` (Orca's `; estimated printing time (normal mode)`, else `M73 P0 R<min>`), `;material_type` (`; filament_type`), nozzle/bed temps, `;work_speed(mm/minute)` (`sparse_infill_speed`×60), min/max X/Y/Z of extruding moves (else `max_z_height`). Unverified extras: `;filament_used(m)`, `;filament_weight(g)`. Streams in two passes (fine for 17 MB+). Toggle `"ivi_header"`; nozzle default `"nozzle_diameter": 0.3`. Test one file: `python3 bridge/ivi_add_header.py IN [OUT]`.
+
 ## CLI
 `ivi_bridge.py [--config F] [--mode wifi|serial] serve | send FILE | postprocess FILE | watch DIR`
 `send`/`postprocess`/`watch` hand the file to the running service if it is up (required for serial, since streaming outlasts the slicer hook), else upload directly over Wi-Fi.

@@ -26,6 +26,8 @@ DEFAULT_CONFIG = {
     "filament_tolerance_c": 3,          # start moving once the nozzle is within this of target
     "filament_heat_timeout_s": 900,
     "filament_poll_s": 1,
+    "ivi_header": True,                 # prepend IVI 3licer's ';Header Start' block (time/material on the touch screen)
+    "nozzle_diameter": 0.3,             # used in ';header_type: 3dp,<d>mm' if the G-code doesn't say
     "jog_extrude_temp": 235,            # Extrude/Retract on a cold nozzle (<170 °C target or below target) heat to this first
     "notify": True,                     # macOS notifications via osascript
     "caffeinate": True,                 # keep the Mac awake during USB jobs
@@ -158,6 +160,128 @@ class WifiPrinter:
                 self._post("disconnect", {"token": self.token})
             except Exception as e:
                 log(f"disconnect failed (ignored): {e}")
+
+# ------------------------------------------------------ IVI file header ----
+# IVI 3licer (server/index.js) prepends this block; the touch screen reads it for time / material info.
+_GEN_RE = re.compile(r"^;\s*generated", re.I)
+_TIME_RE = re.compile(r"^;\s*estimated printing time \(normal mode\)\s*=\s*(.+)$")
+_M73_RE = re.compile(r"^M73\s+P0\s+R(\d+)", re.I)
+_SET_RE = re.compile(r"^;\s*(filament_type|nozzle_temperature|hot_plate_temp|bed_temperature|sparse_infill_speed|"
+                     r"max_z_height|nozzle_diameter|filament used \[mm\]|filament used \[g\]|total filament used \[g\])\s*[=:]\s*(.*)$")
+_AX_RE = re.compile(r"([XYZEF])(-?\d*\.?\d+)")
+
+def parse_duration(s):
+    """'5h 58m 3s' / '1d 2h 3m' -> seconds (int) or None."""
+    tot, hit = 0.0, False
+    for v, u in re.findall(r"(\d+(?:\.\d+)?)\s*([dhms])", s):
+        tot += float(v) * {"d": 86400, "h": 3600, "m": 60, "s": 1}[u]; hit = True
+    return int(round(tot)) if hit else None
+
+def _first(v):
+    return v.split(",")[0].split(";")[0].strip()
+
+def _num(v):
+    try: f = float(_first(v))
+    except ValueError: return None
+    return int(f) if f == int(f) else f
+
+def _fmt(v): return "%g" % v if isinstance(v, float) else str(v)
+
+def scan_gcode(f):
+    """One streaming pass over a text file object -> stats dict."""
+    st = {"lines": 0, "valid": 0, "head": [], "head_done": False, "time": None, "m73": None, "set": {},
+          "min": [None] * 3, "max": [None] * 3}
+    pos = [0.0, 0.0, 0.0]; e = 0.0; rel = False; rel_e = False
+    mn, mx = st["min"], st["max"]
+    for raw in f:
+        st["lines"] += 1
+        line = raw.strip()
+        if not st["head_done"]:
+            if line.startswith(";") and not _GEN_RE.match(line) and len(st["head"]) < 100:
+                st["head"].append(raw.rstrip("\r\n")); continue
+            st["head_done"] = True
+            if not _GEN_RE.match(line): st["head"] = []        # no ';Generated' marker: keep the file as is
+        if not line: continue
+        if line[0] == ";":
+            m = _TIME_RE.match(line)
+            if m: st["time"] = parse_duration(m.group(1)); continue
+            m = _SET_RE.match(line)
+            if m and m.group(1) not in st["set"]: st["set"][m.group(1)] = m.group(2).strip()
+            continue
+        st["valid"] += 1
+        c = line.split(";", 1)[0].upper()
+        if c[:3] in ("G0 ", "G1 ") or c in ("G0", "G1") or c.startswith(("G0X", "G0Y", "G0Z", "G1X", "G1Y", "G1Z", "G1E")):
+            new = list(pos); ext = False
+            for k, v in _AX_RE.findall(c[2:]):
+                v = float(v)
+                if k == "E":
+                    ext = v > 0 if rel_e else v > e
+                    e = e + v if rel_e else v
+                elif k != "F":
+                    i = "XYZ".index(k); new[i] = pos[i] + v if rel else v
+            if ext:
+                for p in (pos, new):
+                    for i in range(3):
+                        if mn[i] is None or p[i] < mn[i]: mn[i] = p[i]
+                        if mx[i] is None or p[i] > mx[i]: mx[i] = p[i]
+            pos = new
+        elif c.startswith("G91"): rel = rel_e = True
+        elif c.startswith("G90"): rel = rel_e = False
+        elif c.startswith("M83"): rel_e = True
+        elif c.startswith("M82"): rel_e = False
+        elif c.startswith("G92"):
+            for k, v in _AX_RE.findall(c[3:]):
+                if k == "E": e = float(v)
+                elif k in "XYZ": pos["XYZ".index(k)] = float(v)
+        elif st["m73"] is None:
+            m = _M73_RE.match(c)
+            if m: st["m73"] = int(m.group(1)) * 60
+    return st
+
+def build_ivi_header(st, nozzle=0.4, date=None):
+    s = st["set"]
+    t = st["time"] if st["time"] is not None else (st["m73"] or 0)
+    nz = _num(s["nozzle_diameter"]) if s.get("nozzle_diameter") else nozzle
+    bed = s.get("hot_plate_temp") or s.get("bed_temperature") or "0"
+    spd = _num(s.get("sparse_infill_speed", "0")) or 0
+    mn = [v if v is not None else 0.0 for v in st["min"]]; mx = [v if v is not None else 0.0 for v in st["max"]]
+    if st["max"][2] is None and s.get("max_z_height"): mx[2] = float(_num(s["max_z_height"]) or 0)
+    out = [";Header Start", ""] + st["head"] + ["", ";header_type: 3dp,%smm" % _fmt(nz),
+           ";file_total_lines: %d" % (st["lines"] + 20), ";file_valid_lines: %d" % st["valid"],
+           ";estimated_time(s): %d" % t]
+    if s.get("filament used [mm]"):     # unverified extras (IVI 3licer logs these, unknown if the screen reads them)
+        out.append(";filament_used(m): %.2f" % (sum(float(x) for x in s["filament used [mm]"].split(",") if x.strip()) / 1000))
+    g = s.get("filament used [g]") or s.get("total filament used [g]")
+    if g: out.append(";filament_weight(g): %.2f" % sum(float(x) for x in g.split(",") if x.strip()))
+    out += [";material_type: %s" % (_first(s.get("filament_type", "PLA")) or "PLA"),
+            ";nozzle_temperature(°C): %s" % _fmt(_num(s.get("nozzle_temperature", "0")) or 0),
+            ";build_plate_temperature(°C): %s" % _fmt(_num(bed) or 0),
+            ";work_speed(mm/minute): %s" % _fmt(spd * 60)]
+    for k, arr in (("max", mx), ("min", mn)):
+        out += [";%s_%s(mm): %.2f" % (k, a, arr[i]) for i, a in enumerate("xyz")]
+    out += ["", ";Header End", "", ";G-code for 3dp engraving", ";Generated by IVI 3licer",
+            ";" + (date or time.strftime("%Y-%m-%d %H:%M:%S")), "", ""]
+    return "\n".join(out)
+
+def has_ivi_header(path):
+    with open(path, "rb") as f: return b";Header Start" in f.read(4096)
+
+def add_ivi_header(src, dst=None, nozzle=0.4, date=None):
+    """Stream src -> dst with the IVI header prepended (original comment lines before ';Generated' move into
+    it). dst None = in place. Returns False if src already has ';Header Start'."""
+    if has_ivi_header(src): 
+        if dst and dst != src: shutil.copyfile(src, dst)
+        return False
+    with open(src, encoding="utf-8", errors="surrogateescape", newline="") as f:
+        st = scan_gcode(f)
+    tmp = (dst or src) + ".ivitmp"
+    with open(src, encoding="utf-8", errors="surrogateescape", newline="") as fi, \
+         open(tmp, "w", encoding="utf-8", errors="surrogateescape", newline="") as fo:
+        fo.write(build_ivi_header(st, nozzle, date))
+        for _ in range(len(st["head"])): next(fi)
+        shutil.copyfileobj(fi, fo, 1 << 20)
+    os.replace(tmp, dst or src)
+    return True
 
 # --------------------------------------------------------------- serial ----
 def clean_gcode(text):
@@ -1065,6 +1189,10 @@ def make_handler(bridge):
             os.makedirs(cfg["spool_dir"], exist_ok=True)
             path = os.path.join(cfg["spool_dir"], fname)
             with open(path, "wb") as f: f.write(data)
+            if cfg.get("ivi_header", True):
+                try:
+                    if add_ivi_header(path, nozzle=float(cfg.get("nozzle_diameter", 0.3))): log(f"added IVI header to {fname}")
+                except Exception as e: log(f"IVI header skipped for {fname}: {e}")
             start = fields.get("print", "false").lower() == "true"
             try:
                 msg_txt = bridge.submit(path, fname, start=start)

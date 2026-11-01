@@ -18,7 +18,7 @@ fi
 
 mkdir -p "$APP" "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
 NEWKEY=""; [ "${1:-}" = "--new-key" ] && NEWKEY="--new-key"
-cp "$HERE/ivi_bridge.py" "$HERE/ivi_setup_keys.py" "$APP/"
+cp "$HERE/ivi_bridge.py" "$HERE/ivi_setup_keys.py" "$HERE/ivi_add_header.py" "$APP/"
 cp "$HERE/Fix IVI Bridge Key.command" "$APP/" && chmod +x "$APP/Fix IVI Bridge Key.command"
 INFO="$("$PY" "$APP/ivi_bridge.py" --config "$CFG" init-config)"
 HOSTPORT="$("$PY" -c 'import json,sys; print(json.loads(sys.argv[1])["host"])' "$INFO")"
