@@ -63,11 +63,11 @@ machine = {
     "machine_max_jerk_x": ["15"], "machine_max_jerk_y": ["15"], "machine_max_jerk_z": ["10"], "machine_max_jerk_e": ["5"],
     "emit_machine_limits_to_gcode": "0",
     "machine_start_gcode": START, "machine_end_gcode": END,
-    "before_layer_change_gcode": "", "layer_change_gcode": "", "change_filament_gcode": "",
+    "before_layer_change_gcode": "", "layer_change_gcode": "", "change_filament_gcode": "M2410 ; pause for manual filament swap",
     "thumbnails": "", "host_type": "octoprint", "print_host": "127.0.0.1:5000",
     "printhost_apikey": "PASTE-API-KEY-FROM-IVI-BRIDGE-INSTALLER", "print_host_webui": "http://127.0.0.1:5000/",
     "default_filament_profile": [FILAMENT], "default_print_profile": PROCESS,
-    "machine_pause_gcode": "M2410", "auxiliary_fan": "0", "silent_mode": "0",
+    "machine_pause_gcode": "M2410", "printer_structure": "delta", "single_extruder_multi_material": "1", "manual_filament_change": "1", "auxiliary_fan": "0", "silent_mode": "0",
 }
 
 filament = {
