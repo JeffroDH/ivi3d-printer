@@ -24,16 +24,20 @@ makes a new one and updates Orca too).
 `/usr/bin/python3 bridge/ivi_setup_keys.py --wait`; add `--dry-run` to only list what would change. **`Uninstall IVI Bridge.command`** removes it (optionally the settings).
 If macOS asks, allow Python under **Privacy & Security → Local Network**.
 
-**Automatic mode:** USB printer plugged in (`/dev/tty.usbmodem*`) → USB print starts immediately (Mac kept awake via `caffeinate -i` for the job); otherwise → Wi-Fi upload, start on the touch screen. Override with `"mode": "wifi"` or `"serial"` in the config.
+**Uploads always go over Wi-Fi** (`"mode": "auto"` or `"wifi"`): Orca's Upload *and* Print both store the file on the printer; start it on the touch screen. Only `"mode": "serial"` streams the job over USB (starts at once; Mac must stay awake, `caffeinate -i`).
+
+**USB status + controls** (`"serial_monitor": true`, default): when the USB port is plugged in and free, the bridge holds it and polls `M105` + `M2007` every `monitor_interval_s` (and asks for `M2155 S<report_interval_s>` auto-reports). Orca's Device tab then shows live temps (`/api/printer`) and job state (`/api/job`; M2007 status 5 = paused). If the port is missing or owned by IVI 3licer, the bridge keeps retrying and the status page shows "USB: not connected (…)"; uploads are unaffected. Set `"serial_monitor": false` to leave the port free for IVI 3licer.
+Controls (USB only): `POST /api/printer/tool` (`target`, `flowrate`), `/api/printer/bed` (`target`), `/api/printer/printhead` (`feedrate`), `/api/printer/command` (whitelist: `M104/M140/M220/M221 S<n>`, `M105`, `M2007`, `M106/M107`, `M2410`, `M2411 S1/S3`; limits nozzle ≤300 °C, bed ≤120 °C, speed 10–300 %, flow 10–200 %). `/api/job` pause/resume/cancel also works for a touch-screen-started job (`M2410`, `M2411 S1`, `M2411 S3`).
+**`M104`/`M140`/`M220`/`M221` are standard Marlin and not yet verified on firmware V1.3.2-alpha.**
 **Notifications** for upload done / print started / finished / cancelled / errors (`"notify": false` to silence).
-**Status page:** http://127.0.0.1:5000/ — state, temperatures, progress, Pause/Resume/Cancel. Temperatures come from the printer's USB reports during a job (the port is released between jobs so IVI 3licer can still use it), and also appear in Orca's device tab via `/api/printer`.
+**Status page:** http://127.0.0.1:5000/ — state, USB status, temperatures, progress. **Toolhead** panel: nozzle/bed temp, Cooldown, speed %, Pause/Resume/Cancel/Clear stuck job. **Filament** panel: flow %, PLA/PETG/ABS preheat, nozzle off. Side by side at ≥1100 px wide, tabs below that.
 
 ## Orca Slicer
 1. Import `IVI3D.orca_printer` (see [../orca/README.md](../orca/README.md)); it pre-sets OctoPrint `127.0.0.1:5000`,
    and the installer / `Fix IVI Bridge Key.command` fills in the API key. Nothing to paste.
 2. Optional check: Prepare sidebar → **Printer** title bar → Connection (Wi-Fi) icon → **Test**. (Hidden while the
    experimental "Use printer agents instead of print hosts" option is on.)
-3. Slice → **Send** (wifi: upload, then press start on the touch screen) or **Print** (serial: starts now).
+3. Slice → **Upload** or **Print**: both upload over Wi-Fi; press start on the touch screen (`"mode": "serial"`: Print streams over USB and starts now).
 
 Alternative without the service in wifi mode: Process → Others → Post-processing scripts:
 `/usr/bin/python3 /PATH/bridge/ivi_bridge.py postprocess;` then use Export G-code.
@@ -66,4 +70,4 @@ and the first sideways move stalls a tower (see docs/laser_cnc_gcode.md).
 `python3 -m unittest discover -s bridge/tests -v` — fake serial printer and fake kore HTTP printer; nothing touches real hardware.
 
 ## Not yet verified on hardware
-Whole bridge (written 2026-11-01, unit-tested only); Orca/Next host test against it; serial cancel via `M2411 S3` (decoded, not run), locked-rotor/kill/status-5 handling, laser/CNC prelude (fake-serial tests only; the printer may need the touch screen to exit PC mode); laser/CNC jobs.
+USB monitor/controls (M2007 status line format is a guess: `status: <n>`; M104/M140/M220/M221 untested); whole bridge (written 2026-11-01, unit-tested only); Orca/Next host test against it; serial cancel via `M2411 S3` (decoded, not run), locked-rotor/kill/status-5 handling, laser/CNC prelude (fake-serial tests only; the printer may need the touch screen to exit PC mode); laser/CNC jobs.

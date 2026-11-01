@@ -181,7 +181,7 @@ class OctoPrintApiTests(unittest.TestCase):
         FakePrinter.calls = []; self.printer = start(FakePrinter); self.tmp = tempfile.mkdtemp()
         self.cfg = dict(B.DEFAULT_CONFIG, printer_host="127.0.0.1", printer_port=self.printer.server_port,
                         printer_token="tok123", api_key="KEY", spool_dir=self.tmp, listen_port=0,
-                        mode="wifi", notify=False)
+                        mode="wifi", notify=False, serial_monitor=False)
         self.awake = []
         self.ser = FakeSerial()
         self.bridge = B.Bridge(self.cfg, serial_factory=lambda: self.ser, awake_factory=self._awake)
@@ -254,5 +254,99 @@ class OctoPrintApiTests(unittest.TestCase):
         self.assertEqual(e.exception.code, 409)
         self.req("/api/job", json.dumps({"command": "cancel"}).encode()); self.bridge.thread.join(5)
         self.assertEqual(self.bridge.job.state, "Cancelled")
+
+class MonitorSerial:
+    """Fake USB port for the status monitor: answers M105/M2007, records everything."""
+    def __init__(self, systat=1):
+        self.written = []; self.out = []; self.closed = False; self.systat = systat; self.t = 0.0
+    def write(self, b):
+        for cmd in b.decode().split("\n"):
+            cmd = cmd.strip()
+            if not cmd: continue
+            self.written.append(cmd)
+            if cmd == "M105": self.out.append("ok T:%.1f /%.1f B:50.0 /60.0" % (21.0 + self.t, self.t))
+            elif cmd == "M2007": self.out += ["Working Status: " + ("WORKING_SCREEN" if self.systat in (2, 5) else "IDLE"),
+                                              "job status: %d" % self.systat, "ok"]
+            elif cmd.startswith("M104 S"): self.t = float(cmd[6:]); self.out.append("ok")
+            else: self.out.append("ok")
+    def readline(self):
+        return (self.out.pop(0) + "\n").encode() if self.out else b""
+    def close(self): self.closed = True
+
+class MonitorTests(unittest.TestCase):
+    def mon(self, factory):
+        return B.SerialMonitor(dict(B.DEFAULT_CONFIG), factory)
+    def test_status_and_commands(self):
+        s = MonitorSerial(); m = self.mon(lambda: s)
+        self.assertTrue(m.poll_once()); self.assertIn("M2155 S4", s.written)
+        self.assertEqual(m.status["temps"]["bed"], {"actual": 50.0, "target": 60.0}); self.assertEqual(m.status["systat"], 1)
+        self.assertEqual(m.send("m104  s200"), "M104 S200"); m.poll_once()
+        self.assertEqual(m.status["temps"]["tool0"]["target"], 200.0)
+    def test_absent_or_busy_port(self):
+        def busy(): raise RuntimeError("cannot open /dev/x: [Errno 16] Resource busy. Disconnect IVI 3licer")
+        m = self.mon(busy); self.assertFalse(m.poll_once()); self.assertIn("busy", m.error)
+        with self.assertRaises(RuntimeError): m.send("M104 S0")
+    def test_usb_lost(self):
+        s = MonitorSerial(); m = self.mon(lambda: s); m.poll_once()
+        def boom(b): raise OSError("serial port closed")
+        s.write = boom; self.assertFalse(m.poll_once()); self.assertFalse(m.connected); self.assertIn("USB lost", m.error)
+    def test_command_whitelist(self):
+        for bad in ("G28", "M104 S400", "M220 S5", "M140 S200", "M104 S200\nG28", "M2411 S2"):
+            with self.assertRaises(ValueError): B.check_command(bad)
+        self.assertEqual(B.check_command("M221 S95"), "M221 S95")
+    def test_upload_mode(self):
+        self.assertEqual(B.upload_mode({"mode": "auto"}), "wifi"); self.assertEqual(B.upload_mode({"mode": "wifi"}), "wifi")
+        self.assertEqual(B.upload_mode({"mode": "serial"}), "serial")
+
+class MonitorApiTests(OctoPrintApiTests):
+    """Bridge with the USB monitor on (fake port) and default mode auto -> uploads go over Wi-Fi."""
+    def setUp(self):
+        FakePrinter.calls = []; self.printer = start(FakePrinter); self.tmp = tempfile.mkdtemp()
+        self.cfg = dict(B.DEFAULT_CONFIG, printer_host="127.0.0.1", printer_port=self.printer.server_port,
+                        printer_token="tok123", api_key="KEY", spool_dir=self.tmp, listen_port=0, notify=False)
+        self.ms = MonitorSerial(); self.ser = FakeSerial(); self.awake = []
+        self.bridge = B.Bridge(self.cfg, serial_factory=lambda: self.ms, awake_factory=self._awake)
+        self.srv = B.serve(self.cfg, self.bridge, start_monitor=False)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.srv.server_port}"; self.bridge.monitor.poll_once()
+    # inherited tests that need a FakeSerial job port are covered by OctoPrintApiTests
+    test_clear_endpoint = test_temps_and_caffeinate = test_serial_print_and_job = test_serial_pause_cancel_via_api = None
+    def post(self, path, obj):
+        r = urllib.request.Request(self.url + path, data=json.dumps(obj).encode(), headers={"X-Api-Key": "KEY", "Content-Type": "application/json"})
+        with urllib.request.urlopen(r, timeout=5) as resp: return resp.status
+    def test_auto_print_true_uploads_over_wifi_only(self):
+        st, js = self.upload("G28\n", start=True)
+        self.assertEqual(st, 201); self.assertIn("touch screen", js["message"])
+        self.assertEqual([c[0] for c in FakePrinter.calls], ["connect", "upload", "disconnect"])
+        self.assertNotIn("M2411 S2", self.ms.written)
+    def test_live_status(self):
+        p = self.req("/api/printer")[1]
+        self.assertTrue(p["ivi"]["usb"]); self.assertEqual(p["temperature"]["bed"]["target"], 60.0)
+        self.assertEqual(self.req("/api/job")[1]["state"], "Operational")
+        self.ms.systat = 5; self.bridge.monitor.poll_once()
+        j = self.req("/api/job")[1]; self.assertEqual(j["state"], "Paused"); self.assertEqual(j["ivi"]["systat"], 5)
+        self.assertTrue(self.req("/api/printer")[1]["state"]["flags"]["paused"])
+    def test_octoprint_control_endpoints(self):
+        self.assertEqual(self.post("/api/printer/tool", {"command": "target", "targets": {"tool0": 205}}), 204)
+        self.post("/api/printer/bed", {"command": "target", "target": 55})
+        self.post("/api/printer/command", {"commands": ["M220 S90", "M221 S105"]})
+        self.post("/api/printer/printhead", {"command": "feedrate", "factor": 110})
+        self.post("/api/printer/tool", {"command": "flowrate", "factor": 98})
+        for g in ("M104 S205", "M140 S55", "M220 S90", "M221 S105", "M220 S110", "M221 S98"): self.assertIn(g, self.ms.written)
+        with self.assertRaises(urllib.error.HTTPError) as e: self.post("/api/printer/command", {"command": "G28"})
+        self.assertEqual(e.exception.code, 400)
+    def test_pause_resume_screen_job_over_usb(self):
+        self.ms.systat = 2; self.bridge.monitor.poll_once()
+        self.post("/api/job", {"command": "pause", "action": "pause"}); self.assertIn("M2410", self.ms.written)
+        self.ms.systat = 5; self.bridge.monitor.poll_once()
+        self.post("/api/job", {"command": "pause", "action": "toggle"}); self.assertIn("M2411 S1", self.ms.written)
+        self.post("/api/job", {"command": "cancel"}); self.assertIn("M2411 S3", self.ms.written)
+    def test_no_usb_controls_fail_gracefully(self):
+        self.bridge.monitor.release()
+        with self.assertRaises(urllib.error.HTTPError) as e: self.post("/api/printer/bed", {"command": "target", "target": 50})
+        self.assertEqual(e.exception.code, 409); self.assertFalse(self.req("/api/printer")[1]["ivi"]["usb"])
+    def test_page_has_panels(self):
+        with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
+        for s in ("Toolhead", "Filament", "M220 S", "M221 S", "min-width:1100px"): self.assertIn(s, page)
 
 if __name__ == "__main__": unittest.main()

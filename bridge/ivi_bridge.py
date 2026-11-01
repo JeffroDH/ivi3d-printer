@@ -16,7 +16,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 VERSION = "0.1.0"
 DEFAULT_CONFIG = {
-    "mode": "auto",                     # "auto" (USB if plugged in, else Wi-Fi), "wifi" or "serial"
+    "mode": "auto",                     # uploads: "auto"/"wifi" = Wi-Fi upload (default); "serial" = USB streaming
+    "serial_monitor": True,             # use the USB port (if free) for live status + temp/speed controls
+    "monitor_interval_s": 3,            # M105/M2007 poll period of the monitor
     "notify": True,                     # macOS notifications via osascript
     "caffeinate": True,                 # keep the Mac awake during USB jobs
     "printer_host": "192.168.50.85",
@@ -84,6 +86,11 @@ def resolve_mode(cfg):
     if m == "auto":
         return "serial" if find_usb_port(cfg["serial_port"]) else "wifi"
     return m
+
+def upload_mode(cfg):
+    """Where an uploaded file goes. Only an explicit mode "serial" streams over USB; "auto" and "wifi"
+    upload to the printer's storage over Wi-Fi (USB is then used for status/controls only)."""
+    return "serial" if cfg.get("mode") == "serial" else "wifi"
 
 # ---------------------------------------------------------------- Wi-Fi ----
 def encode_multipart(fields, files):
@@ -219,6 +226,10 @@ def parse_status(line, status):
     for k, cur, tgt in TEMP_RE.findall(line):
         name = {"T": "tool0", "B": "bed"}.get(k, "tool" + k[1:] if k[0] == "T" else k)
         status.setdefault("temps", {})[name] = {"actual": float(cur), "target": float(tgt)}; hit = True
+    m = re.search(r"(?:job|work|sys)?\s*status\s*[:=]\s*(\d+)\b", line, re.I)
+    if m: status["systat"] = int(m.group(1)); hit = True
+    m = re.search(r"(?:progress|percent)\s*[:=]\s*([\d.]+)", line, re.I)
+    if m: status["progress"] = float(m.group(1)); hit = True
     m = re.search(r"Working Status:\s*(\S+)", line, re.I)
     if m: status["working"] = m.group(1); hit = True
     return hit
@@ -435,6 +446,99 @@ def job_prelude(cfg, kind, lines):
     pre.append("G54")
     return pre
 
+# ---------------------------------------------------------- monitor -------
+# Commands the bridge lets the UI / Orca send over USB. M104/M140/M220/M221 are standard Marlin and
+# NOT yet verified on firmware V1.3.2-alpha.
+ALLOWED_CMD = re.compile(r"^(M104 S\d{1,3}|M140 S\d{1,3}|M220 S\d{1,3}|M221 S\d{1,3}|M105|M2007|M2410|M2411 S[13]|M106( S\d{1,3})?|M107)$")
+LIMITS = {"M104": 300, "M140": 120, "M220": 300, "M221": 200}
+
+def check_command(cmd):
+    c = " ".join(cmd.strip().upper().split())
+    if not ALLOWED_CMD.match(c):
+        raise ValueError(f"command not allowed: {cmd!r}")
+    code, _, arg = c.partition(" S")
+    if code in LIMITS and int(arg) > LIMITS[code]:
+        raise ValueError(f"{code} S{arg} exceeds limit {LIMITS[code]}")
+    if code in ("M220", "M221") and int(arg) < 10:
+        raise ValueError(f"{code} S{arg} below 10%")
+    return c
+
+class SerialMonitor:
+    """Owns the USB port while no USB job is streaming: polls M105 + M2007 and asks for M2155 auto
+    reports, so /api/printer and /api/job show live status. Absent/busy port (e.g. IVI 3licer) -> retries
+    quietly; status shows why."""
+    def __init__(self, cfg, serial_factory, clock=time.monotonic, sleep=time.sleep):
+        self.cfg, self.factory, self.clock, self.sleep = cfg, serial_factory, clock, sleep
+        self.ser = None; self.status = {}; self.error = None; self.updated = None
+        self.lock = threading.Lock(); self._stop = threading.Event(); self._paused = threading.Event()
+        self.thread = None; self.last_cmd = None
+
+    @property
+    def connected(self): return self.ser is not None
+
+    def start(self):
+        self.thread = threading.Thread(target=self._loop, daemon=True); self.thread.start()
+
+    def stop(self):
+        self._stop.set(); self.release()
+
+    def release(self):
+        """Give the port up (a USB job is about to start)."""
+        self._paused.set()
+        with self.lock:
+            if self.ser:
+                try: self.ser.close()
+                except Exception: pass
+            self.ser = None
+
+    def resume(self): self._paused.clear()
+
+    def _open(self):
+        try:
+            ser = self.factory()
+        except Exception as e:
+            self.error = str(e); return False
+        with self.lock:
+            self.ser, self.error = ser, None
+            for c in ("M2005", f"M2155 S{int(self.cfg.get('report_interval_s', 4))}", "M105", "M2007"):
+                ser.write((c + "\n").encode())
+        log("monitor: USB port open (status/controls)")
+        return True
+
+    def poll_once(self):
+        """One cycle: open if needed, send M105/M2007, read what arrived. Returns True if connected."""
+        if self._paused.is_set(): return False
+        if not self.ser and not self._open(): return False
+        try:
+            with self.lock:
+                self.ser.write(b"M105\n"); self.ser.write(b"M2007\n")
+                end = self.clock() + 0.5
+                while self.clock() < end:
+                    line = self.ser.readline().decode(errors="replace").strip()
+                    if not line: continue
+                    if parse_status(line, self.status): self.updated = time.time()
+        except Exception as e:
+            self.error = f"USB lost: {e}"; log("monitor:", self.error)
+            with self.lock:
+                try: self.ser.close()
+                except Exception: pass
+                self.ser = None
+            return False
+        return True
+
+    def _loop(self):
+        while not self._stop.is_set():
+            try: self.poll_once()
+            except Exception as e: self.error = str(e)
+            self._stop.wait(self.cfg.get("monitor_interval_s", 3))
+
+    def send(self, cmd):
+        c = check_command(cmd)
+        with self.lock:
+            if not self.ser: raise RuntimeError(f"USB not connected: {self.error or 'no port'}")
+            self.ser.write((c + "\n").encode()); self.last_cmd = c
+        log("monitor: sent", c); return c
+
 # ------------------------------------------------- OctoPrint emulation ----
 class Bridge:
     def __init__(self, cfg, wifi_factory=None, serial_factory=None, awake_factory=None):
@@ -445,6 +549,19 @@ class Bridge:
         self.serial_factory = serial_factory or (lambda: open_serial(cfg))
         self.job = None; self.thread = None; self.last_file = None
         self.lock = threading.Lock()
+        self.monitor = SerialMonitor(cfg, self.serial_factory) if cfg.get("serial_monitor", True) else None
+
+    def send_command(self, cmd):
+        """Temp/speed/flow etc. over USB: through the streaming job if one runs, else the monitor."""
+        c = check_command(cmd)
+        if self.busy() and isinstance(self.job, SerialJob):
+            self.job._write(c); return c
+        if not self.monitor: raise RuntimeError("serial_monitor is off")
+        return self.monitor.send(c)
+
+    def live_status(self):
+        if self.busy(): return self.job.status
+        return self.monitor.status if self.monitor and self.monitor.connected else {}
 
     def _caffeinate(self):
         if self.cfg.get("caffeinate") and sys.platform == "darwin":
@@ -459,6 +576,7 @@ class Bridge:
         """Clear a stale/paused PC job on the printer (M2411 S3), e.g. after 'Can't start work in current status: 5'."""
         with self.lock:
             if self.busy(): raise RuntimeError("a job is running; use Cancel")
+            if self.monitor: self.monitor.release()
             ser = self.serial_factory()
             try:
                 j = SerialJob(ser, [], "clear", report_interval=self.cfg.get("report_interval_s", 4))
@@ -468,9 +586,10 @@ class Bridge:
                 return f"sent M2411 S3; printer reports {j.status.get('working', 'unknown')}"
             finally:
                 ser.close()
+                if self.monitor: self.monitor.resume()
 
     def submit(self, path, name, start=True, mode=None):
-        mode = mode or resolve_mode(self.cfg)
+        mode = mode or upload_mode(self.cfg)
         self.last_file = name
         if mode == "wifi":
             try: self.wifi_factory().upload(path, name)
@@ -489,8 +608,10 @@ class Bridge:
             try: pre = job_prelude(self.cfg, kind, lines)
             except Exception as e:
                 notify(self.cfg, f"Not starting {name}: {e}"); raise
+            if self.monitor: self.monitor.release()
             try: ser = self.serial_factory()
             except Exception as e:
+                if self.monitor: self.monitor.resume()
                 notify(self.cfg, f"USB print of {name} failed: {e}"); raise
             self.job = SerialJob(ser, lines, name, self.cfg.get("firmware_version", ""),
                                  self.cfg.get("line_timeout_s", 600), prelude=pre,
@@ -504,6 +625,7 @@ class Bridge:
                 finally:
                     try: ser.close()
                     except Exception: pass
+                    if self.monitor: self.monitor.resume()
                     if awake:
                         try: awake.terminate()
                         except Exception: pass
@@ -516,6 +638,16 @@ class Bridge:
 
     def job_info(self):
         j = self.job
+        if not self.busy() and self.monitor and self.monitor.connected:
+            st = self.monitor.status; code = st.get("systat"); ws = st.get("working", "")
+            if code is not None or ws:
+                state = {2: "Printing", 3: "Pausing", 4: "Paused", 5: "Paused", 9: "Cancelling", 10: "Cancelling"}.get(
+                    code, "Printing" if ws.startswith("WORKING") else "Operational")
+                return {"job": {"file": {"name": self.last_file, "origin": "local"}},
+                        "progress": {"completion": st.get("progress"), "printTime": None, "printTimeLeft": None,
+                                     "filepos": None},
+                        "state": state, "ivi": {"systat": code, "systat_name": SYSTAT.get(code), "working": ws,
+                                                "source": "usb monitor"}}
         state = j.state if j else "Operational"
         if j and j.error: state = f"Error: {j.error}"
         elif j and j.reason and j.state == "Paused": state = f"Paused: {j.reason}"
@@ -525,24 +657,63 @@ class Bridge:
                              "printTimeLeft": None, "filepos": j.sent if j else None},
                 "state": state}
 
-PAGE = """<!doctype html><meta charset=utf-8><title>IVI Bridge</title>
-<style>body{font:15px -apple-system,sans-serif;max-width:520px;margin:2em auto}button{font-size:15px;margin-right:.5em}
-.bar{height:14px;background:#ddd;border-radius:7px}.bar>div{height:100%;background:#3a7;border-radius:7px;width:0}</style>
-<h2>IVI Bridge</h2><p>Mode: <b>__MODE__</b></p><p>State: <b id=st>…</b> &nbsp; File: <span id=fn></span></p>
+PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>IVI Bridge</title>
+<style>body{font:15px -apple-system,sans-serif;max-width:1400px;margin:1.5em auto;padding:0 1em}button{font-size:15px;margin:.2em .4em .2em 0}
+.bar{height:14px;background:#ddd;border-radius:7px}.bar>div{height:100%;background:#3a7;border-radius:7px;width:0}
+.tabs{display:flex;gap:.3em;margin:1em 0 0}.tabs button{border:1px solid #bbb;background:#f4f4f4;border-radius:6px 6px 0 0;padding:.4em 1.2em;margin:0}
+.tabs button.on{background:#fff;border-bottom-color:#fff;font-weight:600}
+.panels{display:block}.panel{border:1px solid #bbb;border-radius:0 8px 8px 8px;padding:1em;display:none}.panel.on{display:block}
+.panel h3{margin-top:0}input[type=number]{width:5em;font-size:15px}.row{margin:.6em 0}.note{color:#777;font-size:13px}
+@media (min-width:1100px){.tabs{display:none}.panels{display:grid;grid-template-columns:1fr 1fr;gap:1em;margin-top:1em}.panel{display:block;border-radius:8px}}</style>
+<h2>IVI Bridge</h2><p>Uploads: <b>__MODE__</b> &nbsp; USB: <b id=usb>…</b></p><p>State: <b id=st>…</b> &nbsp; File: <span id=fn></span></p>
 <div class=bar><div id=pb></div></div><p id=pc></p><p id=tp></p>
-<button onclick="cmd('pause','pause')">Pause</button><button onclick="cmd('pause','resume')">Resume</button>
+<div class=tabs><button id=t_tool class=on onclick="tab('tool')">Toolhead</button><button id=t_fil onclick="tab('fil')">Filament</button></div>
+<div class=panels>
+<div class="panel on" id=p_tool><h3>Toolhead</h3>
+<div class=row>Nozzle <input id=nz type=number min=0 max=300 value=215> °C <button onclick="g('M104 S'+nz.value)">Set</button></div>
+<div class=row>Bed <input id=bd type=number min=0 max=120 value=60> °C <button onclick="g('M140 S'+bd.value)">Set</button></div>
+<div class=row><button onclick="g('M104 S0');g('M140 S0')">Cooldown</button></div>
+<div class=row>Speed <input id=sp type=number min=10 max=300 value=100> % <button onclick="g('M220 S'+sp.value)">Set</button></div>
+<div class=row><button onclick="cmd('pause','pause')">Pause</button><button onclick="cmd('pause','resume')">Resume</button>
 <button onclick="if(confirm('Cancel print?'))cmd('cancel')">Cancel</button>
-<button title="Sends M2411 S3 to clear a stuck/paused PC job (e.g. 'current status: 5')" onclick="if(confirm('Clear a stuck job on the printer (M2411 S3)?'))fetch('/api/ivi/clear',{method:'POST',headers:H}).then(r=>r.json()).then(j=>alert(j.message||j.error))">Clear stuck job</button>
+<button title="Sends M2411 S3 to clear a stuck/paused PC job (e.g. 'current status: 5')" onclick="if(confirm('Clear a stuck job on the printer (M2411 S3)?'))fetch('/api/ivi/clear',{method:'POST',headers:H}).then(r=>r.json()).then(j=>alert(j.message||j.error))">Clear stuck job</button></div></div>
+<div class=panel id=p_fil><h3>Filament</h3>
+<div class=row>Flow <input id=fl type=number min=10 max=200 value=100> % <button onclick="g('M221 S'+fl.value)">Set</button></div>
+<div class=row>Preheat <button onclick="g('M104 S210');g('M140 S60')">PLA 210/60</button><button onclick="g('M104 S240');g('M140 S80')">PETG 240/80</button><button onclick="g('M104 S250');g('M140 S100')">ABS 250/100</button></div>
+<div class=row><button onclick="g('M104 S0')">Nozzle off</button></div>
+<p class=note>Manual filament swap: the slicer pauses with M2410; swap, then Resume (M2411 S1).</p></div>
+</div><p class=note id=msg>Controls use USB (M104/M140/M220/M221; not yet verified on this firmware).</p>
 <script>const K=__KEY__,H={'X-Api-Key':K,'Content-Type':'application/json'};
+function tab(t){for(const n of['tool','fil']){document.getElementById('t_'+n).classList.toggle('on',n==t);document.getElementById('p_'+n).classList.toggle('on',n==t)}}
+async function g(c){const r=await fetch('/api/printer/command',{method:'POST',headers:H,body:JSON.stringify({command:c})});msg.textContent=r.ok?'Sent '+c:'Failed: '+((await r.json()).error||r.status)}
 async function cmd(c,a){await fetch('/api/job',{method:'POST',headers:H,body:JSON.stringify({command:c,action:a})});tick()}
 async function tick(){try{const j=await (await fetch('/api/job',{headers:H})).json(),p=await (await fetch('/api/printer',{headers:H})).json();
+usb.textContent=p.ivi&&p.ivi.usb?'connected':'not connected'+(p.ivi&&p.ivi.usb_error?' ('+p.ivi.usb_error+')':'');
 st.textContent=j.state;fn.textContent=j.job.file.name||'';const c=j.progress.completion;pb.style.width=(c||0)+'%';
 pc.textContent=c==null?'':c.toFixed(1)+'%';tp.textContent=Object.entries(p.temperature||{}).map(([k,v])=>k+': '+v.actual+' / '+v.target+' °C').join('   ')}catch(e){st.textContent='bridge offline'}}
 tick();setInterval(tick,2000)</script>"""
 
 def status_page(cfg):
-    return PAGE.replace("__MODE__", html.escape(cfg.get("mode", "auto"))).replace(
+    m = "USB streaming" if upload_mode(cfg) == "serial" else "Wi-Fi (start on the touch screen)"
+    return PAGE.replace("__MODE__", html.escape(m)).replace(
         "__KEY__", json.dumps(cfg.get("api_key", "")).replace("<", "\\u003c"))
+
+def octo_printer_cmds(path, cmd):
+    """OctoPrint printer endpoints -> G-code list (validated later by check_command)."""
+    c = cmd.get("command")
+    if path == "/api/printer/command":
+        lst = cmd.get("commands") or ([c] if c else [])
+        if not lst: raise ValueError("no command")
+        return [str(x) for x in lst]
+    if path == "/api/printer/tool":
+        if c == "target":
+            return [f"M104 S{int(round(float(v)))}" for v in (cmd.get("targets") or {}).values()]
+        if c == "flowrate": return [f"M221 S{int(cmd['factor'])}"]
+    if path == "/api/printer/bed" and c == "target":
+        return [f"M140 S{int(round(float(cmd['target'])))}"]
+    if path == "/api/printer/printhead" and c == "feedrate":
+        return [f"M220 S{int(cmd['factor'])}"]
+    raise ValueError(f"unsupported {path} command {c}")
 
 def make_handler(bridge):
     cfg = bridge.cfg
@@ -571,10 +742,14 @@ def make_handler(bridge):
             if p == "/api/job":
                 return self._json(200, bridge.job_info())
             if p == "/api/printer":
-                st = bridge.job_info()["state"]
+                st = bridge.job_info()["state"]; mon = bridge.monitor
+                temps = bridge.live_status().get("temps", {}) or (bridge.job.status.get("temps", {}) if bridge.job else {})
                 return self._json(200, {"state": {"text": st, "flags": {"operational": True,
-                                   "printing": st == "Printing", "paused": st == "Paused", "ready": not bridge.busy()}},
-                                   "temperature": (bridge.job.status.get("temps", {}) if bridge.job else {})})
+                                   "printing": st == "Printing", "paused": st.startswith("Paused"),
+                                   "ready": not bridge.busy()}},
+                                   "temperature": temps,
+                                   "ivi": {"usb": bool(bridge.busy() or (mon and mon.connected)),
+                                           "usb_error": mon.error if mon else "serial_monitor off"}})
             if p == "/" or p == "/index.html":
                 b = status_page(cfg).encode()
                 self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -591,10 +766,30 @@ def make_handler(bridge):
             if p == "/api/ivi/clear":
                 try: return self._json(200, {"message": bridge.clear_printer()})
                 except Exception as e: return self._json(409, {"error": str(e)})
+            if p.startswith("/api/printer/"):
+                try: cmd = json.loads(body or b"{}")
+                except ValueError: return self._json(400, {"error": "bad json"})
+                try: gcodes = octo_printer_cmds(p, cmd)
+                except ValueError as e: return self._json(400, {"error": str(e)})
+                try:
+                    for g in gcodes: bridge.send_command(g)
+                except ValueError as e: return self._json(400, {"error": str(e)})
+                except Exception as e: return self._json(409, {"error": str(e)})
+                self.send_response(204); self.end_headers(); return
             if p == "/api/job":
                 try: cmd = json.loads(body or b"{}")
                 except ValueError: return self._json(400, {"error": "bad json"})
                 j = bridge.job
+                if (not j or not bridge.busy()) and bridge.monitor and bridge.monitor.connected:
+                    # Wi-Fi-uploaded job started on the touch screen: control it over USB
+                    c, a = cmd.get("command"), cmd.get("action", "toggle")
+                    paused = bridge.monitor.status.get("systat") in (3, 4, 5)
+                    g = {"pause": {"pause": "M2410", "resume": "M2411 S1"}.get(a, "M2411 S1" if paused else "M2410"),
+                         "cancel": "M2411 S3"}.get(c)
+                    if not g: return self._json(400, {"error": f"unsupported command {c}"})
+                    try: bridge.send_command(g)
+                    except Exception as e: return self._json(409, {"error": str(e)})
+                    return self._json(200, {"state": bridge.job_info()["state"], "sent": g})
                 if not j or not bridge.busy(): return self._json(409, {"error": "no active job"})
                 c, a = cmd.get("command"), cmd.get("action", "toggle")
                 if c == "pause":
@@ -630,12 +825,13 @@ def make_handler(bridge):
                              "effectivePrint": start, "message": msg_txt})
     return H
 
-def serve(cfg, bridge=None):
+def serve(cfg, bridge=None, start_monitor=True):
     bridge = bridge or Bridge(cfg)
     srv = ThreadingHTTPServer((cfg["listen_host"], cfg["listen_port"]), make_handler(bridge))
-    log(f"ivi-bridge {VERSION} on http://{cfg['listen_host']}:{cfg['listen_port']} mode={cfg['mode']}")
-    if cfg["mode"] in ("serial", "auto"):
-        log("USB jobs: disconnect IVI 3licer first - only one program can own the USB port")
+    log(f"ivi-bridge {VERSION} on http://{cfg['listen_host']}:{cfg['listen_port']} uploads={upload_mode(cfg)}")
+    if bridge.monitor:
+        log("USB monitor on: status/controls use the USB port when it is free (IVI 3licer must be disconnected)")
+        if start_monitor: bridge.monitor.start()
     return srv
 
 # ----------------------------------------------------------------- CLI -----
@@ -655,7 +851,7 @@ def send_file(cfg, path, name=None):
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"bridge refused: HTTP {e.code} {e.read()[:200]!r}")
     except (urllib.error.URLError, OSError):
-        if resolve_mode(cfg) != "wifi":
+        if upload_mode(cfg) != "wifi":
             raise RuntimeError("bridge service not running; serial mode needs `ivi_bridge.py serve`")
         return Bridge(cfg).submit(path, name)
 
