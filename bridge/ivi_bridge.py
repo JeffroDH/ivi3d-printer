@@ -21,6 +21,7 @@ DEFAULT_CONFIG = {
     "monitor_interval_s": 3,            # M105/M114/M2007 poll period of the monitor
     "filament_load": "extrude",         # Load/Unload: "extrude" (heat, then E moves) or "m701" (M701/M702 - IGNORED by fw V1.3.2-alpha)
     "filament_load_mm": 100,            # load/unload length (<=150)
+    "filament_retry_mm": 20,            # "No, extrude more" length after a load
     "filaments": [["PLA", 210], ["PETG", 240], ["ABS", 250], ["TPU", 225], ["PCTG", 250]],  # picker [name, nozzle °C]
     "filament_tolerance_c": 3,          # start moving once the nozzle is within this of target
     "filament_heat_timeout_s": 900,
@@ -570,12 +571,31 @@ class FilamentChange:
     def info(self):
         return {"action": self.action, "target": self.temp, "actual": self.actual, "state": self.state, "error": self.error}
 
-    def cancel(self): self._cancel.set()
+    def _off(self):
+        try: self.b.send_command("M104 S0")          # like the touch screen: nozzle off at the end
+        except Exception as e: log("filament: nozzle off failed:", e)
+
+    def cancel(self):
+        self._cancel.set()
+        if self.state == "confirm": self.state = "cancelled"; self._off()
+
+    def answer(self, ok):
+        """Load prompt 'Filament coming out of the nozzle?': yes -> done; no -> extrude filament_retry_mm, ask again.
+        The nozzle stays at temperature."""
+        if self.state != "confirm": raise RuntimeError("not waiting for a load confirmation")
+        if ok: self._off(); self.state = "done"; return
+        self.state = "moving"
+        try:
+            for c in ("M83", "G1 E%g F300" % float(self.b.cfg.get("filament_retry_mm", 20)), "M82"):
+                self.b.send_command(c)
+            self.state = "confirm"
+        except Exception as e:
+            self.state, self.error = "error", str(e)
 
     def moves(self):
         n = float(self.b.cfg.get("filament_load_mm", 100))
         if self.action == "unload":
-            return ["M83", "G1 E10 F300", "G1 E-%g F1500" % n, "M82"]
+            return ["M83", "G1 E10 F300", "G1 E-%g F1500" % n, "M82"]  # then M104 S0
         return ["M83", "G1 E%g F300" % n, "M82"]
 
     def start(self):
@@ -591,7 +611,7 @@ class FilamentChange:
             tol = float(cfg.get("filament_tolerance_c", 3)); end = self.clock() + float(cfg.get("filament_heat_timeout_s", 900))
             while True:
                 if self._cancel.is_set():
-                    self.state = "cancelled"; return
+                    self._off(); self.state = "cancelled"; return
                 if mon and not (mon.thread and mon.thread.is_alive()): mon.poll_once()   # no monitor thread (tests/CLI)
                 t = self.b.live_status().get("temps", {}).get("tool0")
                 if t: self.actual = t["actual"]
@@ -601,9 +621,10 @@ class FilamentChange:
                 self._cancel.wait(float(cfg.get("filament_poll_s", 1)))
             self.state = "moving"
             for c in self.moves():
-                if self._cancel.is_set(): self.state = "cancelled"; return
+                if self._cancel.is_set(): self._off(); self.state = "cancelled"; return
                 self.b.send_command(c)
-            self.state = "done"
+            if self.action == "load": self.state = "confirm"
+            else: self._off(); self.state = "done"
         except Exception as e:
             self.state, self.error = "error", str(e); log("filament:", e)
 
@@ -634,7 +655,7 @@ class Bridge:
         if not 150 <= temp <= 300: raise ValueError("temperature must be 150-300 °C")
         if self.busy(): raise RuntimeError("a USB job is running")
         f = self.filament
-        if f and f.state in ("heating", "moving"): raise RuntimeError("a filament change is already running")
+        if f and f.state in ("heating", "moving", "confirm"): raise RuntimeError("a filament change is already running")
         self.filament = FilamentChange(self, action, temp); self.filament.start(); return self.filament.info()
 
     def live_status(self):
@@ -820,7 +841,7 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
 <div style="display:flex;gap:.6em;align-items:center;margin-top:1em">Custom <input id=fcu type=number min=150 max=300 value=220 style="width:5em;font:inherit;padding:.4em;border:1px solid #bcd;border-radius:6px"> °C
 <button class=btn onclick="run(+fcu.value)">Start</button><span style="flex:1"></span><button class=lite style="width:auto" onclick="fclose()">Close</button></div></div>
 <div id=v_heat style="display:none"><div id=hs class=hs>Heating…</div><div class=hbar><div id=hb></div></div><div id=ht class=val style="text-align:center">–</div>
-<div style="display:flex;justify-content:center;gap:.8em;margin-top:1.2em"><button id=fc class=btn onclick="fcancel()">Cancel</button><button id=fk class=btn style="display:none" onclick="fclose()">OK</button></div></div>
+<div style="display:flex;justify-content:center;gap:.8em;margin-top:1.2em"><button id=fy class=btn style="display:none" onclick="fans('yes')">Yes, done</button><button id=fm class=btn style="display:none" onclick="fans('more')">No, extrude more</button><button id=fc class=btn onclick="fcancel()">Cancel</button><button id=fk class=btn style="display:none" onclick="fclose()">OK</button></div></div>
 </div></div></div>
 <script>const K=__KEY__,FIL=__FIL__,H={'X-Api-Key':K,'Content-Type':'application/json'};let T={},fanOn=false;
 function tab(t){for(const n of['tool','fil']){document.getElementById('t_'+n).classList.toggle('on',n==t);document.getElementById('p_'+n).classList.toggle('on',n==t)}}
@@ -845,8 +866,9 @@ async function run(t){const r=await fetch('/api/ivi/filament',{method:'POST',hea
 async function fpoll(){show(await (await fetch('/api/ivi/filament',{headers:H})).json())}
 function show(j){const a=j.actual,t=j.target,pct=a==null?0:Math.max(0,Math.min(100,100*a/t));
  hb.style.width=pct+'%';ht.textContent=(a==null?'–':Math.round(a))+'°C / '+t+'°C';
- hs.textContent={heating:'Heating…',moving:(j.action=='load'?'Loading…':'Unloading…'),done:'Done',cancelled:'Cancelled',error:'Error: '+j.error}[j.state]||j.state;
- hs.className='hs '+j.state;const fin=['done','cancelled','error'].includes(j.state);fc.style.display=fin?'none':'';fk.style.display=fin?'':'none';if(fin)clearInterval(FT)}
+ hs.textContent={heating:'Heating…',moving:(j.action=='load'?'Loading…':'Unloading…'),confirm:'Filament coming out of the nozzle?',done:'Done',cancelled:'Cancelled',error:'Error: '+j.error}[j.state]||j.state;
+ hs.className='hs '+j.state;const fin=['done','cancelled','error'].includes(j.state);const cf=j.state=='confirm';fy.style.display=fm.style.display=cf?'':'none';fc.style.display=fin?'none':'';fk.style.display=fin?'':'none';if(fin)clearInterval(FT)}
+async function fans(a){const r=await fetch('/api/ivi/filament',{method:'POST',headers:H,body:JSON.stringify({action:a})});show(await r.json())}
 async function fcancel(){await fetch('/api/ivi/filament',{method:'POST',headers:H,body:JSON.stringify({action:'cancel'})});fpoll()}
 function fclose(){dlg.style.display='none';clearInterval(FT)}
 function fanT(){fanOn=!fanOn;fan.classList.toggle('on',fanOn);g([fanOn?'M106 S255':'M107'])}
@@ -938,6 +960,11 @@ def make_handler(bridge):
             if p == "/api/ivi/filament":
                 try: cmd = json.loads(body or b"{}")
                 except ValueError: return self._json(400, {"error": "bad json"})
+                if cmd.get("action") in ("yes", "more"):
+                    if not bridge.filament: return self._json(409, {"error": "no filament change"})
+                    try: bridge.filament.answer(cmd["action"] == "yes")
+                    except Exception as e: return self._json(409, {"error": str(e)})
+                    return self._json(200, bridge.filament.info())
                 if cmd.get("action") == "cancel":
                     if bridge.filament: bridge.filament.cancel()
                     return self._json(200, bridge.filament.info() if bridge.filament else {"state": "idle"})

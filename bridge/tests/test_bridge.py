@@ -359,7 +359,7 @@ class MonitorApiTests(OctoPrintApiTests):
         with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
         for s in (">Control<", "Load Filament", "Unload Filament", ">210°C<", ">240°C<", ">270°C<", ">60°C<", ">80°C<", ">100°C<",
                   ">Fan ", "Cooldown", "Extrude", "Retract", ">1000<", ">0.05<", ">1500<", ">3000<", "Home", "Y+", "X/Y",
-                  "Z+", "Z-", "'G91'", "'G90'", "M701", "M702", "M83", "M107", "Pause", "Resume", "Cancel"):
+                  "Z+", "Z-", "'G91'", "'G90'", "/api/ivi/filament", "M107", "Pause", "Resume", "Cancel"):
             self.assertIn(s, page)
     def test_page_has_panels(self):
         with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
@@ -393,16 +393,24 @@ class FilamentTests(unittest.TestCase):
     def test_unload(self):
         self.b.start_filament("unload", 240); self.wait("done")
         self.assertIn("M104 S240", self.hs.written); self.assertNotIn("M109", " ".join(self.hs.written))
-        self.assertEqual(self.moves(), ["M83", "G1 E10 F300", "G1 E-100 F1500", "M82"])
+        self.assertEqual(self.moves(), ["M83", "G1 E10 F300", "G1 E-100 F1500", "M82"]); self.assertEqual(self.hs.written[-1], "M104 S0")
         i = self.hs.written.index("M83"); self.assertGreaterEqual(self.hs.actual, 237)
         self.assertGreater(self.hs.written[:i].count("M105"), 3)   # polled while heating
     def test_load_custom_length(self):
-        self.cfg["filament_load_mm"] = 80; self.b.start_filament("load", 215); self.wait("done")
+        self.cfg["filament_load_mm"] = 80; self.cfg["filament_retry_mm"] = 15
+        self.b.start_filament("load", 215); self.wait("confirm")
         self.assertEqual(self.moves(), ["M83", "G1 E80 F300", "M82"])
+        self.assertNotIn("M104 S0", self.hs.written)          # hot while asking
+        self.b.filament.answer(False); self.assertEqual(self.b.filament.state, "confirm")
+        self.b.filament.answer(False)
+        self.assertEqual(self.moves()[3:], ["M83", "G1 E15 F300", "M82"] * 2)
+        self.b.filament.answer(True); self.assertEqual(self.b.filament.state, "done")
+        self.assertEqual(self.hs.written[-1], "M104 S0")       # off only after "Yes, done"
+        with self.assertRaises(RuntimeError): self.b.filament.answer(True)
     def test_cancel_while_heating(self):
         self.hs.hold = True; self.b.start_filament("load", 250); time.sleep(0.05)
         self.assertEqual(self.b.filament.state, "heating"); self.b.filament.cancel(); self.wait("cancelled")
-        self.assertEqual(self.moves(), [])
+        self.assertEqual(self.moves(), []); self.assertIn("M104 S0", self.hs.written)
     def test_timeout_and_bad_input(self):
         self.hs.hold = True; self.cfg["filament_heat_timeout_s"] = 0.05
         self.b.start_filament("load", 250); self.wait("error"); self.assertIn("did not reach", self.b.filament.error)
@@ -432,12 +440,15 @@ class FilamentApiTests(MonitorApiTests):
         st, j = self.req("/api/ivi/filament", json.dumps({"action": "load", "temp": 215}).encode())
         self.assertEqual(j["target"], 215)
         for _ in range(300):
-            if self.req("/api/ivi/filament")[1]["state"] == "done": break
+            if self.req("/api/ivi/filament")[1]["state"] == "confirm": break
             time.sleep(0.01)
-        self.assertEqual(self.req("/api/ivi/filament")[1]["state"], "done")
+        self.assertEqual(self.req("/api/ivi/filament", json.dumps({"action": "more"}).encode())[1]["state"], "confirm")
+        self.assertIn("G1 E20 F300", self.ms.written)
+        self.assertEqual(self.req("/api/ivi/filament", json.dumps({"action": "yes"}).encode())[1]["state"], "done")
         with self.assertRaises(urllib.error.HTTPError) as e: self.req("/api/ivi/filament", json.dumps({"action": "load", "temp": 999}).encode())
         self.assertEqual(e.exception.code, 400)
         with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
         self.assertIn('[["PLA", 215], ["PETG", 240]]', page); self.assertIn("Heating…", page); self.assertIn("Custom", page)
+        for t in ("Filament coming out of the nozzle?", "Yes, done", "No, extrude more"): self.assertIn(t, page)
 
 if __name__ == "__main__": unittest.main()
