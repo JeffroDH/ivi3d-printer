@@ -39,6 +39,7 @@ Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/mar
 
 | Path | Contents |
 |---|---|
+| `orca/` | OrcaSlicer FDM profile (printer/filament/process + `.orca_printer` bundle) and optional IVI header hook ([orca/README.md](orca/README.md)) |
 | `fusion/` | Autodesk Fusion post processors for the laser and CNC heads + header checker ([fusion/README.md](fusion/README.md)) |
 | `docs/laser_cnc_gcode.md` | Laser (line/point) and CNC G-code + header format from IVI 3licer test files |
 | `bridge/` | Orca Slicer / Anycubic Next bridge: OctoPrint-compatible service, Wi-Fi upload + USB serial streaming, tests |
