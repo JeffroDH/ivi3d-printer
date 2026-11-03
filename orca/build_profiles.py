@@ -72,7 +72,7 @@ machine = {
     "emit_machine_limits_to_gcode": "0",   # no M201/M203/M204/M205 block at the start
     "disable_m73": "1",                     # no M73 progress lines (firmware stalled on them; printer-option in Orca 2.5)
     # G21 cannot be turned off: GCodeWriter::preamble() writes "G90\nG21" for every flavour but MakerWare.
-    # The bridge strips it (strip_commands).
+    # The bridge can strip it via strip_commands (off by default; G21 is harmless).
     "machine_start_gcode": START, "machine_end_gcode": END,
     "before_layer_change_gcode": "", "layer_change_gcode": "", "change_filament_gcode": "M2410 ; pause for manual filament swap",
     "thumbnails": "", "host_type": "octoprint", "print_host": "127.0.0.1:5000",

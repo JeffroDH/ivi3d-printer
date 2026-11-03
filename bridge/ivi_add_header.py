@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Add IVI 3licer's ';Header Start' block to one G-code file (what the bridge does on upload).
-Also drops M204/M205/M73/G21 command lines like the bridge (--strip "" to keep them).
+No lines are dropped by default; --strip M204,M205,M73,G21 drops those command lines (old bridge default).
 Usage: ivi_add_header.py IN [OUT] [--nozzle 0.3] [--strip M204,M205,M73,G21]   (no OUT = IN.ivi.gcode)"""
 import argparse, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -9,7 +9,7 @@ import ivi_bridge as B
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("src"); ap.add_argument("dst", nargs="?"); ap.add_argument("--nozzle", type=float, default=0.3)
-    ap.add_argument("--strip", default=",".join(B.DEFAULT_STRIP), help="comma-separated first words to drop")
+    ap.add_argument("--strip", default=",".join(B.DEFAULT_STRIP), help="comma-separated first words to drop (default: none; e.g. M204,M205,M73,G21)")
     a = ap.parse_args(argv)
     dst = a.dst or os.path.splitext(a.src)[0] + ".ivi.gcode"
     r = B.prepare_gcode(a.src, dst, nozzle=a.nozzle, strip=[c for c in a.strip.split(",") if c.strip()])

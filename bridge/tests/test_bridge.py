@@ -281,7 +281,7 @@ class OctoPrintApiTests(unittest.TestCase):
         if type(self) is not OctoPrintApiTests: return   # subclasses use a monitor serial; covered once here
         with self.assertRaises(urllib.error.HTTPError) as e: self.req("/api/ivi/job/gcode")
         self.assertEqual(e.exception.code, 404)
-        self.cfg["mode"] = "serial"
+        self.cfg["mode"] = "serial"; self.cfg["strip_commands"] = list(B.LEGACY_STRIP)
         self.upload("; c\nG28\nM73 P0\nG1 Z0.3\nG1 X1 E1\nG1 Z0.6\nG1 X2 E2\n"); self.bridge.thread.join(5)
         r = urllib.request.Request(self.url + "/api/ivi/job/gcode", headers={"X-Api-Key": "KEY"})
         with urllib.request.urlopen(r, timeout=5) as resp:
@@ -384,7 +384,7 @@ class MonitorApiTests(OctoPrintApiTests):
         self.assertFalse(self.req("/api/ivi/usb", json.dumps({"action": "enable"}).encode())[1]["usb_locked"])
         self.assertTrue(self.bridge.monitor.poll_once()); self.assertTrue(self.req("/api/printer")[1]["ivi"]["usb"])
     def test_auto_upload_and_print_streams_over_usb(self):
-        self.bridge.serial_factory = lambda: self.ser
+        self.bridge.serial_factory = lambda: self.ser; self.cfg["strip_commands"] = list(B.LEGACY_STRIP)
         st, js = self.upload("G28\nM204 P500\nM73 P1\nG21\nG1 X1\n", start=True)
         self.assertEqual(st, 201); self.assertIn("USB", js["message"]); self.bridge.thread.join(5)
         self.assertEqual(FakePrinter.calls, [])

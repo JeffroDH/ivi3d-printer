@@ -28,7 +28,7 @@ If macOS asks, allow Python under **Privacy & Security → Local Network**.
 
 | Orca button | Where the file goes | Who runs the print | USB / Device page |
 |---|---|---|---|
-| **Upload and Print** | Streamed from the Mac over **USB serial** (`M110 N0`, then `N<n> <cmd>*<checksum>` per `ok`, resend handled; `strip_commands` applied) | The bridge, starting now | Live status + progress bar, Pause/Resume/Cancel on the Device page. **The Mac must stay awake (caffeinate runs) and the USB cable must stay connected until it finishes.** |
+| **Upload and Print** | Streamed from the Mac over **USB serial** (`M110 N0`, then `N<n> <cmd>*<checksum>` per `ok`, resend handled; `strip_commands` applied if set) | The bridge, starting now | Live status + progress bar, Pause/Resume/Cancel on the Device page. **The Mac must stay awake (caffeinate runs) and the USB cable must stay connected until it finishes.** |
 | **Upload** | Stored on the printer over **Wi-Fi** | You, from the **touch screen** (the job runs from the printer's own storage, so the Mac can sleep) | **USB controls are turned off for that print**: opening the USB port during a stored-file print stalls it (cable plugged in alone is fine). The Device page shows a banner; press **Printer idle, re-enable USB** when the print is done or cancelled. Pause/cancel on the touch screen. |
 
 `"mode": "wifi"` sends both buttons over Wi-Fi; `"mode": "serial"` streams both over USB (Upload then only spools).
@@ -74,7 +74,7 @@ and the first sideways move stalls a tower (see docs/laser_cnc_gcode.md).
 
 ## IVI file header (touch-screen time / material)
 On every upload (Wi-Fi and USB spool), if the file has no `;Header Start`, the bridge prepends IVI 3licer's block (format from its `server/index.js`): `;header_type: 3dp,<nozzle>mm`, `;file_total_lines`, `;file_valid_lines`, `;estimated_time(s)` (Orca's `; estimated printing time (normal mode)`, else `M73 P0 R<min>`), `;material_type` (`; filament_type`), nozzle/bed temps, `;work_speed(mm/minute)` (`sparse_infill_speed`×60), min/max X/Y/Z of extruding moves (else `max_z_height`). Unverified extras: `;filament_used(m)`, `;filament_weight(g)`. Streams in two passes (fine for 17 MB+). Toggle `"ivi_header"`; nozzle default `"nozzle_diameter": 0.3`. Test one file: `python3 bridge/ivi_add_header.py IN [OUT]`.
-Same pass also **drops command lines starting with `M204`, `M205`, `M73`, `G21`** (comments after them included; `"strip_commands"`, `[]` = keep all) - an Orca file stalled after the intro line until they were removed. The log shows how many lines were removed; the header's line counts describe the output file. `M73 P0 R<min>` is still read for the time estimate before it is dropped. CLI: `--strip ""` keeps them.
+**G-code filtering is off by default** (`"strip_commands": []`). Stall tests showed `M204`, `M205`, `M73` and `G21` were not the cause of the earlier stalls (the prime was), so nothing is dropped. To re-enable, set `"strip_commands": ["M204","M205","M73","G21"]`; matching command lines (comments after them included) are then dropped, the log shows how many, and the header's line counts describe the output file. `M73 P0 R<min>` is still read for the time estimate. CLI: `--strip M204,M205,M73,G21`.
 
 ## Device page extras (Fluidd/Mainsail-style)
 All of these live on the bridge's Device page (Orca's Device tab, or `http://<mac>:5000/`) and use the same API key as everything else. On a phone the page has tabs: Toolhead, Filament, Camera, Files, Console.

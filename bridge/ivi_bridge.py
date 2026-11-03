@@ -28,7 +28,7 @@ DEFAULT_CONFIG = {
     "filament_heat_timeout_s": 900,
     "filament_poll_s": 1,
     "ivi_header": True,                 # prepend IVI 3licer's ';Header Start' block (time/material on the touch screen)
-    "strip_commands": ["M204", "M205", "M73", "G21"],  # dropped on upload (firmware stalled on Orca's M204/M205/M73/G21)
+    "strip_commands": [],  # filtering off by default (stall tests cleared M204/M205/M73/G21); set to ["M204","M205","M73","G21"] to re-enable
     "nozzle_diameter": 0.3,             # used in ';header_type: 3dp,<d>mm' if the G-code doesn't say
     "jog_extrude_temp": 235,            # Extrude/Retract on a cold nozzle (<170 °C target or below target) heat to this first
     "notify": True,                     # macOS notifications via osascript
@@ -224,7 +224,8 @@ def _num(v):
 
 def _fmt(v): return "%g" % v if isinstance(v, float) else str(v)
 
-DEFAULT_STRIP = ("M204", "M205", "M73", "G21")
+DEFAULT_STRIP = ()  # no stripping by default; stall tests cleared these:
+LEGACY_STRIP = ("M204", "M205", "M73", "G21")  # the old list, for re-enabling
 
 def strip_regex(codes):
     """Matches command lines whose first word is one of codes (e.g. 'M204 P500 ; accel', not M2040)."""
