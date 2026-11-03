@@ -1475,8 +1475,13 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
 .mlist{display:flex;flex-wrap:wrap;gap:.5em}.mb{font-size:15px;padding:.5em 1em}
 .ht{width:100%;border-collapse:collapse;font-size:12px;margin:.4em 0}.ht th{text-align:left;color:#567;font-weight:600;border-bottom:1px solid #d3e0f3}.ht td{padding:.25em .3em;border-bottom:1px solid #eef3fa}.ht .ok{color:#1a8a3a}.ht .bad{color:#c22}
 .con{height:260px;overflow:auto;background:#15171c;color:#cfd6e2;font:12px Menlo,monospace;border-radius:8px;padding:.5em}.con .cs{color:#7fc8ff}.con .ce{color:#ff8a7a}
+.wtabs{display:none;gap:.5em;margin:.8em 1em 0;max-width:1500px}.wtabs button{background:var(--lb);color:var(--t);border-radius:999px;padding:.5em 1.4em;font-size:16px}.wtabs button.on{background:var(--b);color:#fff}
+@media (max-width:560px){.tabs button{font-size:15px;padding:.6em .15em}#tpzw{display:none}}
 @media (min-width:1100px){.tabs{display:none}.panels{display:grid;grid-template-columns:1fr 1fr;gap:2em}
-.panel{display:block;border:1px solid #d3e0f3;border-radius:10px;padding:1em}}
+.panel{display:block;border:1px solid #d3e0f3;border-radius:10px;padding:1em}
+.panels{grid-template-areas:"tool fil" "con files" "cam files";align-items:start}
+#p_tool{grid-area:tool}#p_fil{grid-area:fil}#p_con{grid-area:con}#p_cam{grid-area:cam}#p_files{grid-area:files}
+.wtabs{display:flex}#p_tp{display:none}body.wtp .panels>.panel{display:none}body.wtp #p_tp{display:block;grid-column:1/-1}}
 </style>
 <div class=top>Control<a href=# onclick="tick();return false">&#8635;</a></div>
 <div class=info><span>Uploads: <b>__MODE__</b></span><span>USB: <b id=usb>…</b></span><span>State: <b id=st>…</b></span><span>File: <b id=fn></b></span><span id=pc></span></div>
@@ -1490,11 +1495,7 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
 <div class=row><span>Progress <b id=jpc>–</b></span><span>Lines <b id=jl>–</b></span><span>Elapsed <b id=je>–</b></span><span>Left ≈ <b id=jt>–</b></span></div>
 <div class=row style="margin-top:.5em"><button title="M2410" onclick="cmd('pause','pause')">Pause</button><button title="M2411 S1" onclick="cmd('pause','resume')">Resume</button><button title="Stop the stream and the printer job (M2411 S3)" onclick="if(confirm('Cancel print?'))cmd('cancel')">Cancel</button>
 <span style="font-size:12px;color:#789">Streamed from this Mac over USB with live monitoring &ndash; keep the Mac awake and the cable connected until it finishes.</span></div></div>
-<div class=job id=tpp style="display:none"><b>Live toolpath</b> <span id=tpc style="color:#456;font-size:13px"></span>
-<div id=tpn style="font-size:13px;color:#789;margin:.3em 0"></div>
-<div id=tpw style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><canvas id=tpv width=560 height=560 style="width:min(560px,100%);background:#15171c;border-radius:8px"></canvas>
-<div><div style="font-size:12px;color:#456">Z height</div><canvas id=tpz width=150 height=470 style="background:#15171c;border-radius:8px"></canvas>
-<div style="font-size:12px;color:#456">top view &middot; bright = printed this layer, faint = still to print, dim = earlier layers, orange = nozzle</div></div></div></div>
+<div class=wtabs><button id=w_main class=on onclick="wtab(0)">Controls</button><button id=w_tp onclick="wtab(1)">Toolpath</button></div>
 <div class=panels>
 <div class=panel id=p_tool><h3>Toolhead</h3>
 <div class=tgrid>
@@ -1554,9 +1555,14 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
 <div style="display:flex;gap:.5em;margin-top:.5em"><input id=cin placeholder="G-code, e.g. M105" style="flex:1;font:14px Menlo,monospace;padding:.45em;border:1px solid #bcd;border-radius:6px" onkeydown="if(event.key=='Enter')csend()"><button id=cbtn class=btn style="min-width:5em" onclick="csend()">Send</button></div>
 <div class=lbl id=cnote style="margin-top:.3em">Only commands on the bridge's safety list are sent. During a USB print only temperature, fan, speed, flow and status commands are allowed; during an Upload (Wi-Fi) print the console is off.</div>
 </div>
+<div class=panel id=p_tp><h3>Live toolpath <span id=tpc style="color:#456;font-size:13px;font-weight:400"></span></h3><div id=tpp>
+<div id=tpn style="font-size:13px;color:#789;margin:.3em 0"></div>
+<div id=tpw style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><canvas id=tpv width=560 height=560 style="width:min(560px,100%);background:#15171c;border-radius:8px"></canvas>
+<div id=tpzw><div style="font-size:12px;color:#456">Z height</div><canvas id=tpz width=150 height=470 style="background:#15171c;border-radius:8px"></canvas>
+<div style="font-size:12px;color:#456">top view &middot; bright = printed this layer, faint = still to print, dim = earlier layers, orange = nozzle</div></div></div></div></div>
 </div>
 <p class=note id=msg>Controls need USB. <b>Upload and Print</b> streams the job over USB (live status, Mac must stay awake and connected); <b>Upload</b> stores it on the printer for the touch screen and turns USB controls off during that print. Speed % (M220) and flow % (M221) are not yet verified on this firmware.</p>
-<div class=tabs><button id=t_tool class=on onclick="tab('tool')">Toolhead</button><button id=t_fil onclick="tab('fil')">Filament</button><button id=t_cam onclick="tab('cam')">Camera</button><button id=t_files onclick="tab('files')">Files</button><button id=t_con onclick="tab('con')">Console</button></div>
+<div class=tabs><button id=t_tool class=on onclick="tab('tool')">Toolhead</button><button id=t_fil onclick="tab('fil')">Filament</button><button id=t_cam onclick="tab('cam')">Camera</button><button id=t_files onclick="tab('files')">Files</button><button id=t_con onclick="tab('con')">Console</button><button id=t_tp onclick="tab('tp')">Toolpath</button></div>
 <div id=dlg class=dlg style="display:none"><div class=box><div class=top style="border-radius:12px 12px 0 0">
 <span id=mt>Filament</span></div><div style="padding:1.2em">
 <div id=v_pick><p class=lbl>Which filament is loaded?</p><div id=fp class=fgrid2></div>
@@ -1569,8 +1575,9 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
 async function usbOn(){if(!confirm('Is the printer idle (stored print finished or cancelled)? Opening USB during a stored print stalls it.'))return;
  await fetch('/api/ivi/usb',{method:'POST',headers:H,body:JSON.stringify({action:'enable'})});say('USB controls re-enabled');tick()}
 function hms(s){if(s==null)return'–';s=Math.round(s);return Math.floor(s/3600)+'h '+String(Math.floor(s%3600/60)).padStart(2,'0')+'m'}
-function tab(t){for(const n of['tool','fil','cam','files','con']){document.getElementById('t_'+n).classList.toggle('on',n==t);document.getElementById('p_'+n).classList.toggle('on',n==t)}}
+function tab(t){for(const n of['tool','fil','cam','files','con','tp']){document.getElementById('t_'+n).classList.toggle('on',n==t);document.getElementById('p_'+n).classList.toggle('on',n==t)}}
 tab('tool');
+function wtab(v){document.body.classList.toggle('wtp',!!v);w_main.classList.toggle('on',!v);w_tp.classList.toggle('on',!!v)}
 function say(m){msg.textContent=m}
 function sel(gr){const b=document.querySelector('[data-g='+gr+'] .sel');return b?b.textContent:''}
 document.querySelectorAll('.opts').forEach(o=>o.querySelectorAll('button').forEach(b=>b.onclick=()=>{
@@ -1618,15 +1625,15 @@ async function tick(){try{const j=await (await fetch('/api/job',{headers:H})).js
 let TP={key:null,M:null,lay:null,n:0,busy:false,drawn:-1};
 async function tpLoad(key){TP={key,M:null,lay:null,n:0,busy:true,drawn:-1};tpn.textContent='Loading toolpath…';
  try{const r=await fetch('/api/ivi/job/gcode',{headers:H});if(!r.ok)throw new Error(r.status);let txt=await r.text();
- const mv=[],lay=[];let x=0,y=0,z=0,e=0,lz=null,rel=false,i=0,a=0;
+ const mv=[],lay=[],lzs=[];let x=0,y=0,z=0,e=0,lz=null,rel=false,i=0,a=0;
  while(a<=txt.length){let b=txt.indexOf('\\n',a);if(b<0)b=txt.length;const s=txt.slice(a,b);a=b+1;i++;
   const k=s.trim().split(/\\s+/),c=(k[0]||'').toUpperCase();if(c=='G91'){rel=true;continue}if(c=='G90'){rel=false;continue}
   if(c=='G92'){for(const q of k.slice(1))if(q[0]=='E'||q[0]=='e')e=+q.slice(1)||0;continue}
   if((c!='G0'&&c!='G1')||rel)continue;let nx=x,ny=y,nz=z,ex=0,hasE=false;
   for(const q of k.slice(1)){const v=+q.slice(1),L=q[0].toUpperCase();if(isNaN(v))continue;if(L=='X')nx=v;else if(L=='Y')ny=v;else if(L=='Z')nz=v;else if(L=='E'){hasE=true;ex=v-e;e=v}}
-  const ext=c=='G1'&&hasE&&ex>0;if(ext&&lz!==nz){lay.push(mv.length/4);lz=nz}
+  const ext=c=='G1'&&hasE&&ex>0;if(ext&&lz!==nz){lay.push(mv.length/4);lzs.push(nz);lz=nz}
   mv.push(nx,ny,ext?1:0,i);x=nx;y=ny;z=nz}
- txt=null;TP.M=new Float32Array(mv);TP.lay=lay;TP.n=TP.M.length/4;tpn.textContent=''}
+ txt=null;TP.M=new Float32Array(mv);TP.lay=lay;TP.lz=lzs;TP.n=TP.M.length/4;tpn.textContent=''}
  catch(err){tpn.textContent='Toolpath not available ('+err.message+')'}TP.busy=false}
 function tpIdx(line){const M=TP.M;let lo=0,hi=TP.n-1,r=-1;while(lo<=hi){const m=(lo+hi)>>1;if(M[m*4+3]<=line){r=m;lo=m+1}else hi=m-1}return r}
 function tpDraw(line){const M=TP.M,n=TP.n,lay=TP.lay;if(!M||!n)return;const cur=Math.max(0,tpIdx(line));
@@ -1639,11 +1646,11 @@ function tpDraw(line){const M=TP.M,n=TP.n,lay=TP.lay;if(!M||!n)return;const cur=
  const h=tpz.getContext('2d'),N=Math.max(1,lay.length),bh=420/N;h.clearRect(0,0,150,470);
  for(let i=0;i<lay.length;i++){const yy=450-(i/N)*420;h.fillStyle=i<li-1?'#3fd2ff':i==li-1?'#ff9f2e':'#39404c';h.fillRect(20,yy-bh+(bh>4?2:0),110,Math.max(1,bh-(bh>4?3:0)))}
  h.fillStyle='#8a93a3';h.font='11px sans-serif';h.fillText('top',2,24);h.fillText('bed',2,465);
- tpc.textContent='· Layer '+li+' / '+lay.length+', line '+line.toLocaleString()}
+ tpc.textContent='· Layer '+li+' / '+lay.length+' · Z '+(li&&TP.lz?TP.lz[li-1].toFixed(2):'0.00')+' mm, line '+line.toLocaleString()}
 function tpTick(j,lk){const ji=j.ivi||{},us=ji.source=='usb stream'&&!/^(Operational|Cancelled)/.test(j.state);
- if(lk){tpp.style.display='block';tpw.style.display='none';tpc.textContent='';tpn.textContent='Not available for Upload (Wi-Fi) prints: the printer runs the file from its own storage, so the bridge has no line position. Use Upload and Print for a live toolpath.';TP.key=null;TP.M=null;return}
- if(!us){tpp.style.display='none';TP.key=null;TP.M=null;return}
- tpp.style.display='block';tpw.style.display='flex';const key=j.job.file.name+'|'+ji.total;
+ if(lk){tpw.style.display='none';tpc.textContent='';tpn.textContent='Not available for Upload (Wi-Fi) prints: the printer runs the file from its own storage, so the bridge has no line position. Use Upload and Print for a live toolpath.';TP.key=null;TP.M=null;return}
+ if(!us){tpw.style.display='none';tpc.textContent='';tpn.textContent='No USB print running. The toolpath appears here during an Upload and Print job.';TP.key=null;TP.M=null;return}
+ tpn.textContent='';tpw.style.display='flex';const key=j.job.file.name+'|'+ji.total;
  if(TP.key!==key&&!TP.busy)tpLoad(key).then(()=>tpDraw(ji.line||0));else if(TP.M&&TP.drawn!==ji.line){tpDraw(ji.line||0);TP.drawn=ji.line}}
 const NL=String.fromCharCode(10);let CS=0,CAM=null,MAC=[];
 function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
