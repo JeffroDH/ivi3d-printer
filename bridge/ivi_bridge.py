@@ -11,7 +11,7 @@ Commands:  serve | send FILE | postprocess FILE | watch DIR      (see --help)
 License: CC BY-NC-SA 4.0 (same as the repo).
 """
 import argparse, bisect, email.parser, fcntl, html, secrets, select, subprocess, termios, email.policy, glob, json, os, re, shutil, sys, threading, time
-import urllib.error, urllib.parse, urllib.request, uuid
+import urllib.error, urllib.parse, urllib.request, uuid, base64, collections
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 VERSION = "0.1.0"
@@ -50,6 +50,18 @@ DEFAULT_CONFIG = {
     "home_before_job": True,            # laser/CNC: G53, G28, ..., G54 before M2411 S2 (IVI 3licer behaviour)
     "laser_focus_z": None,              # machine Z (mm) to drop to before a laser job; required if homing
     "auto_clear_stale_job": True,       # on "Can't start work in current status: 5" send M2411 S3 and retry once              # max wait for 'ok' (long heats send 'busy' meanwhile)
+    # --- Fluidd/Mainsail-style extras (all optional) ---
+    "ntfy_url": "",                     # phone push: e.g. "https://ntfy.sh/my-secret-topic" ("" = off)
+    "webcam_stream_url": "",            # MJPEG stream of an IP camera, shown as-is on the Device page
+    "webcam_snapshot_url": "",          # JPEG snapshot URL (IP camera); used for the snapshot view + timelapse
+    "webcam_usb_device": "",            # local USB camera via ffmpeg/avfoundation, e.g. "0" ("" = off)
+    "timelapse": False,                 # snapshot per layer during USB (Upload and Print) jobs
+    "timelapse_dir": "~/Library/Application Support/ivi-bridge/timelapse",
+    "timelapse_fps": 15,
+    "history_file": "~/Library/Application Support/ivi-bridge/history.json",
+    "macros_file": "~/.config/ivi-bridge/macros.json",
+    "backup_dir": "~/.config/ivi-bridge/backups",
+    "temp_history_s": 1800,             # temperature graph window
 }
 
 def log(*a):
@@ -66,7 +78,8 @@ def load_config(path=None):
             cfg.update(json.load(f))
     if os.environ.get("IVI_PRINTER_TOKEN"):
         cfg["printer_token"] = os.environ["IVI_PRINTER_TOKEN"]
-    cfg["spool_dir"] = os.path.expanduser(cfg["spool_dir"])
+    for k in ("spool_dir", "timelapse_dir", "history_file", "macros_file", "backup_dir"):
+        cfg[k] = os.path.expanduser(cfg[k])
     return cfg
 
 def init_config(path=None, token="e0cf19a3-e0a4-4740-825f-bdffb49e58b8"):
@@ -88,6 +101,14 @@ def notify(cfg, msg, title="IVI Bridge"):
         q = lambda t: t.replace("\\", "\\\\").replace('"', '\\"')
         try: subprocess.Popen(["osascript", "-e", f'display notification "{q(msg)}" with title "{q(title)}"'])
         except OSError: pass
+    url = (cfg.get("ntfy_url") or "").strip()
+    if url.startswith(("https://", "http://")):
+        def push():
+            try:
+                req = urllib.request.Request(url, data=msg.encode(), headers={"Title": title})
+                urllib.request.urlopen(req, timeout=10).close()
+            except Exception as e: log("ntfy failed:", e)
+        threading.Thread(target=push, daemon=True).start()
 
 def find_usb_port(pattern):
     if not any(c in pattern for c in "*?["):
@@ -476,6 +497,7 @@ class SerialJob:
         self.started = None; self.status = {}
         self._pause = threading.Event(); self._cancel = threading.Event()
         self._flags = set(); self._layers = None
+        self.on_line = None; self.on_layer = None      # console log / timelapse hooks
 
     def _write(self, cmd):
         self.ser.write((cmd + "\n").encode())
@@ -483,7 +505,10 @@ class SerialJob:
     def _readline(self):
         line = self.ser.readline().decode(errors="replace").strip()
         if line:
-            parse_status(line, self.status)
+            st = parse_status(line, self.status)
+            if self.on_line and not st and not (line == "ok" or line.startswith("ok ") or "busy" in line):
+                try: self.on_line(line)
+                except Exception: pass
             self._event(line)
         return line
 
@@ -602,12 +627,17 @@ class SerialJob:
                 self._write("M110 N0")
                 self._wait(lambda l: l == "ok" or l.startswith("ok "), self.line_timeout)
             i = 0; resends = 0
+            lset = set(layer_starts(self.lines)) if self.on_layer else (); fired = set()
             while i < len(self.lines):
                 while self._pause.is_set() and not self._cancel.is_set():
                     self._readline()          # keep watching for resume / kill while paused
                 if self._cancel.is_set():
                     break
                 cmd = self.lines[i]
+                if i in lset and i not in fired:
+                    fired.add(i)
+                    try: self.on_layer(len(fired))
+                    except Exception as e: log("layer hook:", e)
                 self._resend = None
                 self._write(checksum_line(i + 1, cmd) if self.line_numbers else cmd)
                 if self._wait(lambda l: l == "ok" or l.startswith("ok "), self.line_timeout) is False:
@@ -682,7 +712,7 @@ def job_prelude(cfg, kind, lines):
 # ---------------------------------------------------------- monitor -------
 # Commands the bridge lets the UI / Orca send over USB. M104/M140/M220/M221 are standard Marlin and
 # NOT yet verified on firmware V1.3.2-alpha.
-ALLOWED_CMD = re.compile(r"^(M104 S\d{1,3}|M140 S\d{1,3}|M220 S\d{1,3}|M221 S\d{1,3}|M105|M2007|M2410|M2411 S[13]"
+ALLOWED_CMD = re.compile(r"^(M503|M115|M119|M104 S\d{1,3}|M140 S\d{1,3}|M220 S\d{1,3}|M221 S\d{1,3}|M105|M2007|M2410|M2411 S[13]"
                          r"|M106( S\d{1,3})?|M107|M114|M701|M702|M82|M83|G90|G91|G28( X)?( Y)?( Z)?"
                          r"|G1( [XYZEF]-?\d{1,4}(\.\d{1,3})?)+)$")
 LIMITS = {"M104": 300, "M140": 120, "M220": 300, "M221": 200, "M106": 255}
@@ -716,7 +746,7 @@ class SerialMonitor:
         self.cfg, self.factory, self.clock, self.sleep = cfg, serial_factory, clock, sleep
         self.ser = None; self.status = {}; self.error = None; self.updated = None
         self.lock = threading.Lock(); self._stop = threading.Event(); self._paused = threading.Event()
-        self.thread = None; self.last_cmd = None
+        self.thread = None; self.last_cmd = None; self.on_line = None
 
     @property
     def connected(self): return self.ser is not None
@@ -762,6 +792,7 @@ class SerialMonitor:
                     line = self.ser.readline().decode(errors="replace").strip()
                     if not line: continue
                     if parse_status(line, self.status): self.updated = time.time()
+                    elif self.on_line and line != "ok" and not line.startswith("ok "): self.on_line(line)
         except Exception as e:
             self.error = f"USB lost: {e}"; log("monitor:", self.error)
             with self.lock:
@@ -776,6 +807,23 @@ class SerialMonitor:
             try: self.poll_once()
             except Exception as e: self.error = str(e)
             self._stop.wait(self.cfg.get("monitor_interval_s", 3))
+
+    def query(self, cmd, seconds=3.0, until_ok=True):
+        """Send one allowed command and collect its reply lines (e.g. M503) until 'ok' or timeout."""
+        c = check_command(cmd); out = []
+        with self.lock:
+            if not self.ser: raise RuntimeError(f"USB not connected: {self.error or 'no port'}")
+            self.ser.write((c + "\n").encode()); self.last_cmd = c
+            end = self.clock() + seconds
+            while self.clock() < end:
+                line = self.ser.readline().decode(errors="replace").strip()
+                if not line: continue
+                if parse_status(line, self.status) and not line.startswith(("echo:", "M")): continue
+                if until_ok and (line == "ok" or line.startswith("ok ")):
+                    if out: break
+                    continue
+                out.append(line)
+        log("monitor: query", c, f"-> {len(out)} line(s)"); return out
 
     def send(self, cmd):
         c = check_command(cmd)
@@ -867,6 +915,206 @@ class FilamentChange:
         except Exception as e:
             self.state, self.error = "error", str(e); log("filament:", e)
 
+# ------------------------------------------- Fluidd/Mainsail-style extras ---
+_THUMB_RE = re.compile(r"^;\s*thumbnail(?:_(PNG|JPG|QOI))?\s+begin\s+(\d+)x(\d+)", re.I)
+_FIL_MM_RE = re.compile(r"^;\s*(?:total\s+)?filament used \[mm\]\s*=\s*([\d.]+)", re.I)
+_FIL_G_RE = re.compile(r"^;\s*(?:total\s+)?filament used \[g\]\s*=\s*([\d.]+)", re.I)
+_EST_RE = re.compile(r"^;\s*(?:estimated printing time \(normal mode\)|model printing time)\s*=\s*(.+)$", re.I)
+_IVI_EST_RE = re.compile(r"^;\s*estimated_time\(s\):\s*(\d+)", re.I)
+
+def _head_tail(path, head=2 << 20, tail=128 << 10):
+    size = os.path.getsize(path)
+    with open(path, "rb") as f:
+        a = f.read(head)
+        if size <= head: return a.decode(errors="replace"), ""
+        f.seek(max(head, size - tail)); return a.decode(errors="replace"), f.read().decode(errors="replace")
+
+def gcode_thumbnail(path):
+    """Largest Orca/Prusa embedded thumbnail ('; thumbnail begin WxH LEN' base64 block) -> (mime, bytes) or None."""
+    head, _ = _head_tail(path)
+    best, cur, buf = None, None, []
+    for line in head.splitlines():
+        m = _THUMB_RE.match(line.strip())
+        if m: cur = ((m.group(1) or "PNG").upper(), int(m.group(2)) * int(m.group(3))); buf = []; continue
+        if cur:
+            t = line.strip()
+            if re.match(r"^;\s*thumbnail(?:_\w+)?\s+end", t, re.I):
+                if cur[0] != "QOI" and (not best or cur[1] > best[1]): best = (cur[0], cur[1], "".join(buf))
+                cur = None
+            else: buf.append(t.lstrip(";").strip())
+    if not best: return None
+    try: data = base64.b64decode(best[2])
+    except Exception: return None
+    return ("image/jpeg" if best[0] == "JPG" else "image/png"), data
+
+def gcode_stats(path):
+    """Slicer estimate (s) and filament used from Orca's comments (top config block or end of file)."""
+    head, tail = _head_tail(path)
+    st = {"time_s": None, "filament_mm": None, "filament_g": None, "thumbnail": False}
+    for line in (head + "\n" + tail).splitlines():
+        l = line.strip()
+        if not l.startswith(";"): continue
+        if _THUMB_RE.match(l): st["thumbnail"] = True
+        m = _EST_RE.match(l)
+        if m and st["time_s"] is None: st["time_s"] = parse_duration(m.group(1))
+        m = _IVI_EST_RE.match(l)
+        if m and st["time_s"] is None: st["time_s"] = int(m.group(1))
+        m = _FIL_MM_RE.match(l)
+        if m and st["filament_mm"] is None: st["filament_mm"] = float(m.group(1))
+        m = _FIL_G_RE.match(l)
+        if m and st["filament_g"] is None: st["filament_g"] = float(m.group(1))
+    return st
+
+def safe_job_path(cfg, name):
+    """Spool file by bare name only (no paths), must exist and be G-code."""
+    name = str(name or "")
+    if not name or name != os.path.basename(name) or name.startswith(".") or not name.lower().endswith((".gcode", ".gco", ".g")):
+        raise ValueError("bad file name")
+    p = os.path.join(cfg["spool_dir"], name)
+    if not os.path.isfile(p): raise FileNotFoundError(name)
+    return p
+
+def list_jobs(cfg):
+    d = cfg["spool_dir"]; out = []
+    if not os.path.isdir(d): return out
+    for n in os.listdir(d):
+        p = os.path.join(d, n)
+        if n.startswith(".") or not n.lower().endswith((".gcode", ".gco", ".g")) or not os.path.isfile(p): continue
+        try: st = gcode_stats(p)
+        except OSError: continue
+        out.append(dict(st, name=n, size=os.path.getsize(p), mtime=os.path.getmtime(p)))
+    return sorted(out, key=lambda f: -f["mtime"])
+
+class History:
+    """Print history in a small JSON file (newest last, capped)."""
+    def __init__(self, path, cap=500):
+        self.path, self.cap, self.lock = path, cap, threading.Lock()
+    def load(self):
+        try:
+            with open(self.path) as f: return json.load(f)
+        except (OSError, ValueError): return []
+    def add(self, rec):
+        with self.lock:
+            h = self.load(); h.append(rec); h = h[-self.cap:]
+            os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+            tmp = self.path + ".tmp"
+            with open(tmp, "w") as f: json.dump(h, f, indent=1)
+            os.replace(tmp, self.path)
+    def clear(self):
+        with self.lock:
+            try: os.remove(self.path)
+            except OSError: pass
+    def summary(self):
+        h = self.load(); done = [r for r in h if r.get("state") == "Finished"]
+        return {"jobs": h[::-1], "totals": {"count": len(h), "finished": len(done),
+                "print_time_s": round(sum(r.get("duration_s") or 0 for r in h)),
+                "filament_g": round(sum(r.get("filament_g") or 0 for r in done), 2),
+                "filament_mm": round(sum(r.get("filament_mm") or 0 for r in done), 1)}}
+
+DEFAULT_MACROS = [
+    {"name": "Preheat PLA", "commands": ["M104 S210", "M140 S60"]},
+    {"name": "Preheat PETG", "commands": ["M104 S240", "M140 S80"]},
+    {"name": "Cooldown", "commands": ["M104 S0", "M140 S0", "M107"]},
+    {"name": "Park (home)", "commands": ["G28"]},
+    {"name": "Load filament", "commands": ["@load"]},
+    {"name": "Unload filament", "commands": ["@unload"]},
+    {"name": "Settings backup (M503)", "commands": ["@backup"]},
+]
+# Commands that are safe to send while a USB stream runs (reports + the live tuning the page already offers).
+STREAM_SAFE = re.compile(r"^(M105|M2007|M114|M115|M104 S\d+|M140 S\d+|M106( S\d+)?|M107|M220 S\d+|M221 S\d+)$")
+
+def check_macro_line(c):
+    c = " ".join(str(c).strip().split())
+    if c.startswith("@"):
+        w = c.split()
+        if w[0] in ("@load", "@unload") and len(w) <= 2: return c
+        if c == "@backup": return c
+        raise ValueError(f"unknown macro directive {c!r} (use @load [name|°C], @unload [name|°C], @backup)")
+    return check_command(c)
+
+def validate_macros(ms):
+    if not isinstance(ms, list) or len(ms) > 50: raise ValueError("macros must be a list (max 50)")
+    out = []
+    for m in ms:
+        name = str((m or {}).get("name", "")).strip()[:40]
+        cmds = (m or {}).get("commands")
+        if isinstance(cmds, str): cmds = [x for x in re.split(r"[\n;]+", cmds) if x.strip()]
+        if not name or not cmds or len(cmds) > 40: raise ValueError(f"macro {name or '?'}: needs a name and 1-40 commands")
+        out.append({"name": name, "commands": [check_macro_line(c) for c in cmds]})
+    if len({m["name"] for m in out}) != len(out): raise ValueError("macro names must be unique")
+    return out
+
+def find_ffmpeg():
+    return shutil.which("ffmpeg") or next((p for p in ("/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg")
+                                           if os.path.exists(p)), None)
+
+class Webcam:
+    def __init__(self, cfg, fetch=None, run=None):
+        self.cfg = cfg; self.fetch = fetch or self._fetch; self.run = run or subprocess.run
+    def info(self):
+        c = self.cfg; usb = bool(str(c.get("webcam_usb_device", "")).strip())
+        snap = bool(c.get("webcam_snapshot_url")) or (usb and bool(find_ffmpeg()))
+        return {"enabled": bool(c.get("webcam_stream_url") or snap), "stream": bool(c.get("webcam_stream_url")),
+                "snapshot": snap, "source": "ip" if c.get("webcam_snapshot_url") or c.get("webcam_stream_url") else ("usb" if usb else None),
+                "usb_without_ffmpeg": usb and not find_ffmpeg(), "timelapse": bool(c.get("timelapse")),
+                "ffmpeg": bool(find_ffmpeg())}
+    def _fetch(self, url):
+        with urllib.request.urlopen(url, timeout=10) as r: return r.read(8 << 20)
+    def snapshot(self):
+        """JPEG bytes from the snapshot URL, else one frame from the USB camera via ffmpeg."""
+        url = self.cfg.get("webcam_snapshot_url")
+        if url: return self.fetch(url)
+        dev = str(self.cfg.get("webcam_usb_device", "")).strip(); ff = find_ffmpeg()
+        if dev and ff:
+            fmt = "avfoundation" if sys.platform == "darwin" else "v4l2"
+            r = self.run([ff, "-loglevel", "error", "-f", fmt, "-framerate", "30", "-i", dev, "-frames:v", "1",
+                          "-f", "image2", "-vcodec", "mjpeg", "-"], capture_output=True, timeout=15)
+            if r.returncode == 0 and r.stdout: return r.stdout
+            raise RuntimeError("ffmpeg could not read the USB camera: " + (r.stderr or b"").decode(errors="replace")[-200:])
+        raise RuntimeError("no webcam configured")
+
+class Timelapse:
+    """One snapshot per layer change of a USB job; assembled to MP4 with ffmpeg at the end (frames kept otherwise)."""
+    def __init__(self, cfg, cam, name, run=None):
+        self.cfg, self.cam, self.run = cfg, cam, run or subprocess.run
+        stem = re.sub(r"[^\w.\-]+", "_", os.path.splitext(name)[0])[:60] or "job"
+        self.dir = os.path.join(cfg["timelapse_dir"], time.strftime("%Y%m%d-%H%M%S") + "-" + stem)
+        self.frames = 0; self.busy = False; self.video = None; self.error = None
+    def layer(self, n):
+        if self.busy: return                       # previous snapshot still running: skip this layer
+        self.busy = True
+        threading.Thread(target=self._grab, daemon=True).start()
+    def _grab(self):
+        try:
+            img = self.cam.snapshot(); os.makedirs(self.dir, exist_ok=True)
+            with open(os.path.join(self.dir, "frame_%05d.jpg" % (self.frames + 1)), "wb") as f: f.write(img)
+            self.frames += 1
+        except Exception as e: self.error = str(e)
+        finally: self.busy = False
+    def finish(self):
+        for _ in range(100):
+            if not self.busy: break
+            time.sleep(0.1)
+        ff = find_ffmpeg()
+        if not self.frames: return None
+        if not ff: self.error = "ffmpeg not found; frames kept in " + self.dir; return None
+        out = self.dir + ".mp4"
+        try:
+            r = self.run([ff, "-loglevel", "error", "-y", "-framerate", str(int(self.cfg.get("timelapse_fps", 15))),
+                          "-i", os.path.join(self.dir, "frame_%05d.jpg"), "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                          "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", out], capture_output=True, timeout=600)
+            if r.returncode == 0 and os.path.exists(out): self.video = out; shutil.rmtree(self.dir, ignore_errors=True)
+            else: self.error = "ffmpeg failed: " + (r.stderr or b"").decode(errors="replace")[-200:]
+        except Exception as e: self.error = str(e)
+        return self.video
+
+def list_timelapses(cfg):
+    d = cfg["timelapse_dir"]
+    if not os.path.isdir(d): return []
+    out = [{"name": n, "size": os.path.getsize(os.path.join(d, n)), "mtime": os.path.getmtime(os.path.join(d, n))}
+           for n in os.listdir(d) if n.endswith(".mp4")]
+    return sorted(out, key=lambda f: -f["mtime"])
+
 # ------------------------------------------------- OctoPrint emulation ----
 class Bridge:
     def __init__(self, cfg, wifi_factory=None, serial_factory=None, awake_factory=None):
@@ -880,6 +1128,116 @@ class Bridge:
         self.monitor = SerialMonitor(cfg, self.serial_factory) if cfg.get("serial_monitor", True) else None
         self.filament = None
         self.storage_print = None      # name of a Wi-Fi-uploaded job; USB stays closed until the user re-enables it
+        self.console = collections.deque(maxlen=400); self.console_seq = 0; self.clock = time.time
+        if self.monitor: self.monitor.on_line = lambda l: self.log_console("<", l)
+        self.history = History(cfg.get("history_file") or os.path.join(cfg["spool_dir"], "..", "history.json"))
+        self.webcam = Webcam(cfg); self.timelapse = None; self.last_timelapse = None
+        self.temps = collections.deque(maxlen=max(10, int(cfg.get("temp_history_s", 1800)) // 2))
+        self.queue = []
+
+    # ---- console / safety layer ----
+    def log_console(self, d, text):
+        self.console_seq += 1
+        self.console.append({"seq": self.console_seq, "t": time.time(), "dir": d, "text": str(text)[:500]})
+
+    def guard(self, cmds):
+        """Safety layer for console + macros: validate everything first; nothing while the printer prints
+        from its own storage; only STREAM_SAFE commands while a USB job streams."""
+        cs = [check_macro_line(c) for c in cmds]
+        if self.usb_locked(): raise RuntimeError("USB controls are off while the printer prints from its own storage")
+        if self.busy():
+            bad = [c for c in cs if not STREAM_SAFE.match(c)]
+            if bad: raise RuntimeError(f"not allowed while a USB job is streaming: {', '.join(bad)} "
+                                       "(only temperature/fan/speed/flow and status reports)")
+        return cs
+
+    def console_send(self, cmd):
+        c, = self.guard([cmd])
+        if c.startswith("@"): raise ValueError("@ directives are for macros")
+        self.log_console(">", c)
+        if not self.busy() and self.monitor and c in ("M503", "M115", "M119", "M114", "M105", "M2007"):
+            for l in self.monitor.query(c, 3.0): self.log_console("<", l)
+            return c
+        return self.send_command(c)
+
+    # ---- macros ----
+    def macros(self):
+        try:
+            with open(self.cfg["macros_file"]) as f: return validate_macros(json.load(f))
+        except (OSError, ValueError, KeyError): return [dict(m) for m in DEFAULT_MACROS]
+
+    def save_macros(self, ms):
+        ms = validate_macros(ms); path = self.cfg["macros_file"]
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path + ".tmp", "w") as f: json.dump(ms, f, indent=2)
+        os.replace(path + ".tmp", path); return ms
+
+    def _fil_temp(self, arg):
+        if arg is None: raise ValueError("choose a filament (the page opens the picker)")
+        for n, t in self.cfg.get("filaments") or DEFAULT_CONFIG["filaments"]:
+            if str(n).lower() == arg.lower(): return int(t)
+        return int(float(arg))
+
+    def run_macro(self, name):
+        m = next((m for m in self.macros() if m["name"] == name), None)
+        if not m: raise KeyError(f"no macro {name!r}")
+        cs = self.guard(m["commands"]); out = []
+        for c in cs:
+            if c.startswith("@load") or c.startswith("@unload"):
+                w = c.split(); self.start_filament(w[0][1:], self._fil_temp(w[1] if len(w) > 1 else None))
+                out.append(c)
+            elif c == "@backup": out.append("backup: " + os.path.basename(self.backup_settings()))
+            else: self.log_console(">", c); out.append(self.send_command(c))
+        return out
+
+    def backup_settings(self):
+        """M503 -> ~/.config/ivi-bridge/backups/m503-<time>.txt (0600). Idle + USB monitor only."""
+        if self.busy(): raise RuntimeError("a USB job is running")
+        if self.usb_locked(): raise RuntimeError("USB controls are off while the printer prints from its own storage")
+        if not self.monitor: raise RuntimeError("serial_monitor is off")
+        self.log_console(">", "M503"); lines = self.monitor.query("M503", 5.0)
+        for l in lines: self.log_console("<", l)
+        if not lines: raise RuntimeError("printer sent no M503 reply")
+        d = self.cfg["backup_dir"]; os.makedirs(d, mode=0o700, exist_ok=True)
+        path = os.path.join(d, time.strftime("m503-%Y%m%d-%H%M%S.txt"))
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f: f.write("; IVI3D settings backup (M503) %s\n" % time.strftime("%Y-%m-%d %H:%M:%S") + "\n".join(lines) + "\n")
+        return path
+
+    def list_backups(self):
+        d = self.cfg["backup_dir"]
+        return sorted((n for n in os.listdir(d) if n.endswith(".txt")), reverse=True) if os.path.isdir(d) else []
+
+    # ---- temperature graph ----
+    def sample_temps(self):
+        t = (self.live_status() or {}).get("temps") or {}
+        if not t: return None
+        r = {"t": round(time.time(), 1)}
+        for k in ("tool0", "bed"):
+            if k in t: r[k] = [t[k]["actual"], t[k]["target"]]
+        self.temps.append(r); return r
+
+    def _temp_loop(self):
+        while True:
+            try: self.sample_temps()
+            except Exception: pass
+            time.sleep(2)
+
+    # ---- files / queue ----
+    def print_file(self, name):
+        path = safe_job_path(self.cfg, name)
+        if self.usb_locked(): raise RuntimeError("USB controls are off while the printer prints from its own storage")
+        if self.busy(): raise RuntimeError("a job is already running")
+        return self.submit(path, name, start=True, mode="usb")
+
+    def delete_file(self, name):
+        path = safe_job_path(self.cfg, name)
+        if self.busy() and self.job and self.job.name == name: raise RuntimeError("file is printing")
+        os.remove(path); self.queue = [q for q in self.queue if q != name]
+
+    def start_next(self):
+        if not self.queue: raise RuntimeError("queue is empty")
+        msg = self.print_file(self.queue[0]); self.queue.pop(0); return msg
 
     def usb_locked(self): return self.storage_print is not None
 
@@ -972,6 +1330,12 @@ class Bridge:
             except Exception as e:
                 notify(self.cfg, f"Wi-Fi upload of {name} failed: {e}"); raise
             self.lock_usb(name)
+            try:
+                st = gcode_stats(path)
+                self.history.add({"name": name, "started": time.time(), "ended": None, "duration_s": None,
+                                  "state": "Sent to printer (Wi-Fi)", "via": "wifi", "estimate_s": st.get("time_s"),
+                                  "filament_mm": st.get("filament_mm"), "filament_g": st.get("filament_g")})
+            except Exception as e: log("history:", e)
             m = (f"Uploaded {name} to the printer over Wi-Fi. Start it on the touch screen. "
                  "USB controls are off until you press 'Printer idle, re-enable USB' on the Device page.")
             notify(self.cfg, m); return m
@@ -1000,8 +1364,15 @@ class Bridge:
                                  auto_clear=self.cfg.get("auto_clear_stale_job", True),
                                  notify=lambda m: notify(self.cfg, m),
                                  line_numbers=self.cfg.get("line_numbers", True))
+            self.job.on_line = lambda l: self.log_console("<", l)
+            self.timelapse = None
+            if self.cfg.get("timelapse") and self.webcam.info()["snapshot"]:
+                self.timelapse = Timelapse(self.cfg, self.webcam, name); self.job.on_layer = self.timelapse.layer
+            try: stats = gcode_stats(path)
+            except OSError: stats = {}
+            t0 = time.time()
             awake = self.awake_factory()
-            def runner(job=self.job):
+            def runner(job=self.job, tl=self.timelapse):
                 try:
                     job.run()
                 finally:
@@ -1014,6 +1385,16 @@ class Bridge:
                     msg = {"Operational": f"Finished {job.name}", "Cancelled": f"Cancelled {job.name}"}.get(
                         job.state, f"Print {job.name} stopped: {job.error}")
                     notify(self.cfg, msg)
+                    rec = {"name": job.name, "started": t0, "ended": time.time(), "duration_s": round(time.time() - t0),
+                           "state": {"Operational": "Finished"}.get(job.state, job.state), "error": job.error,
+                           "via": "usb", "lines": job.sent, "total_lines": len(job.lines),
+                           "estimate_s": stats.get("time_s"), "filament_mm": stats.get("filament_mm"),
+                           "filament_g": stats.get("filament_g")}
+                    if tl:
+                        v = tl.finish(); rec["timelapse"] = os.path.basename(v) if v else None
+                        self.last_timelapse = {"frames": tl.frames, "video": rec["timelapse"], "error": tl.error}
+                    try: self.history.add(rec)
+                    except Exception as e: log("history:", e)
             self.thread = threading.Thread(target=runner, daemon=True); self.thread.start()
         notify(self.cfg, f"Printing {name} over USB")
         return f"Printing {name} over USB serial."
@@ -1088,6 +1469,12 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
 .ban b{color:#3d2900}.ban button{background:#e8b84a;color:#2a1c00;border-radius:999px;padding:.5em 1em;white-space:nowrap}
 .job{display:none;margin:.8em 1em 0;padding:.8em 1em;border-radius:10px;background:#eaf2ff;border:1px solid #b8cdee}
 .job .hbar{margin:.5em 0}.job .row{display:flex;flex-wrap:wrap;gap:.4em 1.4em;font-size:13px;color:#456}.job button{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .9em}
+.flist{display:flex;flex-direction:column;gap:.5em;max-height:420px;overflow:auto}.fi{display:flex;gap:.7em;align-items:center;border:1px solid #e0e8f5;border-radius:8px;padding:.4em}
+.fi img,.fi .nt{width:72px;height:72px;object-fit:contain;background:#f4f8fe;border-radius:6px;flex:none}.fi .nt{display:flex;align-items:center;justify-content:center;font-size:11px;color:#89a}
+.fi b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fa{display:flex;gap:.4em;margin-top:.3em}.fa button,.mb{background:var(--lb);color:var(--t);border-radius:999px;padding:.35em .9em;font-size:13px}
+.mlist{display:flex;flex-wrap:wrap;gap:.5em}.mb{font-size:15px;padding:.5em 1em}
+.ht{width:100%;border-collapse:collapse;font-size:12px;margin:.4em 0}.ht th{text-align:left;color:#567;font-weight:600;border-bottom:1px solid #d3e0f3}.ht td{padding:.25em .3em;border-bottom:1px solid #eef3fa}.ht .ok{color:#1a8a3a}.ht .bad{color:#c22}
+.con{height:260px;overflow:auto;background:#15171c;color:#cfd6e2;font:12px Menlo,monospace;border-radius:8px;padding:.5em}.con .cs{color:#7fc8ff}.con .ce{color:#ff8a7a}
 @media (min-width:1100px){.tabs{display:none}.panels{display:grid;grid-template-columns:1fr 1fr;gap:2em}
 .panel{display:block;border:1px solid #d3e0f3;border-radius:10px;padding:1em}}
 </style>
@@ -1139,9 +1526,37 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
  <div class=lbl>Jog Speed<br>(mm/min)</div><div class=opts data-g=fspd><button class=sel>100</button><button>200</button><button>500</button><button>1000</button></div>
  <div class=lbl>Jog Distance<br>(mm)</div><div class=opts data-g=fdst><button class=sel>10</button><button>20</button><button>50</button><button>100</button></div>
 </div></div>
+<div class=panel id=p_cam><h3>Webcam</h3>
+<div id=camoff class=lbl>No camera configured. Set <code>webcam_stream_url</code>, <code>webcam_snapshot_url</code> or <code>webcam_usb_device</code> in the bridge config (see README).</div>
+<img id=camimg alt="webcam" style="display:none;width:100%;max-height:420px;object-fit:contain;background:#15171c;border-radius:8px">
+<div class=lbl id=caminfo style="margin-top:.4em"></div>
+<div id=tlv class=lbl style="margin-top:.4em"></div>
+<h3 style="margin-top:1em">Temperatures <span class=lbl id=tgl></span></h3>
+<canvas id=tg width=640 height=220 style="width:100%;background:#fbfdff;border:1px solid #d3e0f3;border-radius:8px"></canvas>
+<div class=lbl><span style="color:#e2531f">&#9644; nozzle</span> &nbsp; <span style="color:#1a5cf0">&#9644; bed</span> &nbsp; dashed = target</div>
+</div>
+<div class=panel id=p_files><h3>Files <span class=lbl>uploaded jobs on this Mac</span></h3>
+<div id=flist class=flist></div>
+<h3 style="margin-top:1em">Queue</h3><div id=qlist class=lbl>Empty.</div>
+<div class=compact style="margin-top:.4em;border:0;padding:0"><button class=u onclick="qact('start_next')">Start next</button><button onclick="qact('clear')">Clear queue</button><span class=lbl>Queued jobs never start on their own: remove the finished part first, then press Start next.</span></div>
+<h3 style="margin-top:1em">History</h3><div id=hstat class=lbl></div>
+<table class=ht id=htab></table>
+<div class=compact style="border:0;padding:0"><button onclick="if(confirm('Clear print history?'))hact()">Clear history</button></div>
+</div>
+<div class=panel id=p_con><h3>Macros</h3>
+<div id=mlist class=mlist></div>
+<details style="margin-top:.6em"><summary class=lbl>Edit macros</summary>
+<p class=lbl>One macro per line: <code>Name | command; command</code>. Commands must pass the bridge's safety list. Special: <code>@load</code> / <code>@unload</code> (filament picker, or <code>@load PLA</code>), <code>@backup</code> (M503 to a file).</p>
+<textarea id=med rows=8 style="width:100%;font:13px Menlo,monospace;border:1px solid #bcd;border-radius:6px;padding:.4em"></textarea>
+<div class=compact style="border:0;padding:0"><button onclick="msave()">Save macros</button><button onclick="if(confirm('Restore the default macros?'))mreset()">Restore defaults</button></div></details>
+<h3 style="margin-top:1em">Console</h3>
+<div id=con class=con></div>
+<div style="display:flex;gap:.5em;margin-top:.5em"><input id=cin placeholder="G-code, e.g. M105" style="flex:1;font:14px Menlo,monospace;padding:.45em;border:1px solid #bcd;border-radius:6px" onkeydown="if(event.key=='Enter')csend()"><button id=cbtn class=btn style="min-width:5em" onclick="csend()">Send</button></div>
+<div class=lbl id=cnote style="margin-top:.3em">Only commands on the bridge's safety list are sent. During a USB print only temperature, fan, speed, flow and status commands are allowed; during an Upload (Wi-Fi) print the console is off.</div>
+</div>
 </div>
 <p class=note id=msg>Controls need USB. <b>Upload and Print</b> streams the job over USB (live status, Mac must stay awake and connected); <b>Upload</b> stores it on the printer for the touch screen and turns USB controls off during that print. Speed % (M220) and flow % (M221) are not yet verified on this firmware.</p>
-<div class=tabs><button id=t_tool class=on onclick="tab('tool')">Toolhead</button><button id=t_fil onclick="tab('fil')">Filament</button></div>
+<div class=tabs><button id=t_tool class=on onclick="tab('tool')">Toolhead</button><button id=t_fil onclick="tab('fil')">Filament</button><button id=t_cam onclick="tab('cam')">Camera</button><button id=t_files onclick="tab('files')">Files</button><button id=t_con onclick="tab('con')">Console</button></div>
 <div id=dlg class=dlg style="display:none"><div class=box><div class=top style="border-radius:12px 12px 0 0">
 <span id=mt>Filament</span></div><div style="padding:1.2em">
 <div id=v_pick><p class=lbl>Which filament is loaded?</p><div id=fp class=fgrid2></div>
@@ -1154,7 +1569,7 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
 async function usbOn(){if(!confirm('Is the printer idle (stored print finished or cancelled)? Opening USB during a stored print stalls it.'))return;
  await fetch('/api/ivi/usb',{method:'POST',headers:H,body:JSON.stringify({action:'enable'})});say('USB controls re-enabled');tick()}
 function hms(s){if(s==null)return'–';s=Math.round(s);return Math.floor(s/3600)+'h '+String(Math.floor(s%3600/60)).padStart(2,'0')+'m'}
-function tab(t){for(const n of['tool','fil']){document.getElementById('t_'+n).classList.toggle('on',n==t);document.getElementById('p_'+n).classList.toggle('on',n==t)}}
+function tab(t){for(const n of['tool','fil','cam','files','con']){document.getElementById('t_'+n).classList.toggle('on',n==t);document.getElementById('p_'+n).classList.toggle('on',n==t)}}
 tab('tool');
 function say(m){msg.textContent=m}
 function sel(gr){const b=document.querySelector('[data-g='+gr+'] .sel');return b?b.textContent:''}
@@ -1230,6 +1645,53 @@ function tpTick(j,lk){const ji=j.ivi||{},us=ji.source=='usb stream'&&!/^(Operati
  if(!us){tpp.style.display='none';TP.key=null;TP.M=null;return}
  tpp.style.display='block';tpw.style.display='flex';const key=j.job.file.name+'|'+ji.total;
  if(TP.key!==key&&!TP.busy)tpLoad(key).then(()=>tpDraw(ji.line||0));else if(TP.M&&TP.drawn!==ji.line){tpDraw(ji.line||0);TP.drawn=ji.line}}
+const NL=String.fromCharCode(10);let CS=0,CAM=null,MAC=[];
+function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+async function J(u,o){const r=await fetch(u,o?{method:'POST',headers:H,body:JSON.stringify(o)}:{headers:H});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j}
+async function camInit(){try{CAM=await J('/api/ivi/webcam')}catch(e){return}
+ if(!CAM.enabled){camoff.style.display='block';camimg.style.display='none';caminfo.textContent=CAM.usb_without_ffmpeg?'USB camera set, but ffmpeg was not found (brew install ffmpeg).':'';return}
+ camoff.style.display='none';camimg.style.display='block';if(CAM.stream)camimg.src=CAM.stream_url;else camSnap();
+ caminfo.textContent=(CAM.stream?'Live stream':'Snapshot every 3 s')+' · timelapse '+(CAM.timelapse?(CAM.snapshot?'on (one frame per layer, USB prints)':'needs a snapshot URL or USB camera'):'off')+(CAM.timelapse&&!CAM.ffmpeg?' · no ffmpeg: frames are kept, no video':'')}
+function camSnap(){if(CAM&&CAM.enabled&&!CAM.stream)camimg.src='/api/ivi/webcam/snapshot?apikey='+encodeURIComponent(K)+'&t='+Date.now()}
+async function tlLoad(){try{const v=(await J('/api/ivi/timelapse')).videos;tlv.innerHTML=v.length?'Timelapses: '+v.slice(0,5).map(x=>'<a target=_blank href="/api/ivi/timelapse/file?name='+encodeURIComponent(x.name)+'&apikey='+encodeURIComponent(K)+'">'+esc(x.name)+'</a>').join(' · '):''}catch(e){}}
+async function tgDraw(){let d;try{d=await J('/api/ivi/temps')}catch(e){return}const S=d.samples,c=tg.getContext('2d'),W=640,Hh=220,L=36;c.clearRect(0,0,W,Hh);
+ const mx=Math.max(60,...S.flatMap(s=>[s.tool0?Math.max(s.tool0[0],s.tool0[1]):0,s.bed?Math.max(s.bed[0],s.bed[1]):0]))*1.1,now=Date.now()/1000,win=Math.min(d.window_s,Math.max(120,S.length?now-S[0].t:0));
+ c.font='11px sans-serif';c.fillStyle='#789';c.strokeStyle='#e3ebf7';c.lineWidth=1;
+ for(let v=0;v<=mx;v+=50){const y=Hh-14-(Hh-24)*v/mx;c.beginPath();c.moveTo(L,y);c.lineTo(W,y);c.stroke();c.fillText(v+'°',4,y+4)}
+ c.fillText('-'+Math.round(win/60)+' min',L,Hh-2);c.fillText('now',W-24,Hh-2);
+ const X=t=>L+(W-L)*(1-(now-t)/win),Y=v=>Hh-14-(Hh-24)*v/mx;
+ for(const[k,col]of[['tool0','#e2531f'],['bed','#1a5cf0']])for(const i of[1,0]){c.strokeStyle=col;c.lineWidth=i?1:2;c.setLineDash(i?[5,4]:[]);c.beginPath();let f=1;for(const s of S){if(!s[k])continue;const x=X(s.t),y=Y(s[k][i]);f?c.moveTo(x,y):c.lineTo(x,y);f=0}c.stroke()}
+ c.setLineDash([]);const l=S[S.length-1];tgl.textContent=l?('nozzle '+(l.tool0?Math.round(l.tool0[0])+'/'+Math.round(l.tool0[1]):'–')+'°C · bed '+(l.bed?Math.round(l.bed[0])+'/'+Math.round(l.bed[1]):'–')+'°C'):'(no data yet — needs USB)'}
+function fmtG(f){return f.filament_g!=null?f.filament_g.toFixed(1)+' g':f.filament_mm!=null?(f.filament_mm/1000).toFixed(2)+' m':'–'}
+async function filesLoad(){let d;try{d=await J('/api/ivi/files')}catch(e){return}
+ flist.innerHTML=d.files.length?d.files.map(f=>'<div class=fi>'+(f.thumbnail?'<img src="/api/ivi/files/thumb?name='+encodeURIComponent(f.name)+'&apikey='+encodeURIComponent(K)+'">':'<div class=nt>no preview</div>')+'<div style="flex:1;min-width:0"><b>'+esc(f.name)+'</b><div class=lbl>'+hms(f.time_s)+' · '+fmtG(f)+' · '+(f.size/1048576).toFixed(1)+' MB · '+new Date(f.mtime*1000).toLocaleString()+'</div>'
+  +'<div class=fa><button class=u data-a=print data-n="'+esc(f.name)+'">Print (USB)</button><button class=u data-a=queue data-n="'+esc(f.name)+'">Queue</button><button data-a=delete data-n="'+esc(f.name)+'">Delete</button></div></div></div>').join(''):'<div class=lbl>No uploaded jobs yet.</div>';
+ flist.querySelectorAll('button').forEach(b=>b.onclick=()=>fact(b.dataset.a,b.dataset.n));
+ qlist.innerHTML=d.queue.length?d.queue.map((n,i)=>(i+1)+'. '+esc(n)+' <a href=# data-n="'+esc(n)+'">remove</a>').join('<br>'):'Empty.';
+ qlist.querySelectorAll('a').forEach(a=>a.onclick=e=>{e.preventDefault();fact('unqueue',a.dataset.n)});uLock()}
+async function fact(a,n){if(a=='delete'&&!confirm('Delete '+n+' from this Mac?'))return;if(a=='print'&&!confirm('Print '+n+' now over USB? Make sure the bed is clear.'))return;
+ try{const j=await J('/api/ivi/files',{action:a,name:n});say(j.message||(a+': '+n))}catch(e){say('Failed: '+e.message)}filesLoad();tick()}
+async function qact(a){if(a=='start_next'&&!confirm('Start the next queued job over USB? Make sure the bed is clear.'))return;try{const j=await J('/api/ivi/queue',{action:a});say(j.message||'Queue cleared')}catch(e){say('Failed: '+e.message)}filesLoad()}
+async function histLoad(){let d;try{d=await J('/api/ivi/history')}catch(e){return}const t=d.totals;
+ hstat.textContent=t.count+' jobs · '+t.finished+' finished · '+hms(t.print_time_s)+' printing · '+t.filament_g+' g filament';
+ htab.innerHTML='<tr><th>Job</th><th>Result</th><th>Time</th><th>Est.</th><th>Filament</th><th>When</th></tr>'+d.jobs.slice(0,30).map(r=>'<tr><td>'+esc(r.name)+'</td><td class="'+(r.state=='Finished'?'ok':r.via=='wifi'?'':'bad')+'">'+esc(r.state)+'</td><td>'+hms(r.duration_s)+'</td><td>'+hms(r.estimate_s)+'</td><td>'+fmtG(r)+'</td><td>'+new Date(r.started*1000).toLocaleString()+'</td></tr>').join('')}
+async function hact(){await J('/api/ivi/history',{action:'clear'}).catch(()=>{});histLoad()}
+async function mLoad(){try{MAC=(await J('/api/ivi/macros')).macros}catch(e){return}
+ mlist.innerHTML=MAC.map((m,i)=>'<button class="mb u" data-i='+i+' title="'+esc(m.commands.join('; '))+'">'+esc(m.name)+'</button>').join('');
+ mlist.querySelectorAll('button').forEach(b=>b.onclick=()=>mrun(MAC[+b.dataset.i]));med.value=MAC.map(m=>m.name+' | '+m.commands.join('; ')).join(NL);uLock()}
+async function mrun(m){const c0=m.commands[0];if(m.commands.length==1&&(c0=='@load'||c0=='@unload'))return pick(c0.slice(1));
+ try{const j=await J('/api/ivi/macros',{action:'run',name:m.name});say('Ran '+m.name+': '+j.ran.join(' · '))}catch(e){say('Failed: '+e.message)}conPoll();tick()}
+async function msave(){const ms=med.value.split(NL).filter(l=>l.trim()).map(l=>{const i=l.indexOf('|');return{name:l.slice(0,i).trim(),commands:l.slice(i+1).split(';').map(s=>s.trim()).filter(s=>s)}});
+ try{await J('/api/ivi/macros',{action:'save',macros:ms});say('Macros saved')}catch(e){say('Not saved: '+e.message)}mLoad()}
+async function mreset(){await J('/api/ivi/macros',{action:'reset'}).catch(()=>{});mLoad()}
+async function conPoll(){let d;try{d=await J('/api/ivi/console?since='+CS)}catch(e){return}
+ for(const l of d.lines){const e=document.createElement('div');e.className=l.dir=='>'?'cs':'cr';e.textContent=(l.dir=='>'?'> ':'')+l.text;con.appendChild(e)}
+ if(d.lines.length){CS=d.seq;while(con.children.length>400)con.removeChild(con.firstChild);con.scrollTop=con.scrollHeight}
+ cin.disabled=cbtn.disabled=!d.enabled;cin.placeholder=d.usb_locked?'Console off: printing from printer storage (Upload)':!d.enabled?'Console needs USB':d.streaming?'USB print running: temp/fan/speed/flow/status only':'G-code, e.g. M105'}
+async function csend(){const c=cin.value.trim();if(!c)return;try{await J('/api/ivi/console',{command:c});cin.value=''}catch(e){const x=document.createElement('div');x.className='ce';x.textContent='! '+e.message;con.appendChild(x);con.scrollTop=con.scrollHeight}conPoll()}
+function uLock(){const u=!usb.textContent.startsWith('off')&&!usb.textContent.startsWith('not');document.querySelectorAll('#p_files .u,#p_con .u').forEach(b=>b.disabled=!u)}
+camInit();tlLoad();tgDraw();filesLoad();histLoad();mLoad();conPoll();
+setInterval(()=>{camSnap();tgDraw();conPoll()},3000);setInterval(()=>{filesLoad();histLoad();tlLoad()},15000);
 tick();setInterval(tick,2000)</script>"""
 
 def status_page(cfg):
@@ -1269,13 +1731,93 @@ def make_handler(bridge):
             key = cfg.get("api_key")
             # Orca's Device-tab webview sends X-Api-Key twice -> merged as "key, key"
             sent = [k.strip() for k in (self.headers.get("X-Api-Key") or "").split(",")]
-            if key and key not in sent and \
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("apikey", [])   # <img>/<video> src
+            if key and key not in sent and key not in q and \
                self.headers.get("Authorization", "") != f"Bearer {key}":
                 self._json(403, {"error": "Invalid API key"}); return False
             return True
+        def _bytes(self, code, data, ctype, extra=()):
+            self.send_response(code); self.send_header("Content-Type", ctype); self.send_header("Cache-Control", "no-store")
+            for k, v in extra: self.send_header(k, v)
+            self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+        def _q(self, k, d=None):
+            return urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get(k, [d])[0]
+        def _extras_get(self, p):
+            if p == "/api/ivi/console":
+                since = int(self._q("since", 0) or 0)
+                return self._json(200, {"lines": [l for l in bridge.console if l["seq"] > since], "seq": bridge.console_seq,
+                                        "enabled": not bridge.usb_locked() and bool(bridge.busy() or (bridge.monitor and bridge.monitor.connected)),
+                                        "streaming": bridge.busy(), "usb_locked": bridge.usb_locked()})
+            if p == "/api/ivi/macros": return self._json(200, {"macros": bridge.macros()})
+            if p == "/api/ivi/temps":
+                return self._json(200, {"samples": list(bridge.temps), "window_s": cfg.get("temp_history_s", 1800)})
+            if p == "/api/ivi/files":
+                return self._json(200, {"files": list_jobs(cfg), "queue": list(bridge.queue)})
+            if p == "/api/ivi/files/thumb":
+                try: t = gcode_thumbnail(safe_job_path(cfg, self._q("name")))
+                except (ValueError, OSError) as e: return self._json(404, {"error": str(e)})
+                if not t: return self._json(404, {"error": "no thumbnail"})
+                return self._bytes(200, t[1], t[0])
+            if p == "/api/ivi/history": return self._json(200, bridge.history.summary())
+            if p == "/api/ivi/webcam":
+                return self._json(200, dict(bridge.webcam.info(), stream_url=cfg.get("webcam_stream_url") or None,
+                                            last_timelapse=bridge.last_timelapse,
+                                            recording=bool(bridge.timelapse and bridge.busy()),
+                                            frames=bridge.timelapse.frames if bridge.timelapse else 0))
+            if p == "/api/ivi/webcam/snapshot":
+                try: img = bridge.webcam.snapshot()
+                except Exception as e: return self._json(503, {"error": str(e)})
+                return self._bytes(200, img, "image/jpeg")
+            if p == "/api/ivi/timelapse": return self._json(200, {"videos": list_timelapses(cfg)})
+            if p == "/api/ivi/timelapse/file":
+                n = self._q("name") or ""
+                fp = os.path.join(cfg["timelapse_dir"], n)
+                if n != os.path.basename(n) or not n.endswith(".mp4") or not os.path.isfile(fp):
+                    return self._json(404, {"error": "not found"})
+                with open(fp, "rb") as f: data = f.read()
+                return self._bytes(200, data, "video/mp4", [("Content-Disposition", f'inline; filename="{n}"')])
+            if p == "/api/ivi/backups": return self._json(200, {"backups": bridge.list_backups(), "dir": "~/.config/ivi-bridge/backups"})
+            return False
+        def _extras_post(self, p, body):
+            if p not in ("/api/ivi/console", "/api/ivi/macros", "/api/ivi/files", "/api/ivi/queue", "/api/ivi/history"): return False
+            try: cmd = json.loads(body or b"{}")
+            except ValueError: return self._json(400, {"error": "bad json"})
+            a = cmd.get("action")
+            try:
+                if p == "/api/ivi/console":
+                    c = bridge.console_send(str(cmd.get("command", ""))); return self._json(200, {"sent": c, "seq": bridge.console_seq})
+                if p == "/api/ivi/macros":
+                    if a == "run": return self._json(200, {"ran": bridge.run_macro(str(cmd.get("name", "")))})
+                    if a == "save": return self._json(200, {"macros": bridge.save_macros(cmd.get("macros"))})
+                    if a == "reset":
+                        try: os.remove(cfg["macros_file"])
+                        except OSError: pass
+                        return self._json(200, {"macros": bridge.macros()})
+                    return self._json(400, {"error": "action must be run, save or reset"})
+                if p == "/api/ivi/files":
+                    n = cmd.get("name")
+                    if a == "print": return self._json(200, {"message": bridge.print_file(n)})
+                    if a == "delete": bridge.delete_file(n); return self._json(200, {"deleted": n})
+                    if a == "queue":
+                        safe_job_path(cfg, n); bridge.queue.append(n); return self._json(200, {"queue": bridge.queue})
+                    if a == "unqueue":
+                        if n in bridge.queue: bridge.queue.remove(n)
+                        return self._json(200, {"queue": bridge.queue})
+                    return self._json(400, {"error": "action must be print, delete, queue or unqueue"})
+                if p == "/api/ivi/queue":
+                    if a == "start_next": return self._json(200, {"message": bridge.start_next(), "queue": bridge.queue})
+                    if a == "clear": bridge.queue = []; return self._json(200, {"queue": []})
+                    return self._json(400, {"error": "action must be start_next or clear"})
+                if p == "/api/ivi/history":
+                    if a == "clear": bridge.history.clear(); return self._json(200, bridge.history.summary())
+                    return self._json(400, {"error": "action must be clear"})
+            except FileNotFoundError as e: return self._json(404, {"error": f"no such file: {e}"})
+            except (ValueError, TypeError, KeyError) as e: return self._json(400, {"error": str(e).strip('"')})
+            except Exception as e: return self._json(409, {"error": str(e)})
         def do_GET(self):
             p = self.path.split("?")[0]
             if p not in ("/", "/index.html") and not self._auth(): return
+            if p.startswith("/api/ivi/") and self._extras_get(p) is not False: return
             if p == "/api/ivi/filament":
                 return self._json(200, bridge.filament.info() if bridge.filament else {"state": "idle"})
             if p == "/api/ivi/job/gcode":
@@ -1315,6 +1857,7 @@ def make_handler(bridge):
             n = int(self.headers.get("Content-Length", 0)); body = self.rfile.read(n)
             if p in ("/api/files/local", "/api/files/sdcard"):
                 return self._upload(body)
+            if self._extras_post(p, body) is not False: return
             if p == "/api/ivi/filament":
                 try: cmd = json.loads(body or b"{}")
                 except ValueError: return self._json(400, {"error": "bad json"})
@@ -1417,6 +1960,7 @@ def serve(cfg, bridge=None, start_monitor=True):
     if bridge.monitor:
         log("USB monitor on: status/controls use the USB port when it is free (IVI 3licer must be disconnected)")
         if start_monitor: bridge.monitor.start()
+    if start_monitor: threading.Thread(target=bridge._temp_loop, daemon=True).start()
     return srv
 
 # ----------------------------------------------------------------- CLI -----

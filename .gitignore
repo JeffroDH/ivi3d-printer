@@ -3,3 +3,9 @@
 *Non Disclosure Agreement*
 ._*
 __pycache__/
+
+# bridge runtime data (never commit)
+backups/
+m503-*.txt
+history.json
+macros.json

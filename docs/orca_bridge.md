@@ -18,6 +18,9 @@ Slice in Orca Slicer and send jobs directly to the IVI3D, replacing the disconti
 - **Status and control**: from serial (`M105`, line counts); Wi-Fi `status` only reports `IDLE`.
 - **G-code translation**: map any IVI-specific commands (tool selection, laser/spindle) to what the firmware expects.
 
+## Device page extras (done 2026-11-03)
+Webcam (IP MJPEG/snapshot, or a USB camera via ffmpeg) with per-layer timelapse on USB jobs; temperature graph; file manager with Orca thumbnails, reprint, delete and a manual print queue; print history with time and filament totals; G-code console and editable bridge-side macros (preheat, cooldown, park, load/unload, M503 settings backup), both behind the same safety list (off during Wi-Fi Upload prints, only status/temperature/fan/speed/flow during USB prints); optional phone push through ntfy.sh. All of it is optional and off unless configured. See `bridge/README.md` → "Device page extras" for setup.
+
 ## Later features
 - Multi-tool support (FDM, laser, CNC), toolhead detection via CAN.
 - Diagnostics: CAN and driver logging.

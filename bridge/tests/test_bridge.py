@@ -3,6 +3,9 @@ import json, os, sys, tempfile, threading, time, unittest, urllib.request, urlli
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import ivi_bridge as B
+_T = tempfile.mkdtemp(prefix="ivi-test-")   # keep history/macros/backups/timelapse out of the real home folder
+for _k in ("history_file", "macros_file"): B.DEFAULT_CONFIG[_k] = os.path.join(_T, _k + ".json")
+for _k in ("backup_dir", "timelapse_dir"): B.DEFAULT_CONFIG[_k] = os.path.join(_T, _k)
 
 class FakeSerial:
     """Answers like the IVI3D Marlin: banner, 'PC start work', 'ok' per line, busy while heating."""
