@@ -271,6 +271,27 @@ class OctoPrintApiTests(unittest.TestCase):
         self.assertEqual(job["state"], "Operational"); self.assertEqual(job["progress"]["completion"], 100.0)
         self.assertEqual(self.ser.written, ["M2005", "M2007", "M105", "M2155 S4"] + ["M2411 S2", "M110 N0"] +
                          [B.checksum_line(1, "G28"), B.checksum_line(2, "M109 S215"), B.checksum_line(3, "G1 X1")]); self.assertTrue(self.ser.closed)
+    def test_layer_starts(self):
+        lines = ["G28", "G1 Z0.3", "G1 X1 E1", "G1 X2 E2", "G1 Z0.6", "G1 X3", "G1 X4 E3", "G91", "G1 Z5 E1", "G90"]
+        self.assertEqual(B.layer_starts(lines), [2, 6])
+    def test_job_gcode_endpoint_and_line_fields(self):
+        if type(self) is not OctoPrintApiTests: return   # subclasses use a monitor serial; covered once here
+        with self.assertRaises(urllib.error.HTTPError) as e: self.req("/api/ivi/job/gcode")
+        self.assertEqual(e.exception.code, 404)
+        self.cfg["mode"] = "serial"
+        self.upload("; c\nG28\nM73 P0\nG1 Z0.3\nG1 X1 E1\nG1 Z0.6\nG1 X2 E2\n"); self.bridge.thread.join(5)
+        r = urllib.request.Request(self.url + "/api/ivi/job/gcode", headers={"X-Api-Key": "KEY"})
+        with urllib.request.urlopen(r, timeout=5) as resp:
+            self.assertTrue(resp.headers["Content-Type"].startswith("text/plain"))
+            self.assertEqual(resp.read().decode(), "G28\nG1 Z0.3\nG1 X1 E1\nG1 Z0.6\nG1 X2 E2\n")
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(urllib.request.Request(self.url + "/api/ivi/job/gcode", headers={"X-Api-Key": "bad"}), timeout=5)
+        self.assertEqual(e.exception.code, 403)
+        ji = self.req("/api/job")[1]["ivi"]
+        self.assertEqual((ji["line"], ji["layer"], ji["layers"], ji["gcode"]), (5, 2, 2, "/api/ivi/job/gcode"))
+    def test_page_has_toolpath_panel(self):
+        with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
+        self.assertIn("Live toolpath", page); self.assertIn("/api/ivi/job/gcode", page); self.assertIn("indexOf('\\n'", page)
     def test_serial_pause_cancel_via_api(self):
         self.cfg["mode"] = "serial"
         self.upload("\n".join("G1 X%d" % i for i in range(100000)))

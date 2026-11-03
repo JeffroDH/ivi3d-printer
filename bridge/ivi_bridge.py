@@ -10,7 +10,7 @@ can upload to it, and forwards jobs to the printer over:
 Commands:  serve | send FILE | postprocess FILE | watch DIR      (see --help)
 License: CC BY-NC-SA 4.0 (same as the repo).
 """
-import argparse, email.parser, fcntl, html, secrets, select, subprocess, termios, email.policy, glob, json, os, re, shutil, sys, threading, time
+import argparse, bisect, email.parser, fcntl, html, secrets, select, subprocess, termios, email.policy, glob, json, os, re, shutil, sys, threading, time
 import urllib.error, urllib.parse, urllib.request, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -337,6 +337,28 @@ def add_ivi_header(src, dst=None, nozzle=0.4, date=None, strip=()):
     return prepare_gcode(src, dst, nozzle, date, True, strip)["header"]
 
 # --------------------------------------------------------------- serial ----
+_ZRX = re.compile(r"[Zz](-?[\d.]+)")
+_ERX = re.compile(r"[Ee](-?[\d.]+)")
+def layer_starts(lines):
+    """0-based indices where a new layer starts: first extruding G0/G1 at a new Z (absolute XYZ assumed,
+    G91 blocks skipped). Same rule as the Device page's toolpath parser."""
+    out, z, lz, rel = [], 0.0, None, False
+    for i, l in enumerate(lines):
+        w = l.split(None, 1); c = w[0].upper() if w else ""
+        if c == "G91": rel = True; continue
+        if c == "G90": rel = False; continue
+        if c not in ("G0", "G1") or rel: continue
+        m = _ZRX.search(l)
+        if m:
+            try: z = float(m.group(1))
+            except ValueError: pass
+        e = _ERX.search(l)
+        if e and c == "G1" and lz != z:
+            try: ev = float(e.group(1))
+            except ValueError: continue
+            if ev > 0: out.append(i); lz = z
+    return out
+
 def clean_gcode(text):
     """Strip comments/blank lines; returns list of commands."""
     out = []
@@ -453,7 +475,7 @@ class SerialJob:
         self.sent = 0; self.state = "Starting"; self.error = None; self.reason = None
         self.started = None; self.status = {}
         self._pause = threading.Event(); self._cancel = threading.Event()
-        self._flags = set()
+        self._flags = set(); self._layers = None
 
     def _write(self, cmd):
         self.ser.write((cmd + "\n").encode())
@@ -632,7 +654,10 @@ class SerialJob:
     def info(self):
         el = (self.clock() - self.started) if self.started else None
         left = el * (len(self.lines) - self.sent) / self.sent if el and self.sent else None
-        return {"source": "usb stream", "sent": self.sent, "total": len(self.lines), "elapsed": el, "left": left}
+        if self._layers is None: self._layers = layer_starts(self.lines)
+        layer = bisect.bisect_right(self._layers, self.sent - 1) if self.sent else 0
+        return {"source": "usb stream", "sent": self.sent, "total": len(self.lines), "elapsed": el, "left": left,
+                "line": self.sent, "layer": layer, "layers": len(self._layers), "gcode": "/api/ivi/job/gcode"}
 
 def low_err(line):
     return line.lower().startswith(("error", "!!"))
@@ -1078,6 +1103,11 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
 <div class=row><span>Progress <b id=jpc>–</b></span><span>Lines <b id=jl>–</b></span><span>Elapsed <b id=je>–</b></span><span>Left ≈ <b id=jt>–</b></span></div>
 <div class=row style="margin-top:.5em"><button title="M2410" onclick="cmd('pause','pause')">Pause</button><button title="M2411 S1" onclick="cmd('pause','resume')">Resume</button><button title="Stop the stream and the printer job (M2411 S3)" onclick="if(confirm('Cancel print?'))cmd('cancel')">Cancel</button>
 <span style="font-size:12px;color:#789">Streamed from this Mac over USB with live monitoring &ndash; keep the Mac awake and the cable connected until it finishes.</span></div></div>
+<div class=job id=tpp style="display:none"><b>Live toolpath</b> <span id=tpc style="color:#456;font-size:13px"></span>
+<div id=tpn style="font-size:13px;color:#789;margin:.3em 0"></div>
+<div id=tpw style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><canvas id=tpv width=560 height=560 style="width:min(560px,100%);background:#15171c;border-radius:8px"></canvas>
+<div><div style="font-size:12px;color:#456">Z height</div><canvas id=tpz width=150 height=470 style="background:#15171c;border-radius:8px"></canvas>
+<div style="font-size:12px;color:#456">top view &middot; bright = printed this layer, faint = still to print, dim = earlier layers, orange = nozzle</div></div></div></div>
 <div class=panels>
 <div class=panel id=p_tool><h3>Toolhead</h3>
 <div class=tgrid>
@@ -1167,8 +1197,39 @@ async function tick(){try{const j=await (await fetch('/api/job',{headers:H})).js
  const t=p.temperature||{},f=v=>v?Math.round(v.actual)+'°C/'+Math.round(v.target)+'°C':'–';nzv.textContent=f(t.tool0);bdv.textContent=f(t.bed);
  T.nz=t.tool0?t.tool0.target:0;T.bd=t.bed?t.bed.target:0;
  for(const[g2,v]of[['nz',T.nz],['bd',T.bd]])document.querySelectorAll('[data-g='+g2+'] button:not(.pm)').forEach(b=>b.classList.toggle('sel',parseInt(b.textContent)==v));
+ try{tpTick(j,lk)}catch(e){}
  const q=p.position;px.textContent='X: '+(q?q.x.toFixed(2):'–');py.textContent='Y: '+(q?q.y.toFixed(2):'–');pz.textContent='Z: '+(q?q.z.toFixed(2):'–')
 }catch(e){st.textContent='bridge offline';document.querySelectorAll('.u').forEach(b=>b.disabled=true)}}
+let TP={key:null,M:null,lay:null,n:0,busy:false,drawn:-1};
+async function tpLoad(key){TP={key,M:null,lay:null,n:0,busy:true,drawn:-1};tpn.textContent='Loading toolpath…';
+ try{const r=await fetch('/api/ivi/job/gcode',{headers:H});if(!r.ok)throw new Error(r.status);let txt=await r.text();
+ const mv=[],lay=[];let x=0,y=0,z=0,e=0,lz=null,rel=false,i=0,a=0;
+ while(a<=txt.length){let b=txt.indexOf('\\n',a);if(b<0)b=txt.length;const s=txt.slice(a,b);a=b+1;i++;
+  const k=s.trim().split(/\\s+/),c=(k[0]||'').toUpperCase();if(c=='G91'){rel=true;continue}if(c=='G90'){rel=false;continue}
+  if(c=='G92'){for(const q of k.slice(1))if(q[0]=='E'||q[0]=='e')e=+q.slice(1)||0;continue}
+  if((c!='G0'&&c!='G1')||rel)continue;let nx=x,ny=y,nz=z,ex=0,hasE=false;
+  for(const q of k.slice(1)){const v=+q.slice(1),L=q[0].toUpperCase();if(isNaN(v))continue;if(L=='X')nx=v;else if(L=='Y')ny=v;else if(L=='Z')nz=v;else if(L=='E'){hasE=true;ex=v-e;e=v}}
+  const ext=c=='G1'&&hasE&&ex>0;if(ext&&lz!==nz){lay.push(mv.length/4);lz=nz}
+  mv.push(nx,ny,ext?1:0,i);x=nx;y=ny;z=nz}
+ txt=null;TP.M=new Float32Array(mv);TP.lay=lay;TP.n=TP.M.length/4;tpn.textContent=''}
+ catch(err){tpn.textContent='Toolpath not available ('+err.message+')'}TP.busy=false}
+function tpIdx(line){const M=TP.M;let lo=0,hi=TP.n-1,r=-1;while(lo<=hi){const m=(lo+hi)>>1;if(M[m*4+3]<=line){r=m;lo=m+1}else hi=m-1}return r}
+function tpDraw(line){const M=TP.M,n=TP.n,lay=TP.lay;if(!M||!n)return;const cur=Math.max(0,tpIdx(line));
+ let li=0;while(li<lay.length&&lay[li]<=cur)li++;const ls=li?lay[li-1]:0,le=li<lay.length?lay[li]:n;
+ const g=tpv.getContext('2d'),S=2.55,C=280,P=(a,b)=>[C+a*S,C-b*S];g.clearRect(0,0,560,560);
+ g.lineWidth=1.2;g.strokeStyle='#59606d';g.setLineDash([6,5]);g.beginPath();g.arc(C,C,105*S,0,7);g.stroke();g.setLineDash([]);g.strokeStyle='#8a93a3';g.beginPath();g.arc(C,C,100*S,0,7);g.stroke();
+ function seg(a,b,col,w){g.strokeStyle=col;g.lineWidth=w;g.beginPath();for(let i=Math.max(1,a+1);i<b;i++){if(!M[i*4+2])continue;const[p,q]=P(M[i*4-4],M[i*4-3]),[r,t]=P(M[i*4],M[i*4+1]);g.moveTo(p,q);g.lineTo(r,t)}g.stroke()}
+ seg(0,ls,'rgba(120,140,170,.25)',1);seg(cur,le,'rgba(63,182,255,.18)',1.2);seg(ls,cur+1,'#3fd2ff',1.6);
+ const[nx,ny]=P(M[cur*4],M[cur*4+1]);g.fillStyle='#ff9f2e';g.beginPath();g.arc(nx,ny,6,0,7);g.fill();g.strokeStyle='#fff';g.lineWidth=2;g.stroke();
+ const h=tpz.getContext('2d'),N=Math.max(1,lay.length),bh=420/N;h.clearRect(0,0,150,470);
+ for(let i=0;i<lay.length;i++){const yy=450-(i/N)*420;h.fillStyle=i<li-1?'#3fd2ff':i==li-1?'#ff9f2e':'#39404c';h.fillRect(20,yy-bh+(bh>4?2:0),110,Math.max(1,bh-(bh>4?3:0)))}
+ h.fillStyle='#8a93a3';h.font='11px sans-serif';h.fillText('top',2,24);h.fillText('bed',2,465);
+ tpc.textContent='· Layer '+li+' / '+lay.length+', line '+line.toLocaleString()}
+function tpTick(j,lk){const ji=j.ivi||{},us=ji.source=='usb stream'&&!/^(Operational|Cancelled)/.test(j.state);
+ if(lk){tpp.style.display='block';tpw.style.display='none';tpc.textContent='';tpn.textContent='Not available for Upload (Wi-Fi) prints: the printer runs the file from its own storage, so the bridge has no line position. Use Upload and Print for a live toolpath.';TP.key=null;TP.M=null;return}
+ if(!us){tpp.style.display='none';TP.key=null;TP.M=null;return}
+ tpp.style.display='block';tpw.style.display='flex';const key=j.job.file.name+'|'+ji.total;
+ if(TP.key!==key&&!TP.busy)tpLoad(key).then(()=>tpDraw(ji.line||0));else if(TP.M&&TP.drawn!==ji.line){tpDraw(ji.line||0);TP.drawn=ji.line}}
 tick();setInterval(tick,2000)</script>"""
 
 def status_page(cfg):
@@ -1217,6 +1278,14 @@ def make_handler(bridge):
             if p not in ("/", "/index.html") and not self._auth(): return
             if p == "/api/ivi/filament":
                 return self._json(200, bridge.filament.info() if bridge.filament else {"state": "idle"})
+            if p == "/api/ivi/job/gcode":
+                j = bridge.job
+                if not j or not getattr(j, "lines", None):
+                    return self._json(404, {"error": "no USB job"})
+                b = ("\n".join(j.lines) + "\n").encode()
+                self.send_response(200); self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("X-Job-Name", re.sub(r"[^\w.\- ]", "_", j.name or ""))
+                self.send_header("Content-Length", str(len(b))); self.end_headers(); return self.wfile.write(b)
             if p == "/api/version":
                 return self._json(200, {"api": "0.1", "server": "1.9.0", "text": f"OctoPrint (ivi-bridge {VERSION})"})
             if p == "/api/server":
