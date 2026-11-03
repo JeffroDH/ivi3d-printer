@@ -9,6 +9,8 @@
   "listen_host": "127.0.0.1",
   "listen_port": 5001,
   "api_key": "choose-any-string-and-paste-it-in-the-slicer",
+  "poll_feedrate": true,
+  "feedrate_poll_s": 45,
   "report_interval_s": 4,
   "home_before_job": true,
   "laser_focus_z": null,

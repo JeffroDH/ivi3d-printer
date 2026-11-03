@@ -104,3 +104,5 @@ All of these live on the bridge's Device page (Orca's Device tab, or `http://<ma
 
 ## Not yet verified on hardware
 USB monitor/controls (M2007 status line format is a guess: `status: <n>`; M104/M140/M220/M221 untested); whole bridge (written 2026-11-01, unit-tested only); Orca/Next host test against it; serial cancel via `M2411 S3` (decoded, not run), locked-rotor/kill/status-5 handling, laser/CNC prelude (fake-serial tests only; the printer may need the touch screen to exit PC mode); laser/CNC jobs.
+
+**Time left (USB stream):** uses Orca's `M73 P<pct> R<min>` lines as they are streamed (R = slicer minutes left, counted down since that line), scaled by 100/FR from a bare `M220` sent every `feedrate_poll_s` (45 s) while printing (`"poll_feedrate": false` turns that off; no reply is tolerated). Files without M73 fall back to the line-rate estimate. The Device page shows the source next to *Left*.

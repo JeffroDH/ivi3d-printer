@@ -46,6 +46,8 @@ DEFAULT_CONFIG = {
     "spool_dir": "~/Library/Application Support/ivi-bridge/jobs",
     "retries": 3,
     "line_timeout_s": 600,
+    "poll_feedrate": True,              # USB stream: send bare M220 every feedrate_poll_s and scale time left by 100/FR
+    "feedrate_poll_s": 45,
     "report_interval_s": 4,             # M2155 S<n>: printer pushes temps/position/status every n s
     "home_before_job": True,            # laser/CNC: G53, G28, ..., G54 before M2411 S2 (IVI 3licer behaviour)
     "laser_focus_z": None,              # machine Z (mm) to drop to before a laser job; required if homing
@@ -484,10 +486,36 @@ def z_before_xy(lines):
 
 class PrinterHalted(RuntimeError): pass
 
+_M73_ANY_RE = re.compile(r"^M73\b(?=.*\bR(\d+(?:\.\d+)?))?(?=.*\bP(\d+(?:\.\d+)?))?", re.I)
+_FR_RE = re.compile(r"\bFR:\s*(\d+(?:\.\d+)?)\s*%", re.I)
+
+def parse_m73(cmd):
+    """'M73 P12 R34' -> (12.0, 34.0) (percent, minutes left); missing fields None; not M73 -> None."""
+    m = _M73_ANY_RE.match(cmd.split(";", 1)[0].strip())
+    if not m: return None
+    r, p = m.groups()
+    return (float(p) if p is not None else None, float(r) if r is not None else None)
+
+def parse_feedrate(line):
+    """Marlin M220 reply 'FR:100%' (also inside 'echo:FR:120%') -> 120.0, else None."""
+    m = _FR_RE.search(line)
+    return float(m.group(1)) if m else None
+
+def estimate_left(m73_left_s, m73_age_s, feedrate, seg_left):
+    """Time left (s), source. M73 R baseline minus time since that M73, scaled by 100/FR;
+    falls back to the segment estimate (lines-per-second) when the file has no M73 R."""
+    fr = feedrate if feedrate and feedrate > 0 else 100.0
+    if m73_left_s is not None:
+        return max(0.0, m73_left_s - (m73_age_s or 0.0)) * 100.0 / fr, "slicer M73" + ("" if fr == 100.0 else " @%g%%" % fr)
+    if seg_left is not None:
+        return seg_left, "line rate"
+    return None, None
+
 class SerialJob:
     """Streams one job. States: Starting -> Printing <-> Paused -> Operational | Cancelled | Error."""
     def __init__(self, ser, lines, name="job", firmware_version="", line_timeout=600, clock=time.monotonic,
-                 prelude=(), report_interval=4, auto_clear=True, notify=None, line_numbers=False):
+                 prelude=(), report_interval=4, auto_clear=True, notify=None, line_numbers=False,
+                 poll_feedrate=False, feedrate_poll_s=45):
         self.ser, self.lines, self.name = ser, lines, name
         self.line_numbers = line_numbers; self._resend = None
         self.fw = firmware_version
@@ -499,6 +527,8 @@ class SerialJob:
         self._pause = threading.Event(); self._cancel = threading.Event()
         self._flags = set(); self._layers = None
         self.on_line = None; self.on_layer = None      # console log / timelapse hooks
+        self.poll_feedrate, self.feedrate_poll_s = poll_feedrate, feedrate_poll_s
+        self.feedrate = None; self._m73 = None; self._last_fr_poll = None   # _m73 = (seconds left, clock)
 
     def _write(self, cmd):
         self.ser.write((cmd + "\n").encode())
@@ -506,6 +536,8 @@ class SerialJob:
     def _readline(self):
         line = self.ser.readline().decode(errors="replace").strip()
         if line:
+            fr = parse_feedrate(line)
+            if fr is not None: self.feedrate = fr
             st = parse_status(line, self.status)
             if self.on_line and not st and not (line == "ok" or line.startswith("ok ") or "busy" in line):
                 try: self.on_line(line)
@@ -647,7 +679,10 @@ class SerialJob:
                     resends += 1
                     if resends > 50: raise RuntimeError("too many resend requests (line noise?)")
                     i = max(0, self._resend - 1); self.sent = i; continue
+                pm = parse_m73(cmd) if cmd[:3].upper() == "M73" else None
+                if pm and pm[1] is not None: self._m73 = (pm[1] * 60.0, self.clock())
                 i += 1; self.sent = i
+                self._maybe_poll_feedrate()
             if self._cancel.is_set():
                 self._stop_printer(); self.state = "Cancelled"
             else:
@@ -656,6 +691,17 @@ class SerialJob:
         except Exception as e:
             self.error, self.state = str(e), "Error"
             log(f"job {self.name}: ERROR {e}")
+
+    def _maybe_poll_feedrate(self):
+        """Bare M220 between stream lines every feedrate_poll_s; a missing reply is tolerated (short wait)."""
+        if not self.poll_feedrate: return
+        now = self.clock()
+        if self._last_fr_poll is None: self._last_fr_poll = now; return
+        if now - self._last_fr_poll < self.feedrate_poll_s: return
+        self._last_fr_poll = now
+        self._write("M220")
+        try: self._wait(lambda l: l == "ok" or l.startswith("ok "), 3)
+        except (TimeoutError, RuntimeError): pass
 
     def _stop_printer(self):
         # M2411 S3 = "trigger stop" in the firmware job state machine (also what IVI 3licer's Stop sends)
@@ -684,10 +730,13 @@ class SerialJob:
 
     def info(self):
         el = (self.clock() - self.started) if self.started else None
-        left = el * (len(self.lines) - self.sent) / self.sent if el and self.sent else None
+        seg = el * (len(self.lines) - self.sent) / self.sent if el and self.sent else None
+        m73 = self._m73
+        left, src = estimate_left(m73[0] if m73 else None, (self.clock() - m73[1]) if m73 else None, self.feedrate, seg)
         if self._layers is None: self._layers = layer_starts(self.lines)
         layer = bisect.bisect_right(self._layers, self.sent - 1) if self.sent else 0
         return {"source": "usb stream", "sent": self.sent, "total": len(self.lines), "elapsed": el, "left": left,
+                "left_source": src, "feedrate": self.feedrate,
                 "line": self.sent, "layer": layer, "layers": len(self._layers), "gcode": "/api/ivi/job/gcode"}
 
 def low_err(line):
@@ -1364,6 +1413,8 @@ class Bridge:
                                  report_interval=self.cfg.get("report_interval_s", 4),
                                  auto_clear=self.cfg.get("auto_clear_stale_job", True),
                                  notify=lambda m: notify(self.cfg, m),
+                                 poll_feedrate=self.cfg.get("poll_feedrate", True),
+                                 feedrate_poll_s=self.cfg.get("feedrate_poll_s", 45),
                                  line_numbers=self.cfg.get("line_numbers", True))
             self.job.on_line = lambda l: self.log_console("<", l)
             self.timelapse = None
@@ -1613,7 +1664,7 @@ async function cmd(c,a){const r=await fetch('/api/job',{method:'POST',headers:H,
 async function tick(){try{const j=await (await fetch('/api/job',{headers:H})).json(),p=await (await fetch('/api/printer',{headers:H})).json();
  const lk=p.ivi&&p.ivi.usb_locked;ban.style.display=lk?'flex':'none';banf.textContent=(p.ivi&&p.ivi.storage_file)||'';
  const ji=j.ivi||{},us=ji.source=='usb stream'&&!/^(Operational|Cancelled)/.test(j.state);jobp.style.display=us?'block':'none';
- if(us){jn.textContent=j.job.file.name;js2.textContent=j.state;const c2=j.progress.completion||0;jb.style.width=c2+'%';jpc.textContent=c2.toFixed(1)+'%';jl.textContent=ji.sent+' / '+ji.total;je.textContent=hms(ji.elapsed);jt.textContent=hms(ji.left)}
+ if(us){jn.textContent=j.job.file.name;js2.textContent=j.state;const c2=j.progress.completion||0;jb.style.width=c2+'%';jpc.textContent=c2.toFixed(1)+'%';jl.textContent=ji.sent+' / '+ji.total;je.textContent=hms(ji.elapsed);jt.textContent=hms(ji.left)+(ji.left_source?' ('+ji.left_source+')':'')}
  const u=p.ivi&&p.ivi.usb&&!lk;usb.textContent=lk?'off (printing from printer storage)':u?(us?'streaming job':'connected'):'not connected'+(p.ivi&&p.ivi.usb_error?' ('+p.ivi.usb_error+')':'');
  document.querySelectorAll('.u,.opts[data-c] button').forEach(b=>b.disabled=!u);
  st.textContent=j.state;fn.textContent=j.job.file.name||'–';const c=j.progress.completion;pb.style.width=(c||0)+'%';pc.textContent=c==null?'':c.toFixed(1)+'%';
