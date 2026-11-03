@@ -98,6 +98,6 @@ echo "$MSG" | tee "$HOME/.config/ivi-bridge/orca-settings.txt"
 osascript - "$MSG" <<'AS' >/dev/null || true
 on run argv
   display dialog (item 1 of argv) buttons {"Open status page", "Done"} default button "Done" with title "IVI Bridge"
-  if button returned of result is "Open status page" then do shell script "open http://127.0.0.1:5000/"
+  if button returned of result is "Open status page" then do shell script "open http://127.0.0.1:5001/"
 end run
 AS

@@ -61,7 +61,7 @@ class PluginTests(unittest.TestCase):
         py_compile.compile(PLUGIN, doraise=True)
         self.assertEqual([c.__name__ for c in orca.registered], ["IviHeader", "BridgePage"])
         self.assertTrue(all("127.0.0.1" in u for u in orca.perms["network_http"]))
-        self.assertEqual(orca.perms["network_socket"], ["('127.0.0.1', 5000)"])
+        self.assertEqual(orca.perms["network_socket"], ["('127.0.0.1', 5001)"])
         src = open(PLUGIN).read(); self.assertTrue(src.startswith("# /// script")); self.assertIn("[tool.orcaslicer.plugin]", src)
         self.assertEqual(src.count("@orca.plugin"), 1)
 

@@ -75,8 +75,8 @@ machine = {
     # The bridge can strip it via strip_commands (off by default; G21 is harmless).
     "machine_start_gcode": START, "machine_end_gcode": END,
     "before_layer_change_gcode": "", "layer_change_gcode": "", "change_filament_gcode": "M2410 ; pause for manual filament swap",
-    "thumbnails": "", "host_type": "octoprint", "print_host": "127.0.0.1:5000",
-    "printhost_apikey": "PASTE-API-KEY-FROM-IVI-BRIDGE-INSTALLER", "print_host_webui": "http://127.0.0.1:5000/",
+    "thumbnails": "", "host_type": "octoprint", "print_host": "127.0.0.1:5001",
+    "printhost_apikey": "PASTE-API-KEY-FROM-IVI-BRIDGE-INSTALLER", "print_host_webui": "http://127.0.0.1:5001/",
     "default_filament_profile": [FILAMENT], "default_print_profile": PROCESS,
     "machine_pause_gcode": "M2410", "printer_structure": "delta", "single_extruder_multi_material": "1", "manual_filament_change": "1", "auxiliary_fan": "0", "silent_mode": "0",
 }

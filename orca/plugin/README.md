@@ -2,17 +2,17 @@
 
 Single-file Python plugin (PEP 723 header + `[tool.orcaslicer.plugin]`), written against the official
 OrcaSlicer plugin guide (Developer Reference → Plugin Development: Registry, Pages, Slicing Pipeline).
-It only talks to the local **IVI Bridge** (`bridge/`, http://127.0.0.1:5000) — never to the printer — and does
+It only talks to the local **IVI Bridge** (`bridge/`, http://127.0.0.1:5001) — never to the printer — and does
 not use the experimental Printer Agent.
 
 ## What it adds
 | Capability | Type | What it does | Settings (Plugins dialog → Config tab, JSON) |
 |---|---|---|---|
 | **IVI3D FDM Header** | Slicing Pipeline (`psGCodePostProcess`) | Prepends the IVI 3licer `;Header Start … header_type: 3dp` block to exported G-code in place (same logic as `orca/ivi_fdm_header.py`). Idempotent: skips files that already start with `;Header Start`. | `enabled` (true/false), `nozzle` (fallback, `"0.3"`) |
-| **IVI3D Bridge** | Pages (main-window tab) | State, file, progress bar, temperatures, plain-language alerts for *locked rotor*, *kill/halted* and *status 5*; buttons Pause / Resume / Cancel / Clear stuck job. Polls every 3 s only while the tab is visible; shows "IVI Bridge is not running…" when it can't connect. | `bridge_url` (`http://127.0.0.1:5000`), `api_key`, `poll_seconds` (≥2) |
+| **IVI3D Bridge** | Pages (main-window tab) | State, file, progress bar, temperatures, plain-language alerts for *locked rotor*, *kill/halted* and *status 5*; buttons Pause / Resume / Cancel / Clear stuck job. Polls every 3 s only while the tab is visible; shows "IVI Bridge is not running…" when it can't connect. | `bridge_url` (`http://127.0.0.1:5001`), `api_key`, `poll_seconds` (≥2) |
 
-Permissions are declared up front (one dialog at load): HTTP to `http://127.0.0.1:5000/api/{job,printer,version,ivi/clear}`
-and socket `('127.0.0.1', 5000)`. Nothing else. (If you change `bridge_url`, Orca asks once for the new address.)
+Permissions are declared up front (one dialog at load): HTTP to `http://127.0.0.1:5001/api/{job,printer,version,ivi/clear}`
+and socket `('127.0.0.1', 5001)`. Nothing else. (If you change `bridge_url`, Orca asks once for the new address.)
 
 ## Install (macOS)
 A single-file `.py` plugin has **no OS/architecture suffix** in its name. Orca's docs only require platform tags

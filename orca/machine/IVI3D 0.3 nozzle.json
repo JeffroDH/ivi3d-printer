@@ -177,9 +177,9 @@
     "change_filament_gcode": "M2410 ; pause for manual filament swap",
     "thumbnails": "",
     "host_type": "octoprint",
-    "print_host": "127.0.0.1:5000",
+    "print_host": "127.0.0.1:5001",
     "printhost_apikey": "PASTE-API-KEY-FROM-IVI-BRIDGE-INSTALLER",
-    "print_host_webui": "http://127.0.0.1:5000/",
+    "print_host_webui": "http://127.0.0.1:5001/",
     "default_filament_profile": [
         "IVI3D PLA"
     ],

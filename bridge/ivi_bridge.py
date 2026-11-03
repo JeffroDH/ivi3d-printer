@@ -41,7 +41,7 @@ DEFAULT_CONFIG = {
     "baud": 115200,
     "firmware_version": "",             # override; otherwise read from the serial banner
     "listen_host": "127.0.0.1",
-    "listen_port": 5000,
+    "listen_port": 5001,
     "api_key": "",                      # key the slicer must send as X-Api-Key ("" = no check)
     "spool_dir": "~/Library/Application Support/ivi-bridge/jobs",
     "retries": 3,
@@ -1975,7 +1975,7 @@ def serve(cfg, bridge=None, start_monitor=True):
     try:
         srv = ThreadingHTTPServer((cfg["listen_host"], cfg["listen_port"]), handler)
     except OSError as e:
-        # macOS AirPlay Receiver (ControlCenter) holds *:5000. Binding 0.0.0.0 then fails, but specific
+        # macOS AirPlay Receiver (ControlCenter) holds *:5000 (hence the 5001 default). Binding 0.0.0.0 on 5000 then fails, but specific
         # addresses still work: serve on 127.0.0.1 (Orca) + the LAN address (OctoApp) instead.
         if e.errno not in (48, 98) or cfg["listen_host"] not in ("0.0.0.0", ""): raise
         srv = ThreadingHTTPServer(("127.0.0.1", cfg["listen_port"]), handler)

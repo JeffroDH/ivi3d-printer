@@ -57,7 +57,7 @@ class ProfileTests(unittest.TestCase):
         r = max((float(p.split("x")[0]) ** 2 + float(p.split("x")[1]) ** 2) ** .5 for p in m["printable_area"])
         self.assertAlmostEqual(r, 105, places=2)
         self.assertTrue(m["machine_start_gcode"].splitlines()[1].startswith("G53"))
-        self.assertEqual(m["print_host"], "127.0.0.1:5000")
+        self.assertEqual(m["print_host"], "127.0.0.1:5001")
         z = zipfile.ZipFile(os.path.join(D, "IVI3D.orca_printer")); s = json.loads(z.read("bundle_structure.json"))
         for k in ("printer_config", "filament_config", "process_config"):
             for p in s[k]: json.loads(z.read(p))

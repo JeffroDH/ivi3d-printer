@@ -5,8 +5,8 @@
 
 Locations (each is patched only if the file exists; the placeholder or any old key is replaced):
   * bridge config  ~/.config/ivi-bridge/config.json           -> api_key (created if missing)
-  * printer presets <orca>/user/*/machine/**/*.json (IVI3D or 127.0.0.1:5000) -> printhost_apikey
-  * Device tab     <orca>/OrcaSlicer.conf local_machines["127.0.0.1:5000"].access_code
+  * printer presets <orca>/user/*/machine/**/*.json (IVI3D or 127.0.0.1:5001) -> printhost_apikey
+  * Device tab     <orca>/OrcaSlicer.conf local_machines["127.0.0.1:5001"].access_code
   * plugin         <orca>/orca_plugins/config.json  capability "IVI3D Bridge" -> cap_config.api_key
 Orca files are backed up (<file>.bak-YYYYmmdd-HHMMSS) and written atomically. Orca rewrites its
 files on quit, so this refuses to touch them while OrcaSlicer is running. The key is never printed
@@ -18,7 +18,7 @@ from collections import OrderedDict
 PLACEHOLDER = "PASTE-API-KEY-FROM-IVI-BRIDGE-INSTALLER"
 CAPABILITY = "IVI3D Bridge"
 PLUGIN_KEY = "ivi3d_bridge_plugin"
-DEFAULT_HOST = "127.0.0.1:5000"
+DEFAULT_HOST = "127.0.0.1:5001"
 EXIT_ORCA_RUNNING = 3
 
 def mask(key):
@@ -71,7 +71,7 @@ def get_or_create_key(config_path, new_key=False, dry_run=False):
         key = secrets.token_hex(16); cfg["api_key"] = key; changed = True
         if not dry_run:
             write_atomic(config_path, json.dumps(cfg, indent=2) + "\n", mode=0o600)
-    host = "%s:%s" % (cfg.get("listen_host", "127.0.0.1"), cfg.get("listen_port", 5000))
+    host = "%s:%s" % (cfg.get("listen_host", "127.0.0.1"), cfg.get("listen_port", 5001))
     if host.startswith("0.0.0.0:"): host = "127.0.0.1:" + host.split(":", 1)[1]
     return key, host, changed
 
@@ -83,7 +83,7 @@ def preset_files(orca_dir):
         except (ValueError, OSError): continue
         if not isinstance(d, dict) or "printhost_apikey" not in d: continue
         ours = ("IVI3D" in str(d.get("name", "")) or "IVI3D" in str(d.get("inherits", ""))
-                or str(d.get("print_host", "")).startswith(("127.0.0.1:5000", "localhost:5000"))
+                or str(d.get("print_host", "")).startswith(("127.0.0.1:5001", "localhost:5001", "127.0.0.1:5000", "localhost:5000"))
                 or d.get("printhost_apikey") == PLACEHOLDER)
         if ours: out.append((p, d))
     return out

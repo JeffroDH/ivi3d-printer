@@ -8,13 +8,13 @@
 # author = "JeffroDH/ivi3d-printer (CC BY-NC-SA 4.0)"
 # version = "0.1.1"
 # ///
-"""OrcaSlicer 2.5 plugin ("Option A"): talks only to the local IVI Bridge (http://127.0.0.1:5000), never to the printer.
+"""OrcaSlicer 2.5 plugin ("Option A"): talks only to the local IVI Bridge (http://127.0.0.1:5001), never to the printer.
 
 Capabilities
   * "IVI3D FDM Header" (Slicing Pipeline, psGCodePostProcess): prepends the IVI 3licer ';Header Start ... header_type: 3dp'
     block to the exported G-code in place (idempotent). Config: {"enabled": true, "nozzle": "0.3"}.
   * "IVI3D Bridge" (Pages tab): bridge state, temperatures, progress, errors; Pause / Resume / Cancel / Clear stuck job.
-    Config: {"bridge_url": "http://127.0.0.1:5000", "api_key": "<from the bridge installer>", "poll_seconds": 3}.
+    Config: {"bridge_url": "http://127.0.0.1:5001", "api_key": "<from the bridge installer>", "poll_seconds": 3}.
 """
 import datetime
 import json
@@ -24,7 +24,7 @@ import urllib.request
 
 import orca
 
-DEFAULT_URL = "http://127.0.0.1:5000"
+DEFAULT_URL = "http://127.0.0.1:5001"
 ENDPOINTS = ("/api/job", "/api/printer", "/api/version", "/api/ivi/clear")
 
 
@@ -249,6 +249,6 @@ class Ivi3dBridgePlugin(orca.base):
         # Localhost only: the default bridge address and its endpoints.
         orca.request_permissions(
             network_http=[DEFAULT_URL + p for p in ENDPOINTS],
-            network_socket=["('127.0.0.1', 5000)"])
+            network_socket=["('127.0.0.1', 5001)"])
         orca.register_capability(IviHeader)
         orca.register_capability(BridgePage)

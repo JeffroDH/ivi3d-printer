@@ -19,7 +19,7 @@ class T(unittest.TestCase):
         return K.setup(self.cfg, self.orca, log=self.logs.append, **kw)
     def preset(self, folder, key=PH):
         return self.w("user/%s/machine/base/IVI3D 0.3 nozzle.json" % folder,
-                      {"name": "IVI3D 0.3 nozzle", "print_host": "127.0.0.1:5000", "printhost_apikey": key})
+                      {"name": "IVI3D 0.3 nozzle", "print_host": "127.0.0.1:5001", "printhost_apikey": key})
 
     def test_creates_key_and_keeps_it(self):
         rc, k = self.run_(); self.assertEqual(rc, 0); self.assertEqual(len(k), 32)
@@ -30,12 +30,12 @@ class T(unittest.TestCase):
     def test_patches_placeholder_everywhere(self):
         a = self.preset("8e27"); b = self.preset("default")
         other = self.w("user/default/machine/Other.json", {"name": "Prusa", "print_host": "1.2.3.4", "printhost_apikey": "x"})
-        conf = self.w("OrcaSlicer.conf", {"app": {"preset_folder": "8e27"}, "local_machines": {"127.0.0.1:5000": {"access_code": PH, "dev_ip": "127.0.0.1:5000"}}})
-        plug = self.w("orca_plugins/config.json", {"config": [{"capability": "IVI3D Bridge", "cap_config": {"api_key": PH, "bridge_url": "http://127.0.0.1:5000", "poll_seconds": 3}}, {"capability": "IVI3D FDM Header", "cap_config": {"enabled": True}}]})
+        conf = self.w("OrcaSlicer.conf", {"app": {"preset_folder": "8e27"}, "local_machines": {"127.0.0.1:5001": {"access_code": PH, "dev_ip": "127.0.0.1:5001"}}})
+        plug = self.w("orca_plugins/config.json", {"config": [{"capability": "IVI3D Bridge", "cap_config": {"api_key": PH, "bridge_url": "http://127.0.0.1:5001", "poll_seconds": 3}}, {"capability": "IVI3D FDM Header", "cap_config": {"enabled": True}}]})
         rc, k = self.run_(); self.assertEqual(rc, 0)
         for p in (a, b): self.assertEqual(self.r(p)["printhost_apikey"], k)
         self.assertEqual(self.r(other)["printhost_apikey"], "x")
-        self.assertEqual(self.r(conf)["local_machines"]["127.0.0.1:5000"]["access_code"], k)
+        self.assertEqual(self.r(conf)["local_machines"]["127.0.0.1:5001"]["access_code"], k)
         self.assertEqual(self.r(conf)["app"]["preset_folder"], "8e27")
         pc = self.r(plug)["config"]; self.assertEqual(pc[0]["cap_config"]["api_key"], k); self.assertEqual(pc[1]["cap_config"], {"enabled": True})
         self.assertTrue(open(conf).read().startswith("{\n\t\""))  # tabs kept
@@ -51,7 +51,7 @@ class T(unittest.TestCase):
     def test_creates_missing_entries(self):
         conf = self.w("OrcaSlicer.conf", {"app": {}}); plug = self.w("orca_plugins/config.json", {"config": []})
         rc, k = self.run_()
-        m = self.r(conf)["local_machines"]["127.0.0.1:5000"]; self.assertEqual(m["access_code"], k); self.assertEqual(m["printer_type"], "IVI3D")
+        m = self.r(conf)["local_machines"]["127.0.0.1:5001"]; self.assertEqual(m["access_code"], k); self.assertEqual(m["printer_type"], "IVI3D")
         e = self.r(plug)["config"][0]; self.assertEqual(e["capability"], "IVI3D Bridge"); self.assertEqual(e["cap_config"]["api_key"], k)
 
     def test_missing_files_not_created(self):
