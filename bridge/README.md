@@ -93,6 +93,8 @@ All of these live on the bridge's Device page (Orca's Device tab, or `http://<ma
 - **Settings backup**: the macro writes `~/.config/ivi-bridge/backups/m503-YYYYMMDD-HHMMSS.txt` (only you can read it). It only runs while the printer is idle on USB. Keep these files out of git.
 - **Phone notifications**: on top of the macOS notifications, set `"ntfy_url": "https://ntfy.sh/<a-long-secret-topic>"` and subscribe to that topic in the ntfy app. You get pushes for print started, finished, cancelled or failed, and for pauses. It's off by default. Anyone who knows the topic name can read it, so pick a hard-to-guess one.
 
+**Port 5000 and AirPlay:** macOS's AirPlay Receiver also listens on port 5000 on every address. When the bridge is set to `"listen_host": "0.0.0.0"` (home network), it can't take every address, so it listens on `127.0.0.1` (for Orca) and on the Mac's LAN address (for OctoApp) instead. If the Mac's IP changes, restart the bridge. You can also turn off System Settings → General → AirDrop & Handoff → AirPlay Receiver.
+
 ## CLI
 `ivi_bridge.py [--config F] [--mode wifi|serial] serve | send FILE | postprocess FILE | watch DIR`
 `send`/`postprocess`/`watch` hand the file to the running service if it is up (required for serial, since streaming outlasts the slicer hook), else upload directly over Wi-Fi.

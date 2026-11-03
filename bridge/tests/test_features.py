@@ -224,4 +224,18 @@ class TempNotifyCamTests(Base):
         for s in ("Webcam", "Temperatures", "Files", "Queue", "History", "Macros", "Console", "/api/ivi/console", "/api/ivi/macros"):
             self.assertIn(s, page)
 
+class ListenFallbackTests(unittest.TestCase):
+    def test_wildcard_busy_falls_back_to_loopback(self):
+        import socket
+        cfg = dict(B.DEFAULT_CONFIG, listen_host="0.0.0.0", listen_port=0, api_key="K", printer_host="127.0.0.1")
+        real = B.ThreadingHTTPServer; calls = []
+        def fake(addr, h):
+            calls.append(addr[0])
+            if addr[0] == "0.0.0.0": raise OSError(48, "Address already in use")
+            return real(addr, h)
+        B.ThreadingHTTPServer = fake
+        try: srv = B.serve(cfg, B.Bridge(dict(cfg, serial_monitor=False)), start_monitor=False)
+        finally: B.ThreadingHTTPServer = real
+        self.assertEqual(calls[:2], ["0.0.0.0", "127.0.0.1"]); self.assertEqual(srv.server_address[0], "127.0.0.1"); srv.server_close()
+
 if __name__ == "__main__": unittest.main()

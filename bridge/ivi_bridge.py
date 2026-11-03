@@ -1953,9 +1953,31 @@ def make_handler(bridge):
                              "effectivePrint": start, "message": msg_txt})
     return H
 
+def lan_ip(probe="192.168.1.1"):
+    """This Mac's LAN address (UDP connect only picks a route; nothing is sent)."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try: s.connect((probe, 9)); return s.getsockname()[0]
+    except OSError: return None
+    finally: s.close()
+
 def serve(cfg, bridge=None, start_monitor=True):
     bridge = bridge or Bridge(cfg)
-    srv = ThreadingHTTPServer((cfg["listen_host"], cfg["listen_port"]), make_handler(bridge))
+    handler = make_handler(bridge)
+    try:
+        srv = ThreadingHTTPServer((cfg["listen_host"], cfg["listen_port"]), handler)
+    except OSError as e:
+        # macOS AirPlay Receiver (ControlCenter) holds *:5000. Binding 0.0.0.0 then fails, but specific
+        # addresses still work: serve on 127.0.0.1 (Orca) + the LAN address (OctoApp) instead.
+        if e.errno not in (48, 98) or cfg["listen_host"] not in ("0.0.0.0", ""): raise
+        srv = ThreadingHTTPServer(("127.0.0.1", cfg["listen_port"]), handler)
+        ip = lan_ip(cfg.get("printer_host") or "192.168.1.1")
+        log(f"port {cfg['listen_port']} is taken on all addresses (AirPlay Receiver?); serving on 127.0.0.1 and {ip or 'no LAN address'}")
+        if ip and not ip.startswith("127."):
+            try:
+                extra = ThreadingHTTPServer((ip, cfg["listen_port"]), handler)
+                threading.Thread(target=extra.serve_forever, daemon=True).start(); srv.extra = extra
+            except OSError as e2: log(f"LAN listener on {ip} failed: {e2}")
     log(f"ivi-bridge {VERSION} on http://{cfg['listen_host']}:{cfg['listen_port']} uploads={upload_mode(cfg)}")
     if bridge.monitor:
         log("USB monitor on: status/controls use the USB port when it is free (IVI 3licer must be disconnected)")
