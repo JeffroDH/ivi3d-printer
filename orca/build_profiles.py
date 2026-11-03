@@ -29,6 +29,7 @@ G90 ; absolute positioning
 G1 X-30 Y-97 Z15 F3000
 M109 S[nozzle_temperature_initial_layer] ; wait for hotend
 M190 S[bed_temperature_initial_layer_single] ; wait for bed
+G4 S2 ; settle after heat waits (fixes skipped prime)
 G92 E0
 G1 Z0.3 F500
 G1 X30 Y-97 E4.5 F1200 ; prime line, 60 mm
