@@ -72,5 +72,8 @@
     ],
     "slow_down_layer_time": [
         "8"
+    ],
+    "filament_retract_restart_extra": [
+        "-0.4"
     ]
 }

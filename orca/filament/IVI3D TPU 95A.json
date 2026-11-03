@@ -81,5 +81,8 @@
     ],
     "filament_deretraction_speed": [
         "20"
+    ],
+    "filament_retract_restart_extra": [
+        "-0.4"
     ]
 }

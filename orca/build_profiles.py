@@ -19,26 +19,31 @@ BED_MODEL = os.environ.get("IVI3D_BED_MODEL", "/Volumes/14TB/3D Printing Files/I
 def circle(r, n=72):
     return [f"{r * math.cos(2 * math.pi * i / n):.3f}x{r * math.sin(2 * math.pi * i / n):.3f}" for i in range(n)]
 
-START = """; IVI3D start (matches IVI 3licer 1.6.2 machine_start_gcode; G53/M82 as sent before FDM jobs)
+START = """; IVI3D start
 G53 ; machine coordinate system
 M82 ; absolute extrusion
 M104 S[nozzle_temperature_initial_layer]
 M140 S[bed_temperature_initial_layer_single]
 G28 ; home (delta homes to the top)
 G90 ; absolute positioning
-G1 Y-100.0 Z15.0 F2000
+G1 X-30 Y-97 Z15 F3000
 M109 S[nozzle_temperature_initial_layer] ; wait for hotend
 M190 S[bed_temperature_initial_layer_single] ; wait for bed
 G92 E0
-G1 Z0.8 F500.0
-G1 X8.66 Y-98.94 E8.0 F500.0 ; intro line
-G1 X17.25 Y-97.81 E15 F500.0 ; intro line
+G1 Z0.3 F500
+G1 X30 Y-97 E4.5 F1200 ; prime line, 60 mm
+G1 E3.7 F1500 ; small retract (0.8 mm)
+G1 X38 Y-90 F3000 ; wipe inward, no extrusion
 G92 E0
 ; IVI3D start end"""
 
 END = """; IVI3D end (IVI 3licer 1.6.2 machine_end_gcode + fan off)
 M104 S0 ; extruder heater off
 M140 S0 ; bed heater off
+G91 ; relative moves
+G1 Z10 F600 ; lift off the part
+G90 ; absolute moves
+G28 ; home to the top, clear of the print
 M107 ; part fan off (added; not in IVI 3licer)
 G90 ; absolute positioning
 G92 E1
@@ -169,6 +174,8 @@ EXTRA_FILAMENTS = [
                                   "Dry before use; enclosure recommended."]}),
 ]
 FILAMENTS = [filament] + EXTRA_FILAMENTS
+# Bowden: push 0.4 mm less back in after each retract to curb ooze/blobs on restart
+for _f in FILAMENTS: _f["filament_retract_restart_extra"] = ["-0.4"]
 
 # Printer limits (touchscreen presets): nozzle up to 270 C, bed up to 100 C. Clamp every filament to them.
 MAX_NOZZLE, MAX_BED = 270, 100
