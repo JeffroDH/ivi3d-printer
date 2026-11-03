@@ -911,7 +911,7 @@ class Bridge:
 
     def _caffeinate(self):
         if self.cfg.get("caffeinate") and sys.platform == "darwin":
-            try: return subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
+            try: return subprocess.Popen(["caffeinate", "-s", "-i", "-m", "-w", str(os.getpid())])
             except OSError: pass
         return None
 
