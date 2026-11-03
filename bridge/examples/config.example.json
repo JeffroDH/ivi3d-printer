@@ -3,7 +3,7 @@
   "printer_host": "192.168.50.85",
   "printer_port": 8080,
   "printer_token": "PUT-YOUR-PRINTER-TOKEN-HERE",
-  "serial_port": "/dev/tty.usbmodem*",
+  "serial_port": "auto",
   "baud": 115200,
   "firmware_version": "",
   "listen_host": "127.0.0.1",
@@ -14,6 +14,5 @@
   "report_interval_s": 4,
   "home_before_job": true,
   "laser_focus_z": null,
-  "auto_clear_stale_job": true,
-  "spool_dir": "~/Library/Application Support/ivi-bridge/jobs"
+  "auto_clear_stale_job": true
 }

@@ -146,7 +146,7 @@ class BridgeClient:
             return {"online": False, "error": msg}
         except Exception:
             return {"online": False, "error": f"IVI Bridge is not running at {self.url}. "
-                                              "Double-click 'Install IVI Bridge.command' (or start it) and try again."}
+                                              "Run the IVI Bridge installer (bridge/install/<os>/) or start the bridge, and try again."}
         state = job.get("state", "?")
         return {"online": True, "state": state, "alert": classify(state),
                 "file": (job.get("job") or {}).get("file", {}).get("name"),

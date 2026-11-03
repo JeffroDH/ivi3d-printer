@@ -4,6 +4,7 @@
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin
 HERE="$(cd "$(dirname "$0")" && pwd)"
 H="$HERE/ivi_setup_keys.py"
+[ -f "$H" ] || H="$HERE/../../ivi_setup_keys.py"   # run from the repo (bridge/install/macos)
 [ -f "$H" ] || H="$HOME/Library/Application Support/ivi-bridge/app/ivi_setup_keys.py"
 /usr/bin/python3 "$H" --wait "$@"
 echo; read -r -p "Done. Press Return to close." _

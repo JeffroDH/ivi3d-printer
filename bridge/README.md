@@ -7,8 +7,18 @@ A small local Python service that looks like an **OctoPrint** server to the slic
 | Wi-Fi (Orca **Upload**) | kore API `:8080` | `connect` → `upload` (201) → `disconnect`. **Start the job on the touch screen** — `start_print` is 404 on firmware V1.3.2-alpha. Future/custom firmware may enable Wi-Fi start. |
 | USB (Orca **Upload and Print**) | USB-C, 115200 | `M2411 S2` (+`M1001 L` only if fw ≥ 2.4.0) → wait for `PC start work` → stream G-code per `ok`. Connect: `M2005`, `M2007`, `M105`, `M2155 S4` (like IVI 3licer; a stale PC job is stopped with `M2411 S3`). Laser/CNC: `G53`, `G28`, [`G0 Z<laser_focus_z> F1500`], `G54` before start. Pause `M2410`, resume `M2411 S1`, cancel = `M2411 S3` + heaters off. Progress at `/api/job`. **Only one program can own the port — disconnect IVI 3licer.** The Mac must stay awake for the whole print. |
 
+## Folder layout
+| Path | What |
+|---|---|
+| `ivi_bridge.py`, `ivi_setup_keys.py`, `ivi_add_header.py` | core code (stdlib only on macOS/Linux; pyserial on Windows) |
+| `install/macos/` | `Install IVI Bridge.command`, `Uninstall IVI Bridge.command`, `Fix IVI Bridge Key.command`, plist example |
+| `install/linux/` | `install.sh`, `uninstall.sh`, `fix-key.sh` (systemd) |
+| `install/windows/` | `Install IVI Bridge.bat` → `install.ps1`, `Uninstall IVI Bridge.bat` → `uninstall.ps1`, `Fix IVI Bridge Key.bat` |
+| `examples/config.example.json` | annotated config (`"serial_port": "auto"` = per-OS default) |
+| `tests/` | unit tests |
+
 ## Install (macOS) — one time, no Terminal
-Double-click **`Install IVI Bridge.command`** (first time: right-click → Open if Gatekeeper complains). It:
+Double-click **`install/macos/Install IVI Bridge.command`** (first time: right-click → Open if Gatekeeper complains). It:
 - copies the bridge to `~/Library/Application Support/ivi-bridge/app`, no extra packages (built-in termios serial, no pyserial);
 - writes `~/.config/ivi-bridge/config.json` (mode 600) if missing: `mode: auto`, printer `192.168.50.85:8080`, stock token, random API key;
 - installs/loads the LaunchAgent `com.ivi3d.bridge` (starts at login, restarts on crash; log `~/Library/Logs/ivi-bridge.log`);
@@ -20,9 +30,33 @@ Double-click **`Install IVI Bridge.command`** (first time: right-click → Open 
 Re-run it after updating the repo; the existing key is kept (`"Install IVI Bridge.command" --new-key` from Terminal
 makes a new one and updates Orca too).
 **After importing `IVI3D.orca_printer` again** (it ships with a placeholder key), quit Orca and double-click
-**`Fix IVI Bridge Key.command`** (in this folder or `~/Library/Application Support/ivi-bridge/app`). Same as
-`/usr/bin/python3 bridge/ivi_setup_keys.py --wait`; add `--dry-run` to only list what would change. **`Uninstall IVI Bridge.command`** removes it (optionally the settings).
+**`Fix IVI Bridge Key.command`** (in `install/macos/` or `~/Library/Application Support/ivi-bridge/app`). Same as
+`/usr/bin/python3 bridge/ivi_setup_keys.py --wait`; add `--dry-run` to only list what would change. **`install/macos/Uninstall IVI Bridge.command`** removes it (optionally the settings).
 If macOS asks, allow Python under **Privacy & Security → Local Network**.
+
+**Updating an existing Mac install** (from before the `install/` move): `git pull`, then double-click
+`bridge/install/macos/Install IVI Bridge.command` once. Same LaunchAgent label (`com.ivi3d.bridge`), app folder, config
+and key; it just re-copies the core files and reloads. Your existing `"serial_port": "/dev/tty.usbmodem*"` keeps working.
+
+## Install (Linux)
+`bridge/install/linux/install.sh` (re-runnable; keeps config + key). Options: `--system` (system service, sudo), `--no-service`, `--new-key`, `--no-orca`.
+- needs `python3` (3.8+); makes a venv in `~/.local/share/ivi-bridge/venv` with pyserial (optional on Linux; falls back to system python3);
+- copies the core files to `~/.local/share/ivi-bridge/app`, writes `~/.config/ivi-bridge/config.json` if missing (port 5001, filtering off);
+- installs a **systemd --user** unit `ivi3d-bridge.service` (logs: `journalctl --user -u ivi3d-bridge -f`). For a headless box run
+  `sudo loginctl enable-linger $USER` so it runs without a login, or use `--system`. `--no-service` writes `~/.local/share/ivi-bridge/run.sh` instead;
+- serial: the printer appears as `/dev/ttyACM*` (default pattern `/dev/ttyACM*,/dev/ttyUSB*`); you need group `dialout` (Debian/Ubuntu/Fedora) or `uucp` (Arch): `sudo usermod -aG dialout $USER`, then log out/in;
+- Orca: key written into `~/.config/OrcaSlicer` (Flatpak: `~/.var/app/io.github.softfever.OrcaSlicer/config/OrcaSlicer`). After re-importing the profile, quit Orca and run `fix-key.sh`.
+Uninstall: `~/.local/share/ivi-bridge/uninstall.sh [--purge]`.
+
+## Install (Windows)
+Double-click `bridge\install\windows\Install IVI Bridge.bat` (runs `install.ps1` with `-ExecutionPolicy Bypass`; no admin). Options: `-NewKey`, `-NoTask`, `-NoOrca`.
+- needs Python 3.8+ from python.org (`py` launcher; the Store stub is skipped); makes a venv and installs **pyserial** (required on Windows);
+- copies everything to `%LOCALAPPDATA%\IVI3D Bridge` (`app\`, `venv\`, `config.json`, jobs/history under `data\`);
+- registers a per-user Scheduled Task **IVI3D Bridge** at logon running `pythonw.exe` (no window, restarts on failure);
+- serial: `"serial_port": "COM*"` picks the lowest COM port (set e.g. `"COM5"` if you have several; see Device Manager → Ports);
+- firewall: none needed on `127.0.0.1`; for `0.0.0.0` (OctoApp) allow TCP 5001 once as admin (command printed by the installer);
+- Orca: key written into `%APPDATA%\OrcaSlicer`; after re-importing the profile, quit Orca and run `Fix IVI Bridge Key.bat`.
+Uninstall: `Uninstall IVI Bridge.bat` (add `-Purge` from a prompt to delete settings).
 
 ## Two ways to print (Orca's buttons, default `"mode": "auto"`)
 
@@ -43,7 +77,7 @@ Controls (USB only): `POST /api/printer/tool` (`target`, `flowrate`), `/api/prin
 
 ## Orca Slicer
 1. Import `IVI3D.orca_printer` (see [../orca/README.md](../orca/README.md)); it pre-sets OctoPrint `127.0.0.1:5001`,
-   and the installer / `Fix IVI Bridge Key.command` fills in the API key. Nothing to paste.
+   and the installer / Fix-key helper (`install/<os>/`) fills in the API key. Nothing to paste.
 2. Optional check: Prepare sidebar → **Printer** title bar → Connection (Wi-Fi) icon → **Test**. (Hidden while the
    experimental "Use printer agents instead of print hosts" option is on.)
 3. Slice → **Upload and Print** = stream over USB now with live monitoring (keep the Mac awake and connected), or

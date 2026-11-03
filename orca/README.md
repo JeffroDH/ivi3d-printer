@@ -10,7 +10,7 @@
 ## Import
 1. OrcaSlicer → **File → Import → Import Configs…** → pick `IVI3D.orca_printer` (or the three `.json` files).
 2. Select printer **IVI3D 0.3 nozzle**, filament **IVI3D PLA**, process **IVI3D 0.15mm Standard** (or **0.20mm Fast** / **0.10mm High Quality**).
-3. Quit Orca and run the IVI Bridge installer, or `bridge/Fix IVI Bridge Key.command` if the bridge is already
+3. Quit Orca and run the IVI Bridge installer, or `bridge/install/macos/Fix IVI Bridge Key.command` (Linux `bridge/install/linux/fix-key.sh`, Windows `bridge\install\windows\Fix IVI Bridge Key.bat`) if the bridge is already
    installed ([../bridge/README.md](../bridge/README.md)). It writes the bridge's API key over the
    `PASTE-API-KEY-FROM-IVI-BRIDGE-INSTALLER` placeholder in the imported preset, the Device tab connection and the
    plugin config. Do this again after every re-import. Optional: Connection icon on the Printer bar → Test.

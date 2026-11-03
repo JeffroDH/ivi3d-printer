@@ -22,7 +22,7 @@ for wheel (`.whl`) plugins, e.g. `name-1.0-py3-none-any.whl` (pure Python, any O
 Pick one of these (don't use both, or you'll get two copies with the same plugin key):
 - **From Orca (recommended):** open the Plugins dialog, then **Browse plugins ▾ → Install local plugin**, and pick
   `orca/plugin/ivi3d_bridge_plugin.py`.
-- **Installer:** run `bridge/Install IVI Bridge.command` and click **Copy plugin**. It copies the file to the same place
+- **Installer:** run `bridge/install/macos/Install IVI Bridge.command` (Linux: `bridge/install/linux/install.sh`, Windows: `bridge/install/windows/Install IVI Bridge.bat`) and click **Copy plugin**. It copies the file to the same place
   Orca's own installer uses and removes the old `orca_plugins/ivi3d_bridge/` folder from 0.1.0.
 - **Manually:** quit Orca, create
   `~/Library/Application Support/OrcaSlicer/orca_plugins/ivi3d_bridge_plugin.py/` (a folder named after the file, the

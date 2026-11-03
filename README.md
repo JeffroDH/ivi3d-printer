@@ -42,7 +42,7 @@ Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/mar
 | `orca/` | OrcaSlicer FDM profile (printer/filament/process + `.orca_printer` bundle) and optional IVI header hook ([orca/README.md](orca/README.md)) |
 | `fusion/` | Autodesk Fusion post processors for the laser and CNC heads + header checker ([fusion/README.md](fusion/README.md)) |
 | `docs/laser_cnc_gcode.md` | Laser (line/point) and CNC G-code + header format from IVI 3licer test files |
-| `bridge/` | Orca Slicer / Anycubic Next bridge: OctoPrint-compatible service, Wi-Fi upload + USB serial streaming, tests |
+| `bridge/` | Orca Slicer / Anycubic Next bridge: OctoPrint-compatible service, Wi-Fi upload + USB serial streaming, tests; installers for macOS (launchd), Linux (systemd) and Windows (Task Scheduler) in `bridge/install/` |
 | `ivi-control.sh` | Command-line client for the HTTP API (discover, status, print, pause, G-code, …) |
 | `docs/slicer_report.md` | How IVI 3licer 1.6.2 (a rebranded Snapmaker Luban) talks to the printer — best map of the API |
 | `docs/firmware_report.md` | Analysis of the UI-board app (`firmware`): discovery, serial link to the motion board, update flow |

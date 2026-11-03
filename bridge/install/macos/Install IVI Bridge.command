@@ -3,7 +3,8 @@
 # Keeps the existing API key; run with --new-key (from Terminal) to generate a fresh one.
 set -euo pipefail
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")" && pwd)"            # bridge/install/macos
+SRC="$(cd "$HERE/../.." && pwd)"                 # bridge/ (core code)
 APP="$HOME/Library/Application Support/ivi-bridge/app"
 CFG="$HOME/.config/ivi-bridge/config.json"
 PLIST="$HOME/Library/LaunchAgents/com.ivi3d.bridge.plist"
@@ -18,7 +19,7 @@ fi
 
 mkdir -p "$APP" "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
 NEWKEY=""; [ "${1:-}" = "--new-key" ] && NEWKEY="--new-key"
-cp "$HERE/ivi_bridge.py" "$HERE/ivi_setup_keys.py" "$HERE/ivi_add_header.py" "$APP/"
+cp "$SRC/ivi_bridge.py" "$SRC/ivi_setup_keys.py" "$SRC/ivi_add_header.py" "$APP/"
 cp "$HERE/Fix IVI Bridge Key.command" "$APP/" && chmod +x "$APP/Fix IVI Bridge Key.command"
 INFO="$("$PY" "$APP/ivi_bridge.py" --config "$CFG" init-config)"
 HOSTPORT="$("$PY" -c 'import json,sys; print(json.loads(sys.argv[1])["host"])' "$INFO")"
@@ -55,7 +56,7 @@ done
 printf '%s' "$KEY" | pbcopy
 
 # Optional: OrcaSlicer 2.5 plugin (each plugin lives in its own folder under orca_plugins/)
-PLUGIN_SRC="$HERE/../orca/plugin/ivi3d_bridge_plugin.py"
+PLUGIN_SRC="$SRC/../orca/plugin/ivi3d_bridge_plugin.py"
 PLUGIN_NOTE="OrcaSlicer plugin: not installed"
 if [ -f "$PLUGIN_SRC" ]; then
   ANS=$(osascript -e 'button returned of (display dialog "Also copy the IVI3D Bridge plugin into OrcaSlicer 2.5 (orca_plugins)? Enable it afterwards in the Orca Plugins dialog." buttons {"Skip", "Copy plugin"} default button "Copy plugin" with title "IVI Bridge")' 2>/dev/null || echo Skip)

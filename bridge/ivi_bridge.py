@@ -10,9 +10,33 @@ can upload to it, and forwards jobs to the printer over:
 Commands:  serve | send FILE | postprocess FILE | watch DIR      (see --help)
 License: CC BY-NC-SA 4.0 (same as the repo).
 """
-import argparse, bisect, email.parser, fcntl, html, secrets, select, subprocess, termios, email.policy, glob, json, os, re, shutil, sys, threading, time
+import argparse, bisect, email.parser, fnmatch, html, secrets, select, subprocess, email.policy, glob, json, os, re, shutil, sys, threading, time
 import urllib.error, urllib.parse, urllib.request, uuid, base64, collections
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+try:
+    import fcntl, termios          # macOS / Linux: raw serial without pyserial
+except ImportError:                # Windows: pyserial (installed by install.ps1)
+    fcntl = termios = None
+
+def _data_dir():
+    """Per-OS folder for jobs, history and timelapse frames."""
+    if sys.platform == "darwin": return "~/Library/Application Support/ivi-bridge"
+    if sys.platform == "win32":
+        return os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local"), "IVI3D Bridge", "data")
+    return os.path.join(os.environ.get("XDG_DATA_HOME") or "~/.local/share", "ivi-bridge")
+
+def _cfg_dir():
+    if sys.platform == "win32":
+        return os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local"), "IVI3D Bridge")
+    return "~/.config/ivi-bridge"
+
+def default_serial_pattern(platform=None):
+    """Where the IVI3D's USB-C CDC port shows up: macOS /dev/tty.usbmodem*, Linux /dev/ttyACM* (or ttyUSB*
+    for USB-UART adapters), Windows COMn (listed via pyserial / the registry). Comma-separated globs allowed."""
+    platform = platform or sys.platform
+    if platform == "darwin": return "/dev/tty.usbmodem*"
+    if platform == "win32": return "COM*"
+    return "/dev/ttyACM*,/dev/ttyUSB*"
 
 VERSION = "0.1.0"
 DEFAULT_CONFIG = {
@@ -36,14 +60,14 @@ DEFAULT_CONFIG = {
     "printer_host": "192.168.50.85",
     "printer_port": 8080,
     "printer_token": "",                # kore API token (keep out of git)
-    "serial_port": "/dev/tty.usbmodem*",  # glob allowed (IVI3D: /dev/tty.usbmodemREDACTED)
+    "serial_port": default_serial_pattern(),  # glob(s), comma-separated; macOS tty.usbmodem*, Linux ttyACM*/ttyUSB*, Windows COM*
     "line_numbers": True,               # USB stream: Marlin 'N<n> <cmd>*<checksum>' lines, M110 N0 reset, Resend handling
     "baud": 115200,
     "firmware_version": "",             # override; otherwise read from the serial banner
     "listen_host": "127.0.0.1",
     "listen_port": 5001,
     "api_key": "",                      # key the slicer must send as X-Api-Key ("" = no check)
-    "spool_dir": "~/Library/Application Support/ivi-bridge/jobs",
+    "spool_dir": os.path.join(_data_dir(), "jobs"),
     "retries": 3,
     "line_timeout_s": 600,
     "poll_feedrate": True,              # USB stream: send bare M220 every feedrate_poll_s and scale time left by 100/FR
@@ -58,11 +82,11 @@ DEFAULT_CONFIG = {
     "webcam_snapshot_url": "",          # JPEG snapshot URL (IP camera); used for the snapshot view + timelapse
     "webcam_usb_device": "",            # local USB camera via ffmpeg/avfoundation, e.g. "0" ("" = off)
     "timelapse": False,                 # snapshot per layer during USB (Upload and Print) jobs
-    "timelapse_dir": "~/Library/Application Support/ivi-bridge/timelapse",
+    "timelapse_dir": os.path.join(_data_dir(), "timelapse"),
     "timelapse_fps": 15,
-    "history_file": "~/Library/Application Support/ivi-bridge/history.json",
-    "macros_file": "~/.config/ivi-bridge/macros.json",
-    "backup_dir": "~/.config/ivi-bridge/backups",
+    "history_file": os.path.join(_data_dir(), "history.json"),
+    "macros_file": os.path.join(_cfg_dir(), "macros.json"),
+    "backup_dir": os.path.join(_cfg_dir(), "backups"),
     "temp_history_s": 1800,             # temperature graph window
 }
 
@@ -70,7 +94,7 @@ def log(*a):
     print(time.strftime("%H:%M:%S"), *a, file=sys.stderr, flush=True)
 
 def config_path(path=None):
-    return path or os.environ.get("IVI_BRIDGE_CONFIG") or os.path.expanduser("~/.config/ivi-bridge/config.json")
+    return path or os.environ.get("IVI_BRIDGE_CONFIG") or os.path.expanduser(os.path.join(_cfg_dir(), "config.json"))
 
 def load_config(path=None):
     cfg = dict(DEFAULT_CONFIG)
@@ -112,10 +136,41 @@ def notify(cfg, msg, title="IVI Bridge"):
             except Exception as e: log("ntfy failed:", e)
         threading.Thread(target=push, daemon=True).start()
 
-def find_usb_port(pattern):
-    if not any(c in pattern for c in "*?["):
-        return pattern if os.path.exists(pattern) else None
-    hits = sorted(glob.glob(pattern)); return hits[0] if hits else None
+def list_serial_ports():
+    """Serial ports the OS reports (Windows: pyserial, else HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM)."""
+    try:
+        from serial.tools import list_ports
+        return sorted(p.device for p in list_ports.comports())
+    except Exception: pass
+    if sys.platform == "win32":
+        try:
+            import winreg
+            k = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DEVICEMAP\SERIALCOMM"); out, i = [], 0
+            while True:
+                try: out.append(winreg.EnumValue(k, i)[1]); i += 1
+                except OSError: break
+            return sorted(out)
+        except OSError: return []
+    return []
+
+def find_usb_port(pattern, exists=os.path.exists, globber=glob.glob, ports=None, platform=None):
+    """First port matching pattern: a path/COM name, a glob, or several comma-separated ('auto' = OS default)."""
+    platform = platform or sys.platform
+    pattern = (pattern or "auto").strip()
+    if pattern.lower() == "auto": pattern = default_serial_pattern(platform)
+    for pat in [p.strip() for p in pattern.split(",") if p.strip()]:
+        if re.fullmatch(r"(?i)com[\d*?\[\]-]+", pat) or (platform == "win32" and not any(c in pat for c in "/\\:")):
+            avail = list_serial_ports() if ports is None else ports
+            hits = sorted((p for p in avail if fnmatch.fnmatch(p.upper(), pat.upper())),
+                          key=lambda p: (len(p), p))      # COM3 before COM10
+            if hits: return hits[0]
+            continue
+        if not any(c in pat for c in "*?["):
+            if exists(pat): return pat
+            continue
+        hits = sorted(globber(pat))
+        if hits: return hits[0]
+    return None
 
 def resolve_mode(cfg):
     m = cfg.get("mode", "auto")
@@ -440,12 +495,25 @@ class TermiosSerial:
     def close(self):
         if self.fd is not None: os.close(self.fd); self.fd = None
 
+class PySerialPort:
+    """Windows (or anywhere termios is missing): pyserial with the same write/readline/close API."""
+    def __init__(self, port, baud=115200, timeout=1.0):
+        try: import serial
+        except ImportError: raise RuntimeError("pyserial is needed on this OS (pip install pyserial)")
+        kw = {"exclusive": True} if os.name != "nt" else {}
+        self.s = serial.Serial(port, baud, timeout=timeout, write_timeout=timeout, **kw)
+        self.s.reset_input_buffer(); self.s.reset_output_buffer()
+    def write(self, data): self.s.write(data)
+    def readline(self): return self.s.readline()
+    def close(self):
+        if self.s is not None: self.s.close(); self.s = None
+
 def open_serial(cfg):
     port = find_usb_port(cfg["serial_port"])
     if not port:
         raise RuntimeError(f"no serial port matches {cfg['serial_port']} (is USB-C plugged in?)")
     try:
-        return TermiosSerial(port, cfg["baud"])
+        return (TermiosSerial if termios else PySerialPort)(port, cfg["baud"])
     except Exception as e:
         raise RuntimeError(f"cannot open {port}: {e}. Disconnect IVI 3licer (only one program may own the port).")
 
@@ -1116,7 +1184,7 @@ class Webcam:
         if url: return self.fetch(url)
         dev = str(self.cfg.get("webcam_usb_device", "")).strip(); ff = find_ffmpeg()
         if dev and ff:
-            fmt = "avfoundation" if sys.platform == "darwin" else "v4l2"
+            fmt = {"darwin": "avfoundation", "win32": "dshow"}.get(sys.platform, "v4l2")
             r = self.run([ff, "-loglevel", "error", "-f", fmt, "-framerate", "30", "-i", dev, "-frames:v", "1",
                           "-f", "image2", "-vcodec", "mjpeg", "-"], capture_output=True, timeout=15)
             if r.returncode == 0 and r.stdout: return r.stdout

@@ -10,7 +10,7 @@ Locations (each is patched only if the file exists; the placeholder or any old k
   * plugin         <orca>/orca_plugins/config.json  capability "IVI3D Bridge" -> cap_config.api_key
 Orca files are backed up (<file>.bak-YYYYmmdd-HHMMSS) and written atomically. Orca rewrites its
 files on quit, so this refuses to touch them while OrcaSlicer is running. The key is never printed
-in full. Re-run it after importing IVI3D.orca_printer again (or use 'Fix IVI Bridge Key.command').
+in full. Re-run it after importing IVI3D.orca_printer again (or use install/macos/'Fix IVI Bridge Key.command', install/linux/fix-key.sh, install/windows/'Fix IVI Bridge Key.bat').
 """
 import argparse, glob, json, os, secrets, shutil, subprocess, sys, tempfile, time
 from collections import OrderedDict
@@ -24,16 +24,34 @@ EXIT_ORCA_RUNNING = 3
 def mask(key):
     return (key[:4] + "…" + key[-2:]) if key and len(key) > 8 else "****"
 
+def orca_dirs(platform=None, env=None, home=None):
+    """Candidate OrcaSlicer data folders, most likely first."""
+    platform = platform or sys.platform; env = os.environ if env is None else env
+    home = home or os.path.expanduser("~")
+    if platform == "darwin": return [os.path.join(home, "Library", "Application Support", "OrcaSlicer")]
+    if platform == "win32": return [os.path.join(env.get("APPDATA") or os.path.join(home, "AppData", "Roaming"), "OrcaSlicer")]
+    xdg = env.get("XDG_CONFIG_HOME") or os.path.join(home, ".config")
+    return [os.path.join(xdg, "OrcaSlicer"),                                                  # AppImage / distro package
+            os.path.join(home, ".var", "app", "io.github.softfever.OrcaSlicer", "config", "OrcaSlicer")]  # Flatpak
+
 def default_orca_dir():
-    return os.path.expanduser("~/Library/Application Support/OrcaSlicer")
+    c = orca_dirs()
+    return next((d for d in c if os.path.isdir(d)), c[0])
 
 def default_config():
-    return os.environ.get("IVI_BRIDGE_CONFIG") or os.path.expanduser("~/.config/ivi-bridge/config.json")
+    if os.environ.get("IVI_BRIDGE_CONFIG"): return os.environ["IVI_BRIDGE_CONFIG"]
+    if sys.platform == "win32":
+        return os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local"), "IVI3D Bridge", "config.json")
+    return os.path.expanduser("~/.config/ivi-bridge/config.json")
 
 def orca_running():
     try:
-        return subprocess.run(["pgrep", "-x", "OrcaSlicer"], stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL).returncode == 0
+        if sys.platform == "win32":
+            out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq orca-slicer.exe", "/NH"], capture_output=True, text=True).stdout
+            return "orca-slicer.exe" in out.lower()
+        names = ["OrcaSlicer"] if sys.platform == "darwin" else ["orca-slicer", "OrcaSlicer", "orca_slicer"]
+        return any(subprocess.run(["pgrep", "-x", n], stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL).returncode == 0 for n in names)
     except OSError:
         return False
 
@@ -139,7 +157,7 @@ def setup(config_path, orca_dir, new_key=False, dry_run=False, running=None, log
     if not jobs:
         log("Orca already has the current key everywhere."); return 0, key
     if (orca_running() if running is None else running()):
-        log("OrcaSlicer is running. Quit it (Cmd-Q) and run this again; %d file(s) need the key." % len(jobs))
+        log("OrcaSlicer is running. Quit it and run this again; %d file(s) need the key." % len(jobs))
         return EXIT_ORCA_RUNNING, key
     stamp = time.strftime("%Y%m%d-%H%M%S")
     for p, d in jobs:
@@ -168,7 +186,7 @@ def main(argv=None):
     if a.wait:
         warned = False
         while orca_running():
-            if not warned: log("Waiting for OrcaSlicer to quit (Cmd-Q)…"); warned = True
+            if not warned: log("Waiting for OrcaSlicer to quit…"); warned = True
             time.sleep(2)
     rc, key = setup(a.config, a.orca_dir, a.new_key, a.dry_run, log=log)
     if a.print_key: print(key)

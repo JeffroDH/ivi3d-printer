@@ -3,7 +3,7 @@
 **Status (2026-11-01): v0.1 implemented in [`bridge/`](../bridge/README.md)** — OctoPrint-compatible service, Wi-Fi upload + USB serial streaming, post-processing/watch-folder CLI for Anycubic Slicer Next. Unit-tested with fakes; not yet run against the printer.
 
 ## One-time setup (macOS)
-1. Double-click `bridge/Install IVI Bridge.command`; note the dialog (API key is on the clipboard).
+1. Double-click `bridge/install/macos/Install IVI Bridge.command` (Linux: `bridge/install/linux/install.sh`; Windows: `bridge\install\windows\Install IVI Bridge.bat`); note the dialog (API key is on the clipboard).
 2. Orca → printer → Connection: **OctoPrint**, host `127.0.0.1:5001` (5000 is taken by macOS AirPlay Receiver; OctoApp also uses `<mac-ip>:5001`), paste API key → Test.
 3. Every job: slice → **Upload and Print** (streams over USB now, live monitoring; the Mac must stay awake and connected) or **Upload** (stored on the printer over Wi-Fi; start on the touch screen; the bridge keeps USB closed during that print because opening it mid-print stalls the job). Notifications report progress; status page http://127.0.0.1:5001/.
 4. Anycubic Next: add the post-processing line shown by the installer (also saved in `~/.config/ivi-bridge/orca-settings.txt`) and use *Export G-code*.
