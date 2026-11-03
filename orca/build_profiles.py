@@ -31,9 +31,11 @@ M109 S[nozzle_temperature_initial_layer] ; wait for hotend
 M190 S[bed_temperature_initial_layer_single] ; wait for bed
 G4 S2 ; settle after heat waits (fixes skipped prime)
 G92 E0
+G1 E8 F150 ; push filament to the tip (slow)
+G92 E0
 G1 Z0.3 F500
-G1 X30 Y-97 E4.5 F1200 ; prime line, 60 mm
-G1 E3.7 F1500 ; small retract (0.8 mm)
+G1 X30 Y-97 E12 F450 ; prime line, 60 mm, slow and heavy
+G1 E11.2 F1500 ; small retract (0.8 mm)
 G1 X38 Y-90 F3000 ; wipe inward, no extrusion
 G92 E0
 ; IVI3D start end"""
