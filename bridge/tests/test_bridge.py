@@ -145,7 +145,7 @@ class SerialJobTests(unittest.TestCase):
     def test_stream(self):
         s = FakeSerial(); j = B.SerialJob(s, ["G28", "M109 S215", "G1 X1"], line_timeout=2); j.run()
         self.assertEqual(j.state, "Operational"); self.assertEqual(j.sent, 3)
-        self.assertEqual(s.written, ["M2005", "M2007", "M105", "M2155 S4"] + ["M2411 S2", "G28", "M109 S215", "G1 X1"])  # no M1001 on 1.3.2
+        self.assertEqual(s.written, ["M2005", "M2007", "M105", "M2155 S4"] + ["M2411 S2", "G28", "M109 S215", "G1 X1", "M2411 S4", "M2007"])  # no M1001 on 1.3.2
         self.assertEqual(j.progress, 100.0)
     def test_m1001_new_fw(self):
         s = FakeSerial("Firmware V2.4.1"); j = B.SerialJob(s, ["G28"], line_timeout=2); j.run()
@@ -273,7 +273,7 @@ class OctoPrintApiTests(unittest.TestCase):
         job = self.req("/api/job")[1]
         self.assertEqual(job["state"], "Operational"); self.assertEqual(job["progress"]["completion"], 100.0)
         self.assertEqual(self.ser.written, ["M2005", "M2007", "M105", "M2155 S4"] + ["M2411 S2", "M110 N0"] +
-                         [B.checksum_line(1, "G28"), B.checksum_line(2, "M109 S215"), B.checksum_line(3, "G1 X1")]); self.assertTrue(self.ser.closed)
+                         [B.checksum_line(1, "G28"), B.checksum_line(2, "M109 S215"), B.checksum_line(3, "G1 X1"), "M2411 S4", "M2007"]); self.assertTrue(self.ser.closed)
     def test_layer_starts(self):
         lines = ["G28", "G1 Z0.3", "G1 X1 E1", "G1 X2 E2", "G1 Z0.6", "G1 X3", "G1 X4 E3", "G91", "G1 Z5 E1", "G90"]
         self.assertEqual(B.layer_starts(lines), [2, 6])
@@ -576,3 +576,35 @@ class BytePosTests(unittest.TestCase):
         j.sent = 0; self.assertEqual(j.byte_pos(), 0)
         j.sent = 2; self.assertEqual(j.byte_pos(), 4 + 9)
         self.assertEqual(j.byte_pos(3), 4 + 9 + 10); self.assertEqual(j.byte_pos(99), 23)
+
+
+def test_finish_job_sends_m2411_s4_after_normal_stream():
+    import ivi_bridge as b
+    class Ser:
+        def __init__(s): s.out=[]; s.q=[]
+        def write(s, d):
+            l=d.decode().strip(); s.out.append(l)
+            s.q.append(b"ok\n")
+        def readline(s): return s.q.pop(0) if s.q else b""
+        def flush(s): pass
+        @property
+        def in_waiting(s): return len(s.q)
+        def reset_input_buffer(s): s.q.clear()
+    ser=Ser(); j=b.SerialJob(ser, ["G1 X1"], "t", line_timeout=2)
+    j.status={"working": "IDLE"}
+    j._finish_printer()
+    assert "M2411 S4" in ser.out and "M2411 S3" not in ser.out
+
+
+def test_finish_job_can_be_disabled():
+    import ivi_bridge as b
+    class Ser:
+        def __init__(s): s.out=[]
+        def write(s, d): s.out.append(d.decode().strip())
+        def readline(s): return b""
+        def flush(s): pass
+        in_waiting=0
+        def reset_input_buffer(s): pass
+    ser=Ser(); j=b.SerialJob(ser, [], "t", finish_job=False)
+    j._finish_printer()
+    assert ser.out == []

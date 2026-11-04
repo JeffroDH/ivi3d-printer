@@ -75,6 +75,7 @@ DEFAULT_CONFIG = {
     "report_interval_s": 4,             # M2155 S<n>: printer pushes temps/position/status every n s
     "home_before_job": True,            # laser/CNC: G53, G28, ..., G54 before M2411 S2 (IVI 3licer behaviour)
     "laser_focus_z": None,              # machine Z (mm) to drop to before a laser job; required if homing
+    "finish_job_on_complete": True,     # USB stream done: M2411 S4 (then S3 if still WORKING_PC) so the printer goes idle
     "auto_clear_stale_job": True,       # on "Can't start work in current status: 5" send M2411 S3 and retry once              # max wait for 'ok' (long heats send 'busy' meanwhile)
     # --- Fluidd/Mainsail-style extras (all optional) ---
     "ntfy_url": "",                     # phone push: e.g. "https://ntfy.sh/my-secret-topic" ("" = off)
@@ -583,8 +584,9 @@ class SerialJob:
     """Streams one job. States: Starting -> Printing <-> Paused -> Operational | Cancelled | Error."""
     def __init__(self, ser, lines, name="job", firmware_version="", line_timeout=600, clock=time.monotonic,
                  prelude=(), report_interval=4, auto_clear=True, notify=None, line_numbers=False,
-                 poll_feedrate=False, feedrate_poll_s=45):
+                 poll_feedrate=False, feedrate_poll_s=45, finish_job=True):
         self.ser, self.lines, self.name = ser, lines, name
+        self.finish_job = finish_job
         self.line_numbers = line_numbers; self._resend = None
         self.fw = firmware_version
         self.line_timeout, self.clock = line_timeout, clock
@@ -755,7 +757,7 @@ class SerialJob:
             if self._cancel.is_set():
                 self._stop_printer(); self.state = "Cancelled"
             else:
-                self.state = "Operational"
+                self._finish_printer(); self.state = "Operational"
             log(f"job {self.name}: {self.state} ({self.sent}/{len(self.lines)})")
         except Exception as e:
             self.error, self.state = str(e), "Error"
@@ -771,6 +773,23 @@ class SerialJob:
         self._write("M220")
         try: self._wait(lambda l: l == "ok" or l.startswith("ok "), 3)
         except (TimeoutError, RuntimeError): pass
+
+    def _finish_printer(self):
+        """End of a normal stream: close the PC job so the printer leaves WORKING_PC (M2411 S4 = finish).
+        IVI 3licer never does this (it clears a leftover WORKING_PC with M2411 S3 on the next connect), which is
+        why the printer kept reporting 'Printing' after a USB job ended. Falls back to M2411 S3 if still working."""
+        if not self.finish_job: return
+        try:
+            self._write("M2411 S4"); self._drain(2)
+            self.status.pop("working", None); self._write("M2007"); self._drain(2)
+            if self.status.get("working", "").startswith("WORKING"):
+                log(f"job {self.name}: printer still {self.status['working']} after M2411 S4; sending M2411 S3")
+                self._write("M2411 S3")
+                try: self._wait(lambda l: "trigger stop: ok" in l.lower() or "finish stop" in l.lower()
+                                or "can't trigger stop" in l.lower(), 10)
+                except (TimeoutError, RuntimeError): pass
+        except Exception as e:
+            log(f"job {self.name}: finish hook: {e}")
 
     def _stop_printer(self):
         # M2411 S3 = "trigger stop" in the firmware job state machine (also what IVI 3licer's Stop sends)
@@ -1501,6 +1520,7 @@ class Bridge:
                                  notify=lambda m: notify(self.cfg, m),
                                  poll_feedrate=self.cfg.get("poll_feedrate", True),
                                  feedrate_poll_s=self.cfg.get("feedrate_poll_s", 45),
+                                 finish_job=self.cfg.get("finish_job_on_complete", True),
                                  line_numbers=self.cfg.get("line_numbers", True))
             self.job.on_line = lambda l: self.log_console("<", l)
             self.timelapse = None
