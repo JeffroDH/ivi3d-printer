@@ -597,6 +597,7 @@ class SerialJob:
         self.on_line = None; self.on_layer = None      # console log / timelapse hooks
         self.poll_feedrate, self.feedrate_poll_s = poll_feedrate, feedrate_poll_s
         self.feedrate = None; self._m73 = None; self._last_fr_poll = None   # _m73 = (seconds left, clock)
+        self._boff = None; self._sent_t = None   # byte-offset prefix (lazy), clock of the last ack
 
     def _write(self, cmd):
         self.ser.write((cmd + "\n").encode())
@@ -746,10 +747,10 @@ class SerialJob:
                 if self._resend is not None and self.line_numbers:
                     resends += 1
                     if resends > 50: raise RuntimeError("too many resend requests (line noise?)")
-                    i = max(0, self._resend - 1); self.sent = i; continue
+                    i = max(0, self._resend - 1); self.sent = i; self._sent_t = self.clock(); continue
                 pm = parse_m73(cmd) if cmd[:3].upper() == "M73" else None
                 if pm and pm[1] is not None: self._m73 = (pm[1] * 60.0, self.clock())
-                i += 1; self.sent = i
+                i += 1; self.sent = i; self._sent_t = self.clock()
                 self._maybe_poll_feedrate()
             if self._cancel.is_set():
                 self._stop_printer(); self.state = "Cancelled"
@@ -805,7 +806,24 @@ class SerialJob:
         layer = bisect.bisect_right(self._layers, self.sent - 1) if self.sent else 0
         return {"source": "usb stream", "sent": self.sent, "total": len(self.lines), "elapsed": el, "left": left,
                 "left_source": src, "feedrate": self.feedrate,
-                "line": self.sent, "layer": layer, "layers": len(self._layers), "gcode": "/api/ivi/job/gcode"}
+                "line": self.sent, "byte": self.byte_pos(), "layer": layer, "layers": len(self._layers),
+                "gcode": "/api/ivi/job/gcode", "pos": "/api/ivi/job/pos"}
+
+    def byte_pos(self, line=None):
+        """Byte offset in the /api/ivi/job/gcode text of the start of 0-based line `line` (default: the
+        next unsent line), i.e. the bytes fully acknowledged by the printer."""
+        if self._boff is None:
+            off, acc = [0], 0
+            for l in self.lines: acc += len(l.encode()) + 1; off.append(acc)
+            self._boff = off
+        n = self.sent if line is None else line
+        return self._boff[max(0, min(n, len(self._boff) - 1))]
+
+    def pos(self):
+        """Lightweight live position for the toolpath animation (no printer traffic: what the stream knows)."""
+        age = (self.clock() - self._sent_t) if self._sent_t is not None else None
+        return {"active": True, "name": self.name, "state": self.state, "line": self.sent, "total": len(self.lines),
+                "byte": self.byte_pos(), "feedrate": self.feedrate, "age": age}
 
 def low_err(line):
     return line.lower().startswith(("error", "!!"))
@@ -1742,36 +1760,59 @@ async function tick(){try{const j=await (await fetch('/api/job',{headers:H})).js
  try{tpTick(j,lk)}catch(e){}
  const q=p.position;px.textContent='X: '+(q?q.x.toFixed(2):'–');py.textContent='Y: '+(q?q.y.toFixed(2):'–');pz.textContent='Z: '+(q?q.z.toFixed(2):'–')
 }catch(e){st.textContent='bridge offline';document.querySelectorAll('.u').forEach(b=>b.disabled=true)}}
-let TP={key:null,M:null,lay:null,n:0,busy:false,drawn:-1};
-async function tpLoad(key){TP={key,M:null,lay:null,n:0,busy:true,drawn:-1};tpn.textContent='Loading toolpath…';
+let TP={key:null,M:null,lay:null,n:0,busy:false,line:0,fr:100,ai:0,af:1,last:0,bgk:null,bg:null,run:false};
+async function tpLoad(key){TP={key,M:null,lay:null,n:0,busy:true,line:0,fr:100,ai:0,af:1,last:0,bgk:null,bg:null,run:false};tpn.textContent='Loading toolpath…';
  try{const r=await fetch('/api/ivi/job/gcode',{headers:H});if(!r.ok)throw new Error(r.status);let txt=await r.text();
- const mv=[],lay=[],lzs=[];let x=0,y=0,z=0,e=0,lz=null,rel=false,i=0,a=0;
+ const mv=[],lay=[],lzs=[];let x=0,y=0,z=0,e=0,f=1800,lz=null,rel=false,i=0,a=0;
  while(a<=txt.length){let b=txt.indexOf('\\n',a);if(b<0)b=txt.length;const s=txt.slice(a,b);a=b+1;i++;
   const k=s.trim().split(/\\s+/),c=(k[0]||'').toUpperCase();if(c=='G91'){rel=true;continue}if(c=='G90'){rel=false;continue}
   if(c=='G92'){for(const q of k.slice(1))if(q[0]=='E'||q[0]=='e')e=+q.slice(1)||0;continue}
   if((c!='G0'&&c!='G1')||rel)continue;let nx=x,ny=y,nz=z,ex=0,hasE=false;
-  for(const q of k.slice(1)){const v=+q.slice(1),L=q[0].toUpperCase();if(isNaN(v))continue;if(L=='X')nx=v;else if(L=='Y')ny=v;else if(L=='Z')nz=v;else if(L=='E'){hasE=true;ex=v-e;e=v}}
-  const ext=c=='G1'&&hasE&&ex>0;if(ext&&lz!==nz){lay.push(mv.length/4);lzs.push(nz);lz=nz}
-  mv.push(nx,ny,ext?1:0,i);x=nx;y=ny;z=nz}
- txt=null;TP.M=new Float32Array(mv);TP.lay=lay;TP.lz=lzs;TP.n=TP.M.length/4;tpn.textContent=''}
+  for(const q of k.slice(1)){const v=+q.slice(1),L=q[0].toUpperCase();if(isNaN(v))continue;if(L=='X')nx=v;else if(L=='Y')ny=v;else if(L=='Z')nz=v;else if(L=='F'&&v>0)f=v;else if(L=='E'){hasE=true;ex=v-e;e=v}}
+  const ext=c=='G1'&&hasE&&ex>0;if(ext&&lz!==nz){lay.push(mv.length/5);lzs.push(nz);lz=nz}
+  mv.push(nx,ny,ext?1:0,i,f);x=nx;y=ny;z=nz}
+ txt=null;TP.M=new Float32Array(mv);TP.lay=lay;TP.lz=lzs;TP.n=TP.M.length/5;tpn.textContent=''}
  catch(err){tpn.textContent='Toolpath not available ('+err.message+')'}TP.busy=false}
-function tpIdx(line){const M=TP.M;let lo=0,hi=TP.n-1,r=-1;while(lo<=hi){const m=(lo+hi)>>1;if(M[m*4+3]<=line){r=m;lo=m+1}else hi=m-1}return r}
-function tpDraw(line){const M=TP.M,n=TP.n,lay=TP.lay;if(!M||!n)return;const cur=Math.max(0,tpIdx(line));
- let li=0;while(li<lay.length&&lay[li]<=cur)li++;const ls=li?lay[li-1]:0,le=li<lay.length?lay[li]:n;
- const g=tpv.getContext('2d'),S=2.55,C=280,P=(a,b)=>[C+a*S,C-b*S];g.clearRect(0,0,560,560);
- g.lineWidth=1.2;g.strokeStyle='#59606d';g.setLineDash([6,5]);g.beginPath();g.arc(C,C,105*S,0,7);g.stroke();g.setLineDash([]);g.strokeStyle='#8a93a3';g.beginPath();g.arc(C,C,100*S,0,7);g.stroke();
- function seg(a,b,col,w){g.strokeStyle=col;g.lineWidth=w;g.beginPath();for(let i=Math.max(1,a+1);i<b;i++){if(!M[i*4+2])continue;const[p,q]=P(M[i*4-4],M[i*4-3]),[r,t]=P(M[i*4],M[i*4+1]);g.moveTo(p,q);g.lineTo(r,t)}g.stroke()}
- seg(0,ls,'rgba(120,140,170,.25)',1);seg(cur,le,'rgba(63,182,255,.18)',1.2);seg(ls,cur+1,'#3fd2ff',1.6);
- const[nx,ny]=P(M[cur*4],M[cur*4+1]);g.fillStyle='#ff9f2e';g.beginPath();g.arc(nx,ny,6,0,7);g.fill();g.strokeStyle='#fff';g.lineWidth=2;g.stroke();
- const h=tpz.getContext('2d'),N=Math.max(1,lay.length),bh=420/N;h.clearRect(0,0,150,470);
- for(let i=0;i<lay.length;i++){const yy=450-(i/N)*420;h.fillStyle=i<li-1?'#3fd2ff':i==li-1?'#ff9f2e':'#39404c';h.fillRect(20,yy-bh+(bh>4?2:0),110,Math.max(1,bh-(bh>4?3:0)))}
- h.fillStyle='#8a93a3';h.font='11px sans-serif';h.fillText('top',2,24);h.fillText('bed',2,465);
- tpc.textContent='· Layer '+li+' / '+lay.length+' · Z '+(li&&TP.lz?TP.lz[li-1].toFixed(2):'0.00')+' mm, line '+line.toLocaleString()}
+// last move whose 1-based G-code line is <= line (lines before `line` are acknowledged by the printer)
+function tpIdx(line){const M=TP.M;let lo=0,hi=TP.n-1,r=-1;while(lo<=hi){const m=(lo+hi)>>1;if(M[m*5+3]<=line){r=m;lo=m+1}else hi=m-1}return r}
+function tpLayer(i){const lay=TP.lay;let lo=0,hi=lay.length;while(lo<hi){const m=(lo+hi)>>1;if(lay[m]<=i)lo=m+1;else hi=m}return lo}
+const tpS=2.55,tpC=280,tpP=(a,b)=>[tpC+a*tpS,tpC-b*tpS];
+function tpSeg(g,a,b,col,w){const M=TP.M;g.strokeStyle=col;g.lineWidth=w;g.beginPath();for(let i=Math.max(1,a+1);i<b;i++){if(!M[i*5+2])continue;const[p,q]=tpP(M[i*5-5],M[i*5-4]),[r,t]=tpP(M[i*5],M[i*5+1]);g.moveTo(p,q);g.lineTo(r,t)}g.stroke()}
+// static background per layer: bed, earlier layers, faint rest of this layer (cached; redrawn only on layer change)
+function tpBg(li){if(TP.bgk===li&&TP.bg)return TP.bg;const n=TP.n,lay=TP.lay,ls=li?lay[li-1]:0,le=li<lay.length?lay[li]:n;
+ const c=TP.bg||document.createElement('canvas');c.width=c.height=560;const g=c.getContext('2d');g.clearRect(0,0,560,560);
+ g.lineWidth=1.2;g.strokeStyle='#59606d';g.setLineDash([6,5]);g.beginPath();g.arc(tpC,tpC,105*tpS,0,7);g.stroke();g.setLineDash([]);g.strokeStyle='#8a93a3';g.beginPath();g.arc(tpC,tpC,100*tpS,0,7);g.stroke();
+ tpSeg(g,0,ls,'rgba(120,140,170,.25)',1);tpSeg(g,ls,le,'rgba(63,182,255,.18)',1.2);TP.bg=c;TP.bgk=li;return c}
+// draw printed moves up to move ai, with move ai drawn to fraction af (0..1); nozzle at that point
+function tpDraw(ai,af){const M=TP.M,n=TP.n,lay=TP.lay;if(!M||!n)return;ai=Math.max(0,Math.min(n-1,ai));
+ const li=tpLayer(ai),ls=li?lay[li-1]:0,g=tpv.getContext('2d');g.clearRect(0,0,560,560);g.drawImage(tpBg(li),0,0);
+ tpSeg(g,ls,ai,'#3fd2ff',1.6);let x=M[ai*5],y=M[ai*5+1];
+ if(ai>0&&af<1){const x0=M[ai*5-5],y0=M[ai*5-4];x=x0+(x-x0)*af;y=y0+(y-y0)*af}
+ if(ai>0&&M[ai*5+2]){const[p,q]=tpP(M[ai*5-5],M[ai*5-4]),[r,t]=tpP(x,y);g.strokeStyle='#3fd2ff';g.lineWidth=1.6;g.beginPath();g.moveTo(p,q);g.lineTo(r,t);g.stroke()}
+ const[nx,ny]=tpP(x,y);g.fillStyle='#ff9f2e';g.beginPath();g.arc(nx,ny,6,0,7);g.fill();g.strokeStyle='#fff';g.lineWidth=2;g.stroke();
+ if(TP.zli!==li){TP.zli=li;const h=tpz.getContext('2d'),N=Math.max(1,lay.length),bh=420/N;h.clearRect(0,0,150,470);
+  for(let i=0;i<lay.length;i++){const yy=450-(i/N)*420;h.fillStyle=i<li-1?'#3fd2ff':i==li-1?'#ff9f2e':'#39404c';h.fillRect(20,yy-bh+(bh>4?2:0),110,Math.max(1,bh-(bh>4?3:0)))}
+  h.fillStyle='#8a93a3';h.font='11px sans-serif';h.fillText('top',2,24);h.fillText('bed',2,465)}
+ tpc.textContent='· Layer '+li+' / '+lay.length+' · Z '+(li&&TP.lz?TP.lz[li-1].toFixed(2):'0.00')+' mm, line '+TP.line.toLocaleString()}
+// one animation step of dt seconds: advance along the path at the move's feedrate (x speed %), never past
+// the last acknowledged move; far behind (or the job went backwards) -> catch up faster / snap
+function tpStep(dt){const M=TP.M;if(!M||!TP.n)return;const tgt=Math.max(0,tpIdx(TP.line));
+ if(TP.ai>tgt||tgt-TP.ai>400||tpLayer(tgt)!=tpLayer(TP.ai)&&tgt-TP.ai>40){TP.ai=tgt;TP.af=1;return}
+ let bud=dt*(1+(tgt-TP.ai)/12);
+ while(bud>0){if(TP.af>=1){if(TP.ai>=tgt){TP.af=1;return}TP.ai++;TP.af=0}
+  const i=TP.ai,L=i?Math.hypot(M[i*5]-M[i*5-5],M[i*5+1]-M[i*5-4]):0,v=Math.max(1,M[i*5+4]*TP.fr/100/60);
+  if(L<=1e-6){TP.af=1;continue}const need=(1-TP.af)*L/v;if(need<=bud){bud-=need;TP.af=1}else{TP.af+=bud*v/L;bud=0}}}
+function tpFrame(t){if(!TP.run)return;const dt=TP.last?Math.min(.25,(t-TP.last)/1000):0;TP.last=t;
+ if(!document.hidden&&TP.M){tpStep(dt);tpDraw(TP.ai,TP.af)}requestAnimationFrame(tpFrame)}
+function tpStart(){if(TP.run)return;TP.run=true;TP.last=0;requestAnimationFrame(tpFrame)}
+// fast, lightweight position poll (bridge-only, no printer traffic) while a USB print is shown
+async function tpPoll(){if(!TP.M||!TP.run||document.hidden)return;try{const d=await J('/api/ivi/job/pos');
+ if(!d.active)return;TP.line=d.line||0;if(d.feedrate)TP.fr=d.feedrate}catch(e){}}
 function tpTick(j,lk){const ji=j.ivi||{},us=ji.source=='usb stream'&&!/^(Operational|Cancelled)/.test(j.state);
- if(lk){tpw.style.display='none';tpc.textContent='';tpn.textContent='Not available for Upload (Wi-Fi) prints: the printer runs the file from its own storage, so the bridge has no line position. Use Upload and Print for a live toolpath.';TP.key=null;TP.M=null;return}
- if(!us){tpw.style.display='none';tpc.textContent='';tpn.textContent='No USB print running. The toolpath appears here during an Upload and Print job.';TP.key=null;TP.M=null;return}
- tpn.textContent='';tpw.style.display='flex';const key=j.job.file.name+'|'+ji.total;
- if(TP.key!==key&&!TP.busy)tpLoad(key).then(()=>tpDraw(ji.line||0));else if(TP.M&&TP.drawn!==ji.line){tpDraw(ji.line||0);TP.drawn=ji.line}}
+ if(lk||!us){tpw.style.display='none';tpc.textContent='';tpn.textContent=lk?'Not available for Upload (Wi-Fi) prints: the printer runs the file from its own storage, so the bridge has no line position. Use Upload and Print for a live toolpath.':'No USB print running. The toolpath appears here during an Upload and Print job.';TP.key=null;TP.M=null;TP.run=false;return}
+ tpn.textContent='';tpw.style.display='flex';const key=j.job.file.name+'|'+ji.total;TP.line=ji.line||0;if(ji.feedrate)TP.fr=ji.feedrate;
+ if(TP.key!==key&&!TP.busy)tpLoad(key).then(()=>{TP.line=ji.line||0;TP.ai=Math.max(0,tpIdx(TP.line));TP.af=1;tpStart()});else if(TP.M)tpStart()}
+setInterval(tpPoll,350);
 const NL=String.fromCharCode(10);let CS=0,CAM=null,MAC=[];
 function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 async function J(u,o){const r=await fetch(u,o?{method:'POST',headers:H,body:JSON.stringify(o)}:{headers:H});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j}
@@ -1947,6 +1988,11 @@ def make_handler(bridge):
             if p.startswith("/api/ivi/") and self._extras_get(p) is not False: return
             if p == "/api/ivi/filament":
                 return self._json(200, bridge.filament.info() if bridge.filament else {"state": "idle"})
+            if p == "/api/ivi/job/pos":
+                j = bridge.job
+                if not j or not getattr(j, "lines", None) or not hasattr(j, "pos"):
+                    return self._json(200, {"active": False})
+                return self._json(200, j.pos())
             if p == "/api/ivi/job/gcode":
                 j = bridge.job
                 if not j or not getattr(j, "lines", None):

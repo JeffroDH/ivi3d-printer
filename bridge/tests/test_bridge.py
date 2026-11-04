@@ -292,9 +292,20 @@ class OctoPrintApiTests(unittest.TestCase):
         self.assertEqual(e.exception.code, 403)
         ji = self.req("/api/job")[1]["ivi"]
         self.assertEqual((ji["line"], ji["layer"], ji["layers"], ji["gcode"]), (5, 2, 2, "/api/ivi/job/gcode"))
+        self.assertEqual(ji["byte"], len("G28\nG1 Z0.3\nG1 X1 E1\nG1 Z0.6\nG1 X2 E2\n"))
+        pos = self.req("/api/ivi/job/pos")[1]
+        self.assertEqual((pos["active"], pos["line"], pos["total"], pos["byte"]), (True, 5, 5, ji["byte"]))
+        self.assertIsNotNone(pos["age"])
+    def test_job_pos_idle_and_auth(self):
+        self.assertEqual(self.req("/api/ivi/job/pos")[1], {"active": False})
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(urllib.request.Request(self.url + "/api/ivi/job/pos", headers={"X-Api-Key": "bad"}), timeout=5)
+        self.assertEqual(e.exception.code, 403)
     def test_page_has_toolpath_panel(self):
         with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
         self.assertIn("Live toolpath", page); self.assertIn("/api/ivi/job/gcode", page); self.assertIn("indexOf('\\n'", page)
+        for k in ("/api/ivi/job/pos", "requestAnimationFrame", "setInterval(tpPoll,350)", "function tpStep", "' · Z '"):
+            self.assertIn(k, page)
     def test_serial_pause_cancel_via_api(self):
         self.cfg["mode"] = "serial"
         self.upload("\n".join("G1 X%d" % i for i in range(100000)))
@@ -558,3 +569,10 @@ class FilamentApiTests(MonitorApiTests):
         for t in ("Retracting…", "Filament coming out of the nozzle?", "Yes, done", "No, extrude more"): self.assertIn(t, page)
 
 if __name__ == "__main__": unittest.main()
+
+class BytePosTests(unittest.TestCase):
+    def test_byte_pos_prefix(self):
+        j = B.SerialJob.__new__(B.SerialJob); j.lines = ["G28", "G1 X1 E1", "M104 S200"]; j._boff = None
+        j.sent = 0; self.assertEqual(j.byte_pos(), 0)
+        j.sent = 2; self.assertEqual(j.byte_pos(), 4 + 9)
+        self.assertEqual(j.byte_pos(3), 4 + 9 + 10); self.assertEqual(j.byte_pos(99), 23)
