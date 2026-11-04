@@ -85,7 +85,7 @@ filament = {
     "type": "filament", "name": FILAMENT, "from": "User", "inherits": "", "version": VERSION,
     "filament_settings_id": [FILAMENT], "compatible_printers": [PRINTER],
     "filament_type": ["PLA"], "filament_diameter": ["1.75"], "filament_flow_ratio": ["1"], "filament_density": ["1.24"],
-    "nozzle_temperature": ["210"], "nozzle_temperature_initial_layer": ["215"],
+    "nozzle_temperature": ["220"], "nozzle_temperature_initial_layer": ["220"],
     "nozzle_temperature_range_low": ["190"], "nozzle_temperature_range_high": ["230"],
     "hot_plate_temp": ["60"], "hot_plate_temp_initial_layer": ["60"],
     "cool_plate_temp": ["60"], "cool_plate_temp_initial_layer": ["60"],
