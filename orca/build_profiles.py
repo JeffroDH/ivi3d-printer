@@ -92,7 +92,7 @@ filament = {
     "textured_plate_temp": ["60"], "textured_plate_temp_initial_layer": ["60"],
     "eng_plate_temp": ["60"], "eng_plate_temp_initial_layer": ["60"],
     "fan_min_speed": ["100"], "fan_max_speed": ["100"], "close_fan_the_first_x_layers": ["1"],
-    "filament_max_volumetric_speed": ["8"], "slow_down_layer_time": ["8"],
+    "filament_max_volumetric_speed": ["4.5"], "slow_down_layer_time": ["8"],
 }
 
 process = {
@@ -144,7 +144,7 @@ PROCESSES = [process, fast, hq]
 
 # Extra filaments. Baseline = Anycubic's own OrcaSlicer vendor profiles (OrcaSlicer resources/profiles/Anycubic/filament,
 # "Anycubic <X> @Anycubic Kobra S1 0.4 nozzle" / "TPU 95A @Kobra S1 Max 0.4"). Max volumetric speed scaled for the
-# 0.3 nozzle at ~0.55x (nozzle area ratio (0.3/0.4)^2 = 0.56) and capped at the PLA value (8). See README for sources.
+# 0.3 nozzle at ~0.55x (nozzle area ratio (0.3/0.4)^2 = 0.56) and capped at 4.5 mm3/s, the measured limit of the 0.3 nozzle (PLA @220 C flow test, 2026-11-04). See README for sources.
 def fil(name, ftype, density, t, t0, lo, hi, bed, fmin, fmax, nofan, vol, layer_time, retract=None, rspeed=None, extra=None):
     f = dict(filament, name=name, filament_settings_id=[name], filament_type=[ftype], filament_density=[str(density)],
              nozzle_temperature=[str(t)], nozzle_temperature_initial_layer=[str(t0)],
@@ -160,13 +160,13 @@ def fil(name, ftype, density, t, t0, lo, hi, bed, fmin, fmax, nofan, vol, layer_
 
 EXTRA_FILAMENTS = [
     # Anycubic ABS: 250/250 C, bed 90, fan 10-80 (off 5 layers), 15 mm3/s @0.4
-    fil("IVI3D ABS", "ABS", 1.04, 250, 250, 240, 280, 90, 10, 80, 5, 8, 30),
+    fil("IVI3D ABS", "ABS", 1.04, 250, 250, 240, 280, 90, 10, 80, 5, 4.5, 30),
     # Anycubic ASA: 260/260 C, bed 100, fan 10-60 (off 5 layers), 12 mm3/s @0.4
-    fil("IVI3D ASA", "ASA", 1.07, 260, 260, 240, 280, 100, 10, 60, 5, 7, 35),
+    fil("IVI3D ASA", "ASA", 1.07, 260, 260, 240, 280, 100, 10, 60, 5, 4.5, 35),
     # Anycubic PETG: 250/250 C, bed 70, fan 30-90 (off 3), retract 1.5 mm @0.4 direct drive (machine 6.5 kept: Bowden)
-    fil("IVI3D PETG", "PETG", 1.27, 240, 245, 220, 260, 70, 30, 90, 3, 7, 30),
+    fil("IVI3D PETG", "PETG", 1.27, 240, 245, 220, 260, 70, 30, 90, 3, 4.5, 30),
     # Tangled TUFF Pro PCTG baseline: nozzle 250-280, bed 70-90, fan <=25 %, 30-60 mm/s
-    fil("IVI3D PCTG (Tangled TUFF)", "PCTG", 1.27, 260, 260, 250, 280, 80, 10, 25, 3, 6, 20),
+    fil("IVI3D PCTG (Tangled TUFF)", "PCTG", 1.27, 260, 260, 250, 280, 80, 10, 25, 3, 4.5, 20),
     # Anycubic TPU 95A: 205 / 215 first layer, bed 35, fan 100, retract 1 mm @30, 3.2 mm3/s @0.4
     fil("IVI3D TPU 95A", "FLEX", 1.21, 215, 220, 190, 240, 35, 100, 100, 1, 1.5, 10, retract=1.0, rspeed=20),
     # EXPERIMENTAL: Stratasys SR-30 soluble support (alkaline-soluble, NOT PVA). Printed alone on a single nozzle.
