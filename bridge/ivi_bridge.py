@@ -1735,7 +1735,7 @@ button{font:inherit;cursor:pointer;border:0}button:disabled{opacity:.4;cursor:de
 .fan{display:flex;align-items:center;justify-content:space-between;color:var(--t)}
 .tog{width:3.4em;height:1.8em;border-radius:999px;background:#c9d3e2;position:relative}.tog:after{content:"";position:absolute;top:.2em;left:.2em;width:1.4em;height:1.4em;border-radius:50%;background:#fff;transition:.15s}
 .tog.on{background:var(--b)}.tog.on:after{left:1.8em}
-.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:1em 1.5em;align-items:start}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:1em 1.5em;align-items:start;grid-template-areas:"pos jog" "sel jog"}.tpos{grid-area:pos}.tsel{grid-area:sel}.tjog{grid-area:jog}
 .pos{border:1px solid #c9d7ee;border-radius:6px;padding:.7em 1em;display:flex;justify-content:space-between;color:#345}
 .pad{display:grid;grid-template-columns:repeat(3,4.2em) 1.2em 4.2em;grid-template-rows:repeat(3,3.4em);gap:.35em;justify-content:center}
 .pad button{background:var(--lb);color:var(--t);border-radius:6px;font-size:16px}
@@ -1763,7 +1763,7 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
 .ht{width:100%;border-collapse:collapse;font-size:12px;margin:.4em 0}.ht th{text-align:left;color:#567;font-weight:600;border-bottom:1px solid #d3e0f3}.ht td{padding:.25em .3em;border-bottom:1px solid #eef3fa}.ht .ok{color:#1a8a3a}.ht .bad{color:#c22}
 .con{height:260px;overflow:auto;background:#15171c;color:#cfd6e2;font:12px Menlo,monospace;border-radius:8px;padding:.5em}.con .cs{color:#7fc8ff}.con .ce{color:#ff8a7a}
 .wtabs{display:none;gap:.5em;margin:.8em 1em 0;max-width:1500px}.wtabs button{background:var(--lb);color:var(--t);border-radius:999px;padding:.5em 1.4em;font-size:16px}.wtabs button.on{background:var(--b);color:#fff}
-.cambtns{display:flex;gap:.4em;margin-top:.45em;flex-wrap:wrap;align-items:center}.cambtn{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .95em;font-size:13px;min-height:2.2em;touch-action:manipulation}.cambtn.on{background:var(--b);color:#fff}@media (max-width:560px){.tabs button{font-size:15px;padding:.6em .15em}#tpzw{display:none}}
+.cambtns{display:flex;gap:.4em;margin-top:.45em;flex-wrap:wrap;align-items:center}.cambtn{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .95em;font-size:13px;min-height:2.2em;touch-action:manipulation}.cambtn.on{background:var(--b);color:#fff}@media (max-width:560px){.tabs button{font-size:15px;padding:.6em .15em}#tpzw{display:none}}@media (max-width:600px) and (orientation:portrait){body{overflow-x:hidden}.panels{padding:.75em;max-width:100%}.tgrid{grid-template-columns:1fr;grid-template-areas:"pos" "jog" "sel";justify-items:stretch;gap:1em}.tpos,.tsel,.tjog{width:100%;max-width:100%}.tjog{display:flex;flex-direction:column;align-items:center}.tjog .lite{max-width:16em}.pad{justify-content:center}#p_tool .compact{justify-content:center}.fgrid{grid-template-columns:5.2em minmax(0,1fr) 7.2em;gap:.35em .45em}.fgrid .lbl{margin:0;padding:0;line-height:1.2}.fgrid .opts{min-width:0}.fgrid .opts button{padding:.45em .1em;font-size:13px}.fgrid .side{gap:.45em}.fgrid .side .btn{padding:.4em .5em;font-size:14px;min-width:0;width:100%}.fgrid .side .fan{font-size:14px}.two{gap:.7em;margin-bottom:.8em}.opts{max-width:100%}}
 @media (min-width:1100px){.tabs{display:none}.panels{display:grid;grid-template-columns:1fr 1fr;gap:2em}
 .panel{display:block;border:1px solid #d3e0f3;border-radius:10px;padding:1em}
 .panels{grid-template-areas:"tool fil" "con files" "cam files";align-items:start}
@@ -1786,10 +1786,11 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
 <div class=panels>
 <div class=panel id=p_tool><h3>Toolhead</h3>
 <div class=tgrid>
- <div><div class=pos><span id=px>X: –</span><span id=py>Y: –</span><span id=pz>Z: –</span></div>
+ <div class=tpos><div class=pos><span id=px>X: –</span><span id=py>Y: –</span><span id=pz>Z: –</span></div></div>
+ <div class=tsel>
   <p class=lbl>Jog Speed(mm/min)</p><div class=opts data-g=tspd><button>200</button><button>500</button><button class=sel>1500</button><button>3000</button></div>
   <p class=lbl>Jog Distance (mm)</p><div class=opts data-g=tdst><button>0.05</button><button>1</button><button class=sel>10</button><button>50</button></div></div>
- <div><button class="lite u" onclick="g(['G28'])">Home</button>
+ <div class=tjog><button class="lite u" onclick="g(['G28'])">Home</button>
   <div class=pad style="margin-top:1em">
    <span></span><button class=u onclick="jog('Y',1)">Y+</button><span></span><span></span><button class=u onclick="jog('Z',1)">Z+</button>
    <button class=u onclick="jog('X',-1)">X-</button><button class=u title="Move to X0 Y0" onclick="g(['G90','G1 X0 Y0 F'+sel('tspd')])">X/Y</button><button class=u onclick="jog('X',1)">X+</button><span></span><button class=u title="Home (G28)" onclick="g(['G28'])">Z</button>
@@ -1811,8 +1812,8 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
   <button class="btn u" onclick="ext(1)">Extrude</button><button class="btn u" onclick="ext(-1)">Retract</button></div>
  <div><div class=lbl>Bed</div><div class=val id=bdv>–</div></div>
  <div class=opts data-g=bd data-c=M140><button>60°C</button><button>80°C</button><button>100°C</button><button class=pm data-d=-5>-</button><button class=pm data-d=5>+</button></div>
- <div class=lbl>Jog Speed<br>(mm/min)</div><div class=opts data-g=fspd><button class=sel>100</button><button>200</button><button>500</button><button>1000</button></div>
- <div class=lbl>Jog Distance<br>(mm)</div><div class=opts data-g=fdst><button class=sel>10</button><button>20</button><button>50</button><button>100</button></div>
+ <div class=lbl>Extrude speed<br>(mm/min)</div><div class=opts data-g=fspd><button class=sel>100</button><button>200</button><button>500</button><button>1000</button></div>
+ <div class=lbl>Extrude distance<br>(mm)</div><div class=opts data-g=fdst><button class=sel>10</button><button>20</button><button>50</button><button>100</button></div>
 </div></div>
 <div class=panel id=p_cam><h3>Webcam</h3>
 <div id=camoff class=lbl>No camera configured. Set <code>webcam_stream_url</code>, <code>webcam_snapshot_url</code> or <code>webcam_usb_device</code> in the bridge config (see README).</div>
