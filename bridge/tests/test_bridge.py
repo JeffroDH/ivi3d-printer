@@ -222,6 +222,28 @@ class OctoPrintApiTests(unittest.TestCase):
     def test_status_page_no_key_needed(self):
         with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
         self.assertIn("IVI Bridge", page); self.assertIn('"KEY"', page)
+    def test_icons_and_manifest_no_key_needed(self):
+        for path, ct, size in (("/apple-touch-icon.png", "image/png", 180), ("/apple-touch-icon-precomposed.png", "image/png", 180),
+                               ("/icon-192.png", "image/png", 192), ("/icon-512.png", "image/png", 512),
+                               ("/favicon-32.png", "image/png", 32), ("/favicon.ico", "image/x-icon", None)):
+            with urllib.request.urlopen(self.url + path, timeout=5) as r:
+                body = r.read(); self.assertEqual(r.status, 200); self.assertEqual(r.headers["Content-Type"], ct)
+                self.assertIn("max-age", r.headers["Cache-Control"])
+            if size:
+                self.assertEqual(body[:8], b"\x89PNG\r\n\x1a\n")
+                self.assertEqual(int.from_bytes(body[16:20], "big"), size); self.assertEqual(int.from_bytes(body[20:24], "big"), size)
+            else: self.assertEqual(body[:4], b"\x00\x00\x01\x00")
+        with urllib.request.urlopen(self.url + "/manifest.webmanifest", timeout=5) as r:
+            m = json.loads(r.read()); self.assertEqual(r.headers["Content-Type"], "application/manifest+json")
+        self.assertEqual((m["name"], m["short_name"], m["display"]), ("IVI3D Bridge", "IVI3D", "standalone"))
+        self.assertEqual({i["sizes"] for i in m["icons"]}, {"180x180", "192x192", "512x512"})
+        with self.assertRaises(urllib.error.HTTPError) as e: urllib.request.urlopen(self.url + "/api/version", timeout=5)
+        self.assertEqual(e.exception.code, 403)   # icons are public, the API still isn't
+    def test_page_head_has_icon_tags(self):
+        with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
+        for t in ('rel=apple-touch-icon', 'href="/apple-touch-icon.png"', 'rel=manifest href="/manifest.webmanifest"',
+                  'name=apple-mobile-web-app-title content="IVI3D"', 'name=theme-color'):
+            self.assertIn(t, page)
     def test_auto_mode_picks_usb_when_present(self):
         self.cfg["mode"] = "auto"; port = os.path.join(self.tmp, "tty.usbmodemX"); open(port, "w").close()
         self.cfg["serial_port"] = os.path.join(self.tmp, "tty.usbmodem*")
