@@ -1,4 +1,4 @@
-import base64, json, os, sys, tempfile, threading, time, unittest, urllib.request, urllib.error
+import base64, json, os, subprocess, sys, tempfile, threading, time, unittest, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(__file__)); sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import ivi_bridge as B
@@ -221,8 +221,118 @@ class TempNotifyCamTests(Base):
         finally: B.find_ffmpeg = real
     def test_page_has_new_panels(self):
         with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
-        for s in ("Webcam", "Temperatures", "Files", "Queue", "History", "Macros", "Console", "/api/ivi/console", "/api/ivi/macros"):
+        for s in ("Webcam", "Temperatures", "Files", "Queue", "History", "Macros", "Console", "/api/ivi/console", "/api/ivi/macros",
+                  "cambtns", "camSetMode", "ivi_cam_mode", "Live stream interrupted"):
             self.assertIn(s, page)
+    def test_live_mode_snapshot_does_not_oneshot(self):
+        """With live mode on, a missing live frame must fail fast — never start -frames:v 1 (locks camera)."""
+        self.cfg["webcam_usb_device"] = "0"; real = B.find_ffmpeg; calls = []
+        def run(a, **k):
+            calls.append(a)
+            class R: returncode = 0; stdout = b"\xff\xd8USB"; stderr = b""
+            return R()
+        try:
+            B.find_ffmpeg = lambda: "/x/ffmpeg"
+            self.bridge.webcam.run = subprocess.run  # force live path identity check
+            # Fake _live returning None without spawning
+            self.bridge.webcam._live = lambda *a, **k: None
+            with self.assertRaises(RuntimeError) as e:
+                self.bridge.webcam.snapshot()
+            self.assertIn("no frame", str(e.exception).lower())
+            self.assertEqual(calls, [])
+        finally:
+            B.find_ffmpeg = real
+    def test_oneshot_timeout_is_killed(self):
+        self.cfg.update(webcam_usb_device="0", webcam_usb_live=False); real = B.find_ffmpeg
+        class Boom(subprocess.TimeoutExpired):
+            def __init__(self):
+                super().__init__(cmd=["ffmpeg"], timeout=15)
+                self.process = type("P", (), {"kill": lambda s: setattr(self, "killed", True)})()
+                self.killed = False
+        def run(a, **k):
+            raise Boom()
+        try:
+            B.find_ffmpeg = lambda: "/x/ffmpeg"
+            self.bridge.webcam.run = run
+            with self.assertRaises(RuntimeError) as e:
+                self.bridge.webcam.snapshot()
+            self.assertIn("timed out", str(e.exception).lower())
+        finally:
+            B.find_ffmpeg = real
+
+class WebcamWatchdogTests(unittest.TestCase):
+    def setUp(self):
+        W = B.Webcam
+        if W._proc is not None:
+            try: W._kill_live()
+            except Exception: pass
+        W._proc = None; W._frame = None; W._seq = 0; W._ft = 0.0; W._t0 = 0.0; W._last_req = 0.0
+    def tearDown(self):
+        self.setUp()
+    def test_live_stale_false_during_warmup(self):
+        W = B.Webcam
+        class P:
+            def poll(self): return None
+        W._proc = P(); W._t0 = time.time(); W._ft = 0.0
+        self.assertFalse(W._live_stale())
+    def test_live_stale_true_after_warmup_without_frame(self):
+        W = B.Webcam
+        class P:
+            def poll(self): return None
+        W._proc = P(); W._t0 = time.time() - (W._WARMUP_S + 0.1); W._ft = 0.0
+        self.assertTrue(W._live_stale())
+    def test_live_stale_true_when_frame_old(self):
+        W = B.Webcam
+        class P:
+            def poll(self): return None
+        W._proc = P(); W._t0 = time.time() - 60; W._ft = time.time() - (W._STALE_S + 0.1)
+        self.assertTrue(W._live_stale())
+    def test_live_stale_false_with_fresh_frame(self):
+        W = B.Webcam
+        class P:
+            def poll(self): return None
+        W._proc = P(); W._t0 = time.time() - 60; W._ft = time.time()
+        self.assertFalse(W._live_stale())
+    def test_kill_live_uses_sigkill(self):
+        W = B.Webcam
+        class P:
+            def __init__(self): self.killed = False; self.dead = False
+            def poll(self): return None if not self.dead else 0
+            def kill(self): self.killed = True; self.dead = True
+            def wait(self, timeout=None): return 0
+        p = P(); W._proc = p
+        W._kill_live()
+        self.assertTrue(p.killed); self.assertIsNone(W._proc)
+    def test_live_respawns_after_stale_kill(self):
+        W = B.Webcam
+        spawned = []
+        class Old:
+            def __init__(self): self.killed = False; self.dead = False
+            def poll(self): return None if not self.dead else 1
+            def kill(self): self.killed = True; self.dead = True
+            def wait(self, timeout=None): return 0
+        class Pipe:
+            def read(self, n): return b""
+        class New:
+            def __init__(self): self.stdout = Pipe()
+            def poll(self): return None
+            def terminate(self): pass
+            def kill(self): pass
+            def wait(self, timeout=None): return 0
+        old = Old(); W._proc = old; W._t0 = time.time() - 60; W._ft = 0.0
+        real_popen = B.subprocess.Popen
+        def fake_popen(*a, **k):
+            p = New(); spawned.append(p); return p
+        B.subprocess.Popen = fake_popen
+        try:
+            cam = B.Webcam({"webcam_usb_device": "0", "webcam_usb_fps": 10})
+            cam._live("/x/ffmpeg", "0", wait=False)
+            self.assertTrue(old.killed)
+            self.assertEqual(len(spawned), 1)
+            self.assertIs(W._proc, spawned[0])
+        finally:
+            B.subprocess.Popen = real_popen
+            W._kill_live()
 
 class ListenFallbackTests(unittest.TestCase):
     def test_wildcard_busy_falls_back_to_loopback(self):

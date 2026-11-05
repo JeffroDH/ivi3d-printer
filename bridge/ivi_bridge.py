@@ -1204,6 +1204,12 @@ def find_ffmpeg():
                                            if os.path.exists(p)), None)
 
 class Webcam:
+    """USB/IP webcam helper. One shared ffmpeg keeps the USB camera open for live MJPEG;
+    /snapshot reuses that frame when live mode is on (never starts a one-shot while live holds the camera)."""
+    _proc = None; _last_req = 0.0; _lock = threading.Lock(); _cond = threading.Condition()
+    _frame = None; _seq = 0; _ft = 0.0; _t0 = 0.0
+    _WARMUP_S = 3.0; _STALE_S = 5.0; _IDLE_S = 30.0
+
     def __init__(self, cfg, fetch=None, run=None):
         self.cfg = cfg; self.fetch = fetch or self._fetch; self.run = run or subprocess.run
     def info(self):
@@ -1215,37 +1221,67 @@ class Webcam:
                 "ffmpeg": bool(find_ffmpeg()), "usb_stream": self.usb_live_ok()}
     def _fetch(self, url):
         with urllib.request.urlopen(url, timeout=10) as r: return r.read(8 << 20)
+    @classmethod
+    def _kill_live(cls):
+        """SIGKILL a wedged live ffmpeg. SIGTERM was ignored when the camera process locked up."""
+        p = cls._proc; cls._proc = None
+        if p is None: return
+        try:
+            if p.poll() is None: p.kill()
+        except OSError: pass
+        try: p.wait(timeout=1)
+        except Exception: pass
+    @classmethod
+    def _live_stale(cls):
+        """True when the shared ffmpeg is alive past warm-up but has produced no fresh frame for _STALE_S."""
+        if cls._proc is None or cls._proc.poll() is not None: return False
+        now = time.time()
+        if now - cls._t0 < cls._WARMUP_S: return False
+        return cls._ft == 0.0 or (now - cls._ft) > cls._STALE_S
     def snapshot(self):
         """JPEG bytes from the snapshot URL, else one frame from the USB camera via ffmpeg."""
         url = self.cfg.get("webcam_snapshot_url")
         if url: return self.fetch(url)
         dev = str(self.cfg.get("webcam_usb_device", "")).strip(); ff = find_ffmpeg()
-        if dev and ff and self.run is subprocess.run and self.cfg.get("webcam_usb_live", True):
+        live_on = bool(self.cfg.get("webcam_usb_live", True))
+        # Prefer the shared live process. Never start a one-shot while live mode is enabled:
+        # a wedged live ffmpeg still holds the camera, and one-shot hangs with "Could not lock device".
+        if dev and ff and self.run is subprocess.run and live_on:
             img = self._live(ff, dev)
             if img: return img
+            raise RuntimeError("USB camera live stream has no frame")
         if dev and ff:
             fmt = {"darwin": "avfoundation", "win32": "dshow"}.get(sys.platform, "v4l2")
-            r = self.run([ff, "-loglevel", "error", "-f", fmt, "-framerate", "30", "-i", dev, "-frames:v", "1",
-                          "-f", "image2", "-vcodec", "mjpeg", "-"], capture_output=True, timeout=15)
+            try:
+                r = self.run([ff, "-loglevel", "error", "-f", fmt, "-framerate", "30", "-i", dev, "-frames:v", "1",
+                              "-f", "image2", "-vcodec", "mjpeg", "-"], capture_output=True, timeout=15)
+            except subprocess.TimeoutExpired as e:
+                proc = getattr(e, "process", None)
+                if proc is not None:
+                    try: proc.kill()
+                    except OSError: pass
+                raise RuntimeError("ffmpeg USB camera snapshot timed out")
             if r.returncode == 0 and r.stdout: return r.stdout
             raise RuntimeError("ffmpeg could not read the USB camera: " + (r.stderr or b"").decode(errors="replace")[-200:])
         raise RuntimeError("no webcam configured")
 
-    _proc = None; _last_req = 0.0; _lock = threading.Lock(); _cond = threading.Condition(); _frame = None; _seq = 0; _ft = 0.0
     def _live(self, ff, dev, wait=True):
         """One shared ffmpeg keeps the USB camera open (MJPEG frames to memory) while anyone is watching;
         feeds both /snapshot and the /stream MJPEG view. Avoids the dark first frame and the ~4 s camera open.
-        Stops after 30 s with no viewers or requests."""
+        Stops after 30 s with no viewers or requests. If alive but frame-stale for 5 s after warm-up, SIGKILL and respawn."""
         W = Webcam
         with W._lock:
             W._last_req = time.time()
-            if W._proc is None or W._proc.poll() is not None:
+            alive = W._proc is not None and W._proc.poll() is None
+            if alive and W._live_stale():
+                W._kill_live(); alive = False
+            if not alive:
                 fmt = {"darwin": "avfoundation", "win32": "dshow"}.get(sys.platform, "v4l2")
                 fps = str(self.cfg.get("webcam_usb_fps", 10))
                 W._proc = subprocess.Popen([ff, "-loglevel", "error", "-f", fmt, "-framerate", "30", "-i", dev,
                                             "-vf", "fps=" + fps, "-q:v", "6", "-f", "image2pipe", "-vcodec", "mjpeg", "-"],
                                            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                W._frame = None; t0 = time.time()
+                W._frame = None; W._ft = 0.0; W._t0 = time.time(); t0 = W._t0
                 def reader(proc=W._proc, t0=t0):
                     buf = b""
                     while True:
@@ -1256,10 +1292,13 @@ class Webcam:
                             i = buf.find(b"\xff\xd8"); j = buf.find(b"\xff\xd9", i + 2)
                             if i < 0 or j < 0: break
                             fr = buf[i:j + 2]; buf = buf[j + 2:]
-                            if time.time() - t0 < 3: continue          # skip dark frames while exposure settles
+                            if time.time() - t0 < W._WARMUP_S: continue   # skip dark frames while exposure settles
                             with W._cond: W._frame = fr; W._seq += 1; W._ft = time.time(); W._cond.notify_all()
                         if len(buf) > 8 << 20: buf = b""
-                        if time.time() - W._last_req > 30: proc.terminate(); break
+                        if time.time() - W._last_req > W._IDLE_S:
+                            try: proc.terminate()
+                            except OSError: pass
+                            break
                     with W._cond: W._cond.notify_all()
                 threading.Thread(target=reader, daemon=True).start()
         if not wait: return None
@@ -1278,7 +1317,11 @@ class Webcam:
         while True:
             W._last_req = time.time(); self._live(ff, dev, wait=False)
             with W._cond:
-                if not W._cond.wait_for(lambda: W._seq != seq, timeout=5): return
+                if not W._cond.wait_for(lambda: W._seq != seq, timeout=5):
+                    # No frame for 5 s: SIGKILL a wedged live process; the next request respawns it.
+                    with W._lock:
+                        if W._live_stale(): W._kill_live()
+                    return
                 seq = W._seq; fr = W._frame
             yield fr
 
@@ -1688,7 +1731,7 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
 .ht{width:100%;border-collapse:collapse;font-size:12px;margin:.4em 0}.ht th{text-align:left;color:#567;font-weight:600;border-bottom:1px solid #d3e0f3}.ht td{padding:.25em .3em;border-bottom:1px solid #eef3fa}.ht .ok{color:#1a8a3a}.ht .bad{color:#c22}
 .con{height:260px;overflow:auto;background:#15171c;color:#cfd6e2;font:12px Menlo,monospace;border-radius:8px;padding:.5em}.con .cs{color:#7fc8ff}.con .ce{color:#ff8a7a}
 .wtabs{display:none;gap:.5em;margin:.8em 1em 0;max-width:1500px}.wtabs button{background:var(--lb);color:var(--t);border-radius:999px;padding:.5em 1.4em;font-size:16px}.wtabs button.on{background:var(--b);color:#fff}
-@media (max-width:560px){.tabs button{font-size:15px;padding:.6em .15em}#tpzw{display:none}}
+.cambtns{display:flex;gap:.4em;margin-top:.45em;flex-wrap:wrap;align-items:center}.cambtn{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .95em;font-size:13px;min-height:2.2em;touch-action:manipulation}.cambtn.on{background:var(--b);color:#fff}@media (max-width:560px){.tabs button{font-size:15px;padding:.6em .15em}#tpzw{display:none}}
 @media (min-width:1100px){.tabs{display:none}.panels{display:grid;grid-template-columns:1fr 1fr;gap:2em}
 .panel{display:block;border:1px solid #d3e0f3;border-radius:10px;padding:1em}
 .panels{grid-template-areas:"tool fil" "con files" "cam files";align-items:start}
@@ -1741,8 +1784,11 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
 </div></div>
 <div class=panel id=p_cam><h3>Webcam</h3>
 <div id=camoff class=lbl>No camera configured. Set <code>webcam_stream_url</code>, <code>webcam_snapshot_url</code> or <code>webcam_usb_device</code> in the bridge config (see README).</div>
-<img id=camimg alt="webcam" style="display:none;width:100%;max-height:420px;object-fit:contain;background:#15171c;border-radius:8px">
+<div id=camframe style="display:none">
+<img id=camimg alt="webcam" style="width:100%;max-height:420px;object-fit:contain;background:#15171c;border-radius:8px">
+<div class=cambtns><button type=button class=cambtn data-m=live onclick="camSetMode('live')">Live</button><button type=button class=cambtn data-m=snap onclick="camSetMode('snap')">Snapshot</button><button type=button class=cambtn onclick="camRetry()">Retry</button></div>
 <div class=lbl id=caminfo style="margin-top:.4em"></div>
+</div>
 <div id=tlv class=lbl style="margin-top:.4em"></div>
 <h3 style="margin-top:1em">Temperatures <span class=lbl id=tgl></span></h3>
 <canvas id=tg width=640 height=220 style="width:100%;background:#fbfdff;border:1px solid #d3e0f3;border-radius:8px"></canvas>
@@ -1890,11 +1936,29 @@ setInterval(tpPoll,350);
 const NL=String.fromCharCode(10);let CS=0,CAM=null,MAC=[];
 function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 async function J(u,o){const r=await fetch(u,o?{method:'POST',headers:H,body:JSON.stringify(o)}:{headers:H});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j}
+let camMode='live',camRetryT=null,camFails=0;
+function camCanLive(){return !!(CAM&&(CAM.stream||CAM.usb_stream))}
+function camStreamUrl(){return CAM.stream?CAM.stream_url:'/api/ivi/webcam/stream?apikey='+encodeURIComponent(K)}
+function camSnapUrl(){return '/api/ivi/webcam/snapshot?apikey='+encodeURIComponent(K)+'&t='+Date.now()}
+function camTlNote(){return ' · timelapse '+(CAM.timelapse?(CAM.snapshot?'on (one frame per layer, USB prints)':'needs a snapshot URL or USB camera'):'off')+(CAM.timelapse&&!CAM.ffmpeg?' · no ffmpeg: frames are kept, no video':'')}
+function camCaption(extra){const mode=camMode==='live'?'Live stream':'Snapshot every second';caminfo.textContent=(extra||mode)+camTlNote()}
+function camHighlight(){document.querySelectorAll('.cambtn[data-m]').forEach(b=>b.classList.toggle('on',b.dataset.m===camMode))}
+function camSetMode(m,save){if(m!=='live'&&m!=='snap')return;if(m==='live'&&!camCanLive())m='snap';camMode=m;camFails=0;
+ if(save!==false)try{localStorage.setItem('ivi_cam_mode',m)}catch(e){}camHighlight();camApply()}
+function camRetry(){camFails=0;if(camRetryT){clearTimeout(camRetryT);camRetryT=null}camApply()}
+function camOnStreamError(){camFails++;const delay=Math.min(30000,Math.round(5000*Math.pow(1.5,Math.min(camFails-1,6))));
+ camCaption('Live stream interrupted — retrying in '+Math.round(delay/1000)+'s');
+ if(camRetryT)clearTimeout(camRetryT);camRetryT=setTimeout(()=>{camRetryT=null;camApply()},delay)}
+function camApply(){if(!CAM||!CAM.enabled)return;if(camRetryT){clearTimeout(camRetryT);camRetryT=null}
+ if(camMode==='live'&&camCanLive()){camimg.onerror=()=>camOnStreamError();camimg.src=camStreamUrl();camCaption()}
+ else{camMode='snap';camHighlight();camimg.onerror=null;camimg.src=camSnapUrl();camCaption()}}
 async function camInit(){try{CAM=await J('/api/ivi/webcam')}catch(e){return}
- if(!CAM.enabled){camoff.style.display='block';camimg.style.display='none';caminfo.textContent=CAM.usb_without_ffmpeg?'USB camera set, but ffmpeg was not found (brew install ffmpeg).':'';return}
- camoff.style.display='none';camimg.style.display='block';if(CAM.stream)camimg.src=CAM.stream_url;else if(CAM.usb_stream){camimg.src='/api/ivi/webcam/stream?apikey='+encodeURIComponent(K);camimg.onerror=()=>{CAM.usb_stream=false;camSnap()}}else camSnap();
- caminfo.textContent=(CAM.stream||CAM.usb_stream?'Live stream':'Snapshot every second')+' · timelapse '+(CAM.timelapse?(CAM.snapshot?'on (one frame per layer, USB prints)':'needs a snapshot URL or USB camera'):'off')+(CAM.timelapse&&!CAM.ffmpeg?' · no ffmpeg: frames are kept, no video':'')}
-function camSnap(){if(CAM&&CAM.enabled&&!CAM.stream&&!CAM.usb_stream)camimg.src='/api/ivi/webcam/snapshot?apikey='+encodeURIComponent(K)+'&t='+Date.now()}
+ if(!CAM.enabled){camoff.style.display='block';camframe.style.display='none';camoff.textContent=CAM.usb_without_ffmpeg?'USB camera set, but ffmpeg was not found (brew install ffmpeg).':camoff.textContent;return}
+ camoff.style.display='none';camframe.style.display='block';
+ let pref='live';try{pref=localStorage.getItem('ivi_cam_mode')||'live'}catch(e){}
+ if(pref!=='live'&&pref!=='snap')pref='live';if(pref==='live'&&!camCanLive())pref='snap';
+ camMode=pref;camHighlight();camApply()}
+function camSnap(){if(CAM&&CAM.enabled&&camMode==='snap')camimg.src=camSnapUrl()}
 async function tlLoad(){try{const v=(await J('/api/ivi/timelapse')).videos;tlv.innerHTML=v.length?'Timelapses: '+v.slice(0,5).map(x=>'<a target=_blank href="/api/ivi/timelapse/file?name='+encodeURIComponent(x.name)+'&apikey='+encodeURIComponent(K)+'">'+esc(x.name)+'</a>').join(' · '):''}catch(e){}}
 async function tgDraw(){let d;try{d=await J('/api/ivi/temps')}catch(e){return}const S=d.samples,c=tg.getContext('2d'),W=640,Hh=220,L=36;c.clearRect(0,0,W,Hh);
  const mx=Math.max(60,...S.flatMap(s=>[s.tool0?Math.max(s.tool0[0],s.tool0[1]):0,s.bed?Math.max(s.bed[0],s.bed[1]):0]))*1.1,now=Date.now()/1000,win=Math.min(d.window_s,Math.max(120,S.length?now-S[0].t:0));
