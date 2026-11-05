@@ -22,7 +22,7 @@ def circle(r, n=72):
 START = """; IVI3D start
 G53 ; machine coordinate system
 M82 ; absolute extrusion
-M900 K2.0 ; pressure advance (Bowden, from PA tests 2026-11-04)
+M900 K0.86 ; pressure advance (Bowden, pentagon tower 2026-11-04)
 M104 S[nozzle_temperature_initial_layer]
 M140 S[bed_temperature_initial_layer_single]
 G28 ; home (delta homes to the top)
