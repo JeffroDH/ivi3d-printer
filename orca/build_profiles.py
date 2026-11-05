@@ -64,7 +64,7 @@ machine = {
     "bed_exclude_area": [], "bed_custom_texture": BED_TEXTURE, "bed_custom_model": BED_MODEL, "nozzle_diameter": ["0.3"], "nozzle_type": "brass", "extruder_offset": ["0x0"],
     "max_layer_height": ["0.24"], "min_layer_height": ["0.05"],
     "use_relative_e_distances": "1", "use_firmware_retraction": "0",
-    "retraction_length": ["6.5"], "retraction_speed": ["25"], "deretraction_speed": ["25"],
+    "retraction_length": ["6.2"], "retraction_speed": ["25"], "deretraction_speed": ["25"],
     "retract_when_changing_layer": ["1"], "z_hop": ["0"], "retraction_minimum_travel": ["1.5"], "wipe": ["1"], "wipe_distance": ["2"],
     "machine_max_speed_x": ["500"], "machine_max_speed_y": ["500"], "machine_max_speed_z": ["500"], "machine_max_speed_e": ["100"],
     "machine_max_acceleration_x": ["1000"], "machine_max_acceleration_y": ["1000"], "machine_max_acceleration_z": ["1000"],

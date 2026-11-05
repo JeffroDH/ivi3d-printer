@@ -49,7 +49,7 @@ the edge. Measure the real plate and update the constants in `make_bed.py` if pr
 | Flavor / E mode | Marlin, absolute E (M82) | def `RepRap (Marlin/Sprinter)`; end G-code + observed start use M82 |
 | Start / end G-code | IVI's, with Orca placeholders | active `machine_start_gcode` / `machine_end_gcode`; `G53` + `M82` from today's observed FDM start |
 | Temps PLA | 210 / 215 first layer, bed 60 | active + `material.pla.def.json` |
-| Retraction | 6.5 mm @ 25 mm/s, no layer-change retract, no Z-hop | active |
+| Retraction | 6.2 mm @ 25 mm/s (retraction tower, PLA 220 °C), retract on layer change, 2 mm wipe, no Z-hop, extra restart 0 | active |
 | Layer | 0.15, first 0.3; widths 0.3 / 0.28 | active |
 | Shells / infill | 3 walls, 6 top, 4 bottom, 15 % | active |
 | Speeds (mm/s) | outer 45, inner 50, infill 60, top/bottom 30, travel 80, first layer 18, first-layer travel 30, skirt 18 | active |
@@ -77,16 +77,16 @@ Z-14.29) live in the printer, not in Orca.
 
 ## Extra filament presets
 
-Baseline: Anycubic's own OrcaSlicer vendor profiles (`resources/profiles/Anycubic/filament/`, the "Anycubic ABS/ASA/PETG @Anycubic Kobra S1 0.4 nozzle" and "Anycubic TPU 95A @Anycubic Kobra S1 Max 0.4 nozzle" JSONs). Max volumetric speed is scaled ~0.55x for the 0.3 nozzle (area ratio (0.3/0.4)^2 = 0.56) and capped at the PLA preset's 8 mm³/s. Retraction is inherited from the machine preset (6.5 mm @ 25 mm/s, from IVI 3licer) except TPU. All values are starting points; calibrate temperature, flow, and retraction per spool.
+Baseline: Anycubic's own OrcaSlicer vendor profiles (`resources/profiles/Anycubic/filament/`, the "Anycubic ABS/ASA/PETG @Anycubic Kobra S1 0.4 nozzle" and "Anycubic TPU 95A @Anycubic Kobra S1 Max 0.4 nozzle" JSONs). Max volumetric speed is scaled ~0.55x for the 0.3 nozzle (area ratio (0.3/0.4)^2 = 0.56) and capped at the PLA preset's 8 mm³/s. Retraction is inherited from the machine preset (6.2 mm @ 25 mm/s, tuned from the IVI 3licer 6.5) except TPU. All values are starting points; calibrate temperature, flow, and retraction per spool.
 
 | Preset | Nozzle (1st layer) °C | Bed °C | Fan min–max (off first n layers) | Retraction | Max vol. mm³/s | Source |
 |---|---|---|---|---|---|---|
-| IVI3D ABS | 250 (250) | 90 | 10–80 % (5) | machine 6.5 mm | 8 (AC 15) | Anycubic ABS |
-| IVI3D ASA | 260 (260) | 100 | 10–60 % (5) | machine 6.5 mm | 7 (AC 12) | Anycubic ASA |
-| IVI3D PETG | 240 (245) | 70 | 30–90 % (3) | machine 6.5 mm | 7 (AC 12) | Anycubic PETG (250 °C, lowered 10 °C for this slower printer) |
-| IVI3D PCTG (Tangled TUFF) | 260 (260) | 80 | 10–25 % (3) | machine 6.5 mm | 6 | Tangled TUFF Pro PCTG label: nozzle 250–280, bed 70–90, fan ≤25 %, 30–60 mm/s |
+| IVI3D ABS | 250 (250) | 90 | 10–80 % (5) | machine 6.2 mm | 8 (AC 15) | Anycubic ABS |
+| IVI3D ASA | 260 (260) | 100 | 10–60 % (5) | machine 6.2 mm | 7 (AC 12) | Anycubic ASA |
+| IVI3D PETG | 240 (245) | 70 | 30–90 % (3) | machine 6.2 mm | 7 (AC 12) | Anycubic PETG (250 °C, lowered 10 °C for this slower printer) |
+| IVI3D PCTG (Tangled TUFF) | 260 (260) | 80 | 10–25 % (3) | machine 6.2 mm | 6 | Tangled TUFF Pro PCTG label: nozzle 250–280, bed 70–90, fan ≤25 %, 30–60 mm/s |
 | IVI3D TPU 95A | 215 (220) | 35 | 100 % (1) | 1.0 mm @ 20 mm/s | 1.5 (AC 3.2) | Anycubic TPU 95A (205/215, retract 1 mm @ 30) |
-| IVI3D SR-30 Soluble (EXPERIMENTAL) | 255 (260) | 100 | 0–20 % (3) | machine 6.5 mm | 4 | Stratasys / MakerBot SR-30 docs (support for ABS/ASA, ~250–260 °C class); assumed values |
+| IVI3D SR-30 Soluble (EXPERIMENTAL) | 255 (260) | 100 | 0–20 % (3) | machine 6.2 mm | 4 | Stratasys / MakerBot SR-30 docs (support for ABS/ASA, ~250–260 °C class); assumed values |
 
 Caveats:
 - **ABS / ASA / SR-30:** enclosure strongly recommended (warping, fumes; ventilate). Bed 90–100 °C (the IVI supports bed up to 100 °C and nozzle up to 270 °C per its touchscreen presets; `build_profiles.py` clamps all filament temps to these limits).

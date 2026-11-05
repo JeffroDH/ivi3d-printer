@@ -103,7 +103,7 @@
     "use_relative_e_distances": "1",
     "use_firmware_retraction": "0",
     "retraction_length": [
-        "6.5"
+        "6.2"
     ],
     "retraction_speed": [
         "25"
