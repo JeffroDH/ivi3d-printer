@@ -22,7 +22,6 @@ def circle(r, n=72):
 START = """; IVI3D start
 G53 ; machine coordinate system
 M82 ; absolute extrusion
-M900 K0.86 ; pressure advance (Bowden, pentagon tower 2026-11-04)
 M104 S[nozzle_temperature_initial_layer]
 M140 S[bed_temperature_initial_layer_single]
 G28 ; home (delta homes to the top)
@@ -96,6 +95,9 @@ filament = {
     "fan_min_speed": ["100"], "fan_max_speed": ["100"], "close_fan_the_first_x_layers": ["1"],
     "filament_max_volumetric_speed": ["4.5"], "slow_down_layer_time": ["8"],
 }
+# Pressure advance per filament (Orca emits M900 K for Marlin). K0.86 from the PLA pentagon tower 2026-11-04;
+# other materials start there until tuned. TPU: off (soft filament compresses in the Bowden tube).
+filament.update(enable_pressure_advance=["1"], pressure_advance=["0.86"])
 
 process = {
     "type": "process", "name": PROCESS, "from": "User", "inherits": "", "version": VERSION,
@@ -170,7 +172,7 @@ EXTRA_FILAMENTS = [
     # Tangled TUFF Pro PCTG baseline: nozzle 250-280, bed 70-90, fan <=25 %, 30-60 mm/s
     fil("IVI3D PCTG (Tangled TUFF)", "PCTG", 1.27, 260, 260, 250, 280, 80, 10, 25, 3, 4.5, 20),
     # Anycubic TPU 95A: 205 / 215 first layer, bed 35, fan 100, retract 1 mm @30, 3.2 mm3/s @0.4
-    fil("IVI3D TPU 95A", "FLEX", 1.21, 215, 220, 190, 240, 35, 100, 100, 1, 1.5, 10, retract=1.0, rspeed=20),
+    fil("IVI3D TPU 95A", "FLEX", 1.21, 215, 220, 190, 240, 35, 100, 100, 1, 1.5, 10, retract=1.0, rspeed=20, extra={"enable_pressure_advance": ["0"]}),
     # EXPERIMENTAL: Stratasys SR-30 soluble support (alkaline-soluble, NOT PVA). Printed alone on a single nozzle.
     fil("IVI3D SR-30 Soluble (EXPERIMENTAL)", "PVA", 1.2, 255, 260, 245, 265, 100, 0, 20, 3, 4, 20,
         extra={"filament_soluble": ["1"], "filament_is_support": ["1"],
