@@ -45,7 +45,8 @@ END = """; IVI3D end (IVI 3licer 1.6.2 machine_end_gcode + fan off)
 M104 S0 ; extruder heater off
 M140 S0 ; bed heater off
 G91 ; relative moves
-G1 Z10 F600 ; lift off the part
+G1 E-6.5 Z0.6 F1500 ; retract with a small lift before leaving the part (stops the end blob)
+G1 Z9.4 F600 ; lift off the part
 G90 ; absolute moves
 G28 ; home to the top, clear of the print
 M107 ; part fan off (added; not in IVI 3licer)
@@ -64,7 +65,7 @@ machine = {
     "max_layer_height": ["0.24"], "min_layer_height": ["0.05"],
     "use_relative_e_distances": "0", "use_firmware_retraction": "0",
     "retraction_length": ["6.5"], "retraction_speed": ["25"], "deretraction_speed": ["25"],
-    "retract_when_changing_layer": ["0"], "z_hop": ["0"], "retraction_minimum_travel": ["1.5"], "wipe": ["0"],
+    "retract_when_changing_layer": ["1"], "z_hop": ["0"], "retraction_minimum_travel": ["1.5"], "wipe": ["1"], "wipe_distance": ["2"],
     "machine_max_speed_x": ["500"], "machine_max_speed_y": ["500"], "machine_max_speed_z": ["500"], "machine_max_speed_e": ["100"],
     "machine_max_acceleration_x": ["1000"], "machine_max_acceleration_y": ["1000"], "machine_max_acceleration_z": ["1000"],
     "machine_max_acceleration_e": ["1000"], "machine_max_acceleration_extruding": ["1000"],

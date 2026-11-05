@@ -112,7 +112,7 @@
         "25"
     ],
     "retract_when_changing_layer": [
-        "0"
+        "1"
     ],
     "z_hop": [
         "0"
@@ -121,7 +121,10 @@
         "1.5"
     ],
     "wipe": [
-        "0"
+        "1"
+    ],
+    "wipe_distance": [
+        "2"
     ],
     "machine_max_speed_x": [
         "500"
@@ -171,7 +174,7 @@
     "emit_machine_limits_to_gcode": "0",
     "disable_m73": "1",
     "machine_start_gcode": "; IVI3D start\nG53 ; machine coordinate system\nM82 ; absolute extrusion\nM900 K2.0 ; pressure advance (Bowden, from PA tests 2026-11-04)\nM104 S[nozzle_temperature_initial_layer]\nM140 S[bed_temperature_initial_layer_single]\nG28 ; home (delta homes to the top)\nG90 ; absolute positioning\nG1 X-30 Y-97 Z15 F3000\nM109 S[nozzle_temperature_initial_layer] ; wait for hotend\nM190 S[bed_temperature_initial_layer_single] ; wait for bed\nG4 S2 ; settle after heat waits (fixes skipped prime)\nG92 E0\nG1 E8 F150 ; push filament to the tip (slow)\nG92 E0\nG1 Z0.3 F500\nG1 X30 Y-97 E12 F450 ; prime line, 60 mm, slow and heavy\nG1 E11.2 F1500 ; small retract (0.8 mm)\nG1 X38 Y-90 F3000 ; wipe inward, no extrusion\nG92 E0\n; IVI3D start end",
-    "machine_end_gcode": "; IVI3D end (IVI 3licer 1.6.2 machine_end_gcode + fan off)\nM104 S0 ; extruder heater off\nM140 S0 ; bed heater off\nG91 ; relative moves\nG1 Z10 F600 ; lift off the part\nG90 ; absolute moves\nG28 ; home to the top, clear of the print\nM107 ; part fan off (added; not in IVI 3licer)\nG90 ; absolute positioning\nG92 E1\nG1 E-1 F300 ; relieve pressure\nM203 Z500\nM82 ; absolute extrusion mode\n; IVI3D end end",
+    "machine_end_gcode": "; IVI3D end (IVI 3licer 1.6.2 machine_end_gcode + fan off)\nM104 S0 ; extruder heater off\nM140 S0 ; bed heater off\nG91 ; relative moves\nG1 E-6.5 Z0.6 F1500 ; retract with a small lift before leaving the part (stops the end blob)\nG1 Z9.4 F600 ; lift off the part\nG90 ; absolute moves\nG28 ; home to the top, clear of the print\nM107 ; part fan off (added; not in IVI 3licer)\nG90 ; absolute positioning\nG92 E1\nG1 E-1 F300 ; relieve pressure\nM203 Z500\nM82 ; absolute extrusion mode\n; IVI3D end end",
     "before_layer_change_gcode": "",
     "layer_change_gcode": "",
     "change_filament_gcode": "M2410 ; pause for manual filament swap",
