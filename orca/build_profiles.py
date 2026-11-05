@@ -65,7 +65,7 @@ machine = {
     "max_layer_height": ["0.24"], "min_layer_height": ["0.05"],
     "use_relative_e_distances": "1", "use_firmware_retraction": "0",
     "retraction_length": ["6.2"], "retraction_speed": ["25"], "deretraction_speed": ["25"],
-    "retract_when_changing_layer": ["1"], "z_hop": ["0"], "retraction_minimum_travel": ["1.5"], "wipe": ["1"], "wipe_distance": ["2"],
+    "retract_when_changing_layer": ["1"], "z_hop": ["0"], "retraction_minimum_travel": ["2.5"], "wipe": ["1"], "wipe_distance": ["2"],
     "machine_max_speed_x": ["500"], "machine_max_speed_y": ["500"], "machine_max_speed_z": ["500"], "machine_max_speed_e": ["100"],
     "machine_max_acceleration_x": ["1000"], "machine_max_acceleration_y": ["1000"], "machine_max_acceleration_z": ["1000"],
     "machine_max_acceleration_e": ["1000"], "machine_max_acceleration_extruding": ["1000"],
@@ -127,6 +127,8 @@ process = {
     "enable_support": "0", "support_type": "normal(auto)", "support_threshold_angle": "50",
     "support_base_pattern": "rectilinear", "support_object_xy_distance": "0.35",
     "seam_position": "aligned", "gcode_label_objects": "0", "exclude_object": "0",
+    # Avoid crossing walls + reduce infill retractions (Orca's "only retract when crossing perimeters")
+    "reduce_crossing_wall": "1", "reduce_infill_retraction": "1",
     "post_process": [],
 }
 
@@ -143,6 +145,7 @@ def variant(name, layer, top_thick, top, bottom, walls, infill, outer, inner, fi
 
 # fast_print(0.3): layer 0.2, top 0.9 / bottom 0.6 mm, wall 0.8 mm, 15 %, wall_0 50, wall_x 60, infill 80, topbottom 40, travel 100
 fast = variant("IVI3D 0.20mm Fast", 0.2, 0.9, 5, 3, 3, 15, 50, 60, 80, 40, 100)
+fast["internal_solid_infill_speed"] = "60"  # cap solid infill (was tied to sparse 80)
 # high_quality(0.3): layer 0.1, top 1.2 / bottom 0.6 mm, wall 0.8 mm, 20 %, wall_0 30, wall_x 45, infill 50, topbottom 30, travel 60
 hq = variant("IVI3D 0.10mm High Quality", 0.1, 1.2, 12, 6, 3, 20, 30, 45, 50, 30, 60)
 PROCESSES = [process, fast, hq]
