@@ -82,6 +82,8 @@ DEFAULT_CONFIG = {
     "webcam_stream_url": "",            # MJPEG stream of an IP camera, shown as-is on the Device page
     "webcam_snapshot_url": "",          # JPEG snapshot URL (IP camera); used for the snapshot view + timelapse
     "webcam_usb_device": "",            # local USB camera via ffmpeg/avfoundation, e.g. "0" ("" = off)
+    "webcam_usb_fps": 10,               # live USB MJPEG output FPS after capture (ffmpeg -vf fps=N); capture requests 30
+    "webcam_usb_live": True,            # shared live ffmpeg for USB; snapshot reuses those frames
     "timelapse": False,                 # snapshot per layer during USB (Upload and Print) jobs
     "timelapse_dir": os.path.join(_data_dir(), "timelapse"),
     "timelapse_fps": 15,
@@ -1768,7 +1770,7 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
 .panel{display:block;border:1px solid #d3e0f3;border-radius:10px;padding:1em}
 .panels{grid-template-areas:"tool fil" "con files" "cam files";align-items:start}
 #p_tool{grid-area:tool}#p_fil{grid-area:fil}#p_con{grid-area:con}#p_cam{grid-area:cam}#p_files{grid-area:files}
-.wtabs{display:flex}#p_tp{display:none}body.wtp .panels>.panel{display:none}body.wtp #p_tp{display:block;grid-column:1/-1}}
+.wtabs{display:flex}#p_tp{display:none}body.wtp .panels>.panel{display:none}body.wtp #p_tp{display:block;grid-column:1/-1}}#camimg{cursor:zoom-in}#camfs{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:rgba(10,14,22,.94);padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0)}#camfs.on{display:flex}#camfs img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;background:#000;border-radius:0}#camfsx{position:absolute;top:max(.6em,env(safe-area-inset-top));right:max(.6em,env(safe-area-inset-right));z-index:41;background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:999px;padding:.55em 1em;font:600 15px -apple-system,Helvetica,sans-serif;cursor:pointer}body.camfs-on{overflow:hidden}#camframe:fullscreen,#camframe:-webkit-full-screen{width:100%;height:100%;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:.5em;box-sizing:border-box}#camframe:fullscreen #camimg,#camframe:-webkit-full-screen #camimg{max-height:calc(100% - 3.2em);max-width:100%;width:auto;height:auto;border-radius:0;cursor:zoom-out}#camframe:fullscreen .cambtns,#camframe:-webkit-full-screen .cambtns{margin-top:.5em}
 </style>
 <div class=top>Control<a href=# onclick="tick();return false">&#8635;</a></div>
 <div class=info><span>Uploads: <b>__MODE__</b></span><span>USB: <b id=usb>…</b></span><span>State: <b id=st>…</b></span><span>File: <b id=fn></b></span><span id=pc></span></div>
@@ -1818,10 +1820,11 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
 <div class=panel id=p_cam><h3>Webcam</h3>
 <div id=camoff class=lbl>No camera configured. Set <code>webcam_stream_url</code>, <code>webcam_snapshot_url</code> or <code>webcam_usb_device</code> in the bridge config (see README).</div>
 <div id=camframe style="display:none">
-<img id=camimg alt="webcam" style="width:100%;max-height:420px;object-fit:contain;background:#15171c;border-radius:8px">
-<div class=cambtns><button type=button class=cambtn data-m=live onclick="camSetMode('live')">Live</button><button type=button class=cambtn data-m=snap onclick="camSetMode('snap')">Snapshot</button><button type=button class=cambtn onclick="camRetry()">Retry</button></div>
+<img id=camimg alt="webcam" style="width:100%;max-height:420px;object-fit:contain;background:#15171c;border-radius:8px" title="Tap for full screen" onclick="camToggleFs()">
+<div class=cambtns><button type=button class=cambtn data-m=live onclick="camSetMode('live')">Live</button><button type=button class=cambtn data-m=snap onclick="camSetMode('snap')">Snapshot</button><button type=button class=cambtn onclick="camRetry()">Retry</button><button type=button class=cambtn id=camfsbtn onclick="camToggleFs()">Full Screen</button></div>
 <div class=lbl id=caminfo style="margin-top:.4em"></div>
 </div>
+<div id=camfs aria-hidden=true><button type=button id=camfsx onclick="camExitFs()" title="Close">Close</button><img id=camfsimg alt="webcam full screen" onclick="camExitFs()"></div>
 <div id=tlv class=lbl style="margin-top:.4em"></div>
 <h3 style="margin-top:1em">Temperatures <span class=lbl id=tgl></span></h3>
 <canvas id=tg width=640 height=220 style="width:100%;background:#fbfdff;border:1px solid #d3e0f3;border-radius:8px"></canvas>
@@ -1991,7 +1994,23 @@ async function camInit(){try{CAM=await J('/api/ivi/webcam')}catch(e){return}
  let pref='live';try{pref=localStorage.getItem('ivi_cam_mode')||'live'}catch(e){}
  if(pref!=='live'&&pref!=='snap')pref='live';if(pref==='live'&&!camCanLive())pref='snap';
  camMode=pref;camHighlight();camApply()}
-function camSnap(){if(CAM&&CAM.enabled&&camMode==='snap')camimg.src=camSnapUrl()}
+function camSnap(){if(CAM&&CAM.enabled&&camMode==='snap'){camimg.src=camSnapUrl();if(camFsOpen())camfsimg.src=camimg.src}}
+function camNativeFs(){const el=camframe;return !!(el&&(el.requestFullscreen||el.webkitRequestFullscreen))}
+function camFsOpen(){return !!(document.fullscreenElement||document.webkitFullscreenElement)||camfs.classList.contains('on')}
+function camSyncFsImg(){if(!camFsOpen())return;camfsimg.src=camimg.currentSrc||camimg.src}
+function camEnterFs(){if(!CAM||!CAM.enabled||camframe.style.display==='none')return;
+ if(camNativeFs()){const req=camframe.requestFullscreen||camframe.webkitRequestFullscreen;
+  try{const p=req.call(camframe);if(p&&p.catch)p.catch(()=>camOverlayFs(true));return}catch(e){}}
+ camOverlayFs(true)}
+function camOverlayFs(on){camfs.classList.toggle('on',!!on);camfs.setAttribute('aria-hidden',on?'false':'true');
+ document.body.classList.toggle('camfs-on',!!on);if(on){camfsimg.src=camimg.currentSrc||camimg.src}}
+function camExitFs(){const fs=document.fullscreenElement||document.webkitFullscreenElement;
+ if(fs){const x=document.exitFullscreen||document.webkitExitFullscreen;try{x.call(document)}catch(e){}}
+ camOverlayFs(false)}
+function camToggleFs(){camFsOpen()?camExitFs():camEnterFs()}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&camFsOpen()){e.preventDefault();camExitFs()}});
+document.addEventListener('fullscreenchange',()=>{if(!(document.fullscreenElement||document.webkitFullscreenElement))camOverlayFs(false)});
+document.addEventListener('webkitfullscreenchange',()=>{if(!(document.fullscreenElement||document.webkitFullscreenElement))camOverlayFs(false)});
 async function tlLoad(){try{const v=(await J('/api/ivi/timelapse')).videos;tlv.innerHTML=v.length?'Timelapses: '+v.slice(0,5).map(x=>'<a target=_blank href="/api/ivi/timelapse/file?name='+encodeURIComponent(x.name)+'&apikey='+encodeURIComponent(K)+'">'+esc(x.name)+'</a>').join(' · '):''}catch(e){}}
 async function tgDraw(){let d;try{d=await J('/api/ivi/temps')}catch(e){return}const S=d.samples,c=tg.getContext('2d'),W=640,Hh=220,L=36;c.clearRect(0,0,W,Hh);
  const mx=Math.max(60,...S.flatMap(s=>[s.tool0?Math.max(s.tool0[0],s.tool0[1]):0,s.bed?Math.max(s.bed[0],s.bed[1]):0]))*1.1,now=Date.now()/1000,win=Math.min(d.window_s,Math.max(120,S.length?now-S[0].t:0));
@@ -2030,7 +2049,7 @@ async function conPoll(){let d;try{d=await J('/api/ivi/console?since='+CS)}catch
 async function csend(){const c=cin.value.trim();if(!c)return;try{await J('/api/ivi/console',{command:c});cin.value=''}catch(e){const x=document.createElement('div');x.className='ce';x.textContent='! '+e.message;con.appendChild(x);con.scrollTop=con.scrollHeight}conPoll()}
 function uLock(){const u=!usb.textContent.startsWith('off')&&!usb.textContent.startsWith('not');document.querySelectorAll('#p_files .u,#p_con .u').forEach(b=>b.disabled=!u)}
 camInit();tlLoad();tgDraw();filesLoad();histLoad();mLoad();conPoll();
-setInterval(()=>{tgDraw();conPoll()},3000);setInterval(()=>{if(document.getElementById('p_cam').offsetParent)camSnap()},1000);setInterval(()=>{filesLoad();histLoad();tlLoad()},15000);
+setInterval(()=>{tgDraw();conPoll()},3000);setInterval(()=>{if(document.getElementById('p_cam').offsetParent)camSnap();if(camfs.classList.contains('on')&&camMode==='live')camSyncFsImg()},1000);setInterval(()=>{filesLoad();histLoad();tlLoad()},15000);
 tick();setInterval(tick,2000)</script>"""
 
 def status_page(cfg):

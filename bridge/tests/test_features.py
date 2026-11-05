@@ -222,7 +222,7 @@ class TempNotifyCamTests(Base):
     def test_page_has_new_panels(self):
         with urllib.request.urlopen(self.url + "/", timeout=5) as r: page = r.read().decode()
         for s in ("Webcam", "Temperatures", "Files", "Queue", "History", "Macros", "Console", "/api/ivi/console", "/api/ivi/macros",
-                  "cambtns", "camSetMode", "ivi_cam_mode", "Live stream interrupted"):
+                  "cambtns", "camSetMode", "ivi_cam_mode", "Live stream interrupted", "Full Screen", "camToggleFs"):
             self.assertIn(s, page)
     def test_live_mode_snapshot_does_not_oneshot(self):
         """With live mode on, a missing live frame must fail fast — never start -frames:v 1 (locks camera)."""
