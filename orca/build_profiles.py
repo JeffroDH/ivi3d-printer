@@ -45,7 +45,7 @@ END = """; IVI3D end (IVI 3licer 1.6.2 machine_end_gcode + fan off)
 M104 S0 ; extruder heater off
 M140 S0 ; bed heater off
 G91 ; relative moves
-G1 E-6.5 Z0.6 F1500 ; retract with a small lift before leaving the part (stops the end blob)
+G1 E-6.2 Z0.6 F1500 ; retract with a small lift before leaving the part (stops the end blob)
 G1 Z9.4 F600 ; lift off the part
 G90 ; absolute moves
 G28 ; home to the top, clear of the print
@@ -168,17 +168,17 @@ def fil(name, ftype, density, t, t0, lo, hi, bed, fmin, fmax, nofan, vol, layer_
 
 EXTRA_FILAMENTS = [
     # Anycubic ABS: 250/250 C, bed 90, fan 10-80 (off 5 layers), 15 mm3/s @0.4
-    fil("IVI3D ABS", "ABS", 1.04, 250, 250, 240, 280, 90, 10, 80, 5, 4.5, 30),
+    fil("IVI3D ABS", "ABS", 1.04, 250, 250, 240, 280, 90, 10, 80, 5, 4.5, 8),
     # Anycubic ASA: 260/260 C, bed 100, fan 10-60 (off 5 layers), 12 mm3/s @0.4
-    fil("IVI3D ASA", "ASA", 1.07, 260, 260, 240, 280, 100, 10, 60, 5, 4.5, 35),
+    fil("IVI3D ASA", "ASA", 1.07, 260, 260, 240, 280, 100, 10, 60, 5, 4.5, 8),
     # Anycubic PETG: 250/250 C, bed 70, fan 30-90 (off 3), retract 1.5 mm @0.4 direct drive (machine 6.5 kept: Bowden)
-    fil("IVI3D PETG", "PETG", 1.27, 240, 245, 220, 260, 70, 30, 90, 3, 4.5, 30),
+    fil("IVI3D PETG", "PETG", 1.27, 240, 245, 220, 260, 70, 30, 90, 3, 4.5, 8),
     # Tangled TUFF Pro PCTG baseline: nozzle 250-280, bed 70-90, fan <=25 %, 30-60 mm/s
-    fil("IVI3D PCTG (Tangled TUFF)", "PCTG", 1.27, 260, 260, 250, 280, 80, 10, 25, 3, 4.5, 20),
+    fil("IVI3D PCTG (Tangled TUFF)", "PCTG", 1.27, 260, 260, 250, 280, 80, 10, 25, 3, 4.5, 8),
     # Anycubic TPU 95A: 205 / 215 first layer, bed 35, fan 100, retract 1 mm @30, 3.2 mm3/s @0.4
     fil("IVI3D TPU 95A", "FLEX", 1.21, 215, 220, 190, 240, 35, 100, 100, 1, 1.5, 10, retract=1.0, rspeed=20, extra={"enable_pressure_advance": ["0"]}),
     # EXPERIMENTAL: Stratasys SR-30 soluble support (alkaline-soluble, NOT PVA). Printed alone on a single nozzle.
-    fil("IVI3D SR-30 Soluble (EXPERIMENTAL)", "PVA", 1.2, 255, 260, 245, 265, 100, 0, 20, 3, 4, 20,
+    fil("IVI3D SR-30 Soluble (EXPERIMENTAL)", "PVA", 1.2, 255, 260, 245, 265, 100, 0, 20, 3, 4, 8,
         extra={"filament_soluble": ["1"], "filament_is_support": ["1"],
                "filament_notes": ["EXPERIMENTAL. Stratasys SR-30 (alkaline-soluble terpolymer, NOT PVA). Dissolve in "
                                   "heated NaOH bath ~70 C. Pairs with ABS/ASA; single nozzle = whole-part tests only. "
