@@ -22,7 +22,7 @@ class NoAccelM73Tests(unittest.TestCase):
         with open(os.path.join(D, sub, name + ".json")) as f: return json.load(f)
     def test_machine(self):
         m = self.load("machine", "IVI3D 0.3 nozzle")
-        self.assertEqual(m["disable_m73"], "1"); self.assertEqual(m["emit_machine_limits_to_gcode"], "0")
+        self.assertEqual(m["disable_m73"], "0"); self.assertEqual(m["emit_machine_limits_to_gcode"], "0")
         self.assertNotIn("G21", m["machine_start_gcode"] + m["layer_change_gcode"] + m["before_layer_change_gcode"])
     def test_processes(self):
         for n in ("IVI3D 0.15mm Standard", "IVI3D 0.20mm Fast", "IVI3D 0.10mm High Quality"):
@@ -34,7 +34,7 @@ class NoAccelM73Tests(unittest.TestCase):
     def test_bundle_matches(self):
         with zipfile.ZipFile(os.path.join(D, "IVI3D.orca_printer")) as z:
             m = json.loads(z.read("printer/IVI3D 0.3 nozzle.json")); p = json.loads(z.read("process/IVI3D 0.15mm Standard.json"))
-        self.assertEqual(m["disable_m73"], "1"); self.assertEqual(p["default_acceleration"], "0"); self.assertEqual(p["default_jerk"], "0")
+        self.assertEqual(m["disable_m73"], "0"); self.assertEqual(p["default_acceleration"], "0"); self.assertEqual(p["default_jerk"], "0")
 
 class HeaderTests(unittest.TestCase):
     def test_header(self):

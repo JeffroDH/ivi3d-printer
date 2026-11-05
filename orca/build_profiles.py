@@ -72,7 +72,7 @@ machine = {
     "machine_max_acceleration_retracting": ["1000"], "machine_max_acceleration_travel": ["1000"],
     "machine_max_jerk_x": ["15"], "machine_max_jerk_y": ["15"], "machine_max_jerk_z": ["10"], "machine_max_jerk_e": ["5"],
     "emit_machine_limits_to_gcode": "0",   # no M201/M203/M204/M205 block at the start
-    "disable_m73": "1",                     # no M73 progress lines (firmware stalled on them; printer-option in Orca 2.5)
+    "disable_m73": "0",                     # emit M73 progress lines (stall tests 11-03 cleared M73; bridge uses M73 R for time left)
     # G21 cannot be turned off: GCodeWriter::preamble() writes "G90\nG21" for every flavour but MakerWare.
     # The bridge can strip it via strip_commands (off by default; G21 is harmless).
     "machine_start_gcode": START, "machine_end_gcode": END,
