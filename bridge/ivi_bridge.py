@@ -10,7 +10,7 @@ can upload to it, and forwards jobs to the printer over:
 Commands:  serve | send FILE | postprocess FILE | watch DIR      (see --help)
 License: CC BY-NC-SA 4.0 (same as the repo).
 """
-import argparse, bisect, email.parser, fnmatch, html, secrets, select, subprocess, email.policy, glob, json, os, re, shutil, sys, threading, time
+import argparse, bisect, email.parser, fnmatch, html, secrets, select, subprocess, email.policy, glob, json, os, re, shutil, sys, tempfile, threading, time
 import urllib.error, urllib.parse, urllib.request, uuid, base64, collections
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 try:
@@ -1212,7 +1212,7 @@ class Webcam:
         return {"enabled": bool(c.get("webcam_stream_url") or snap), "stream": bool(c.get("webcam_stream_url")),
                 "snapshot": snap, "source": "ip" if c.get("webcam_snapshot_url") or c.get("webcam_stream_url") else ("usb" if usb else None),
                 "usb_without_ffmpeg": usb and not find_ffmpeg(), "timelapse": bool(c.get("timelapse")),
-                "ffmpeg": bool(find_ffmpeg())}
+                "ffmpeg": bool(find_ffmpeg()), "usb_stream": self.usb_live_ok()}
     def _fetch(self, url):
         with urllib.request.urlopen(url, timeout=10) as r: return r.read(8 << 20)
     def snapshot(self):
@@ -1220,6 +1220,9 @@ class Webcam:
         url = self.cfg.get("webcam_snapshot_url")
         if url: return self.fetch(url)
         dev = str(self.cfg.get("webcam_usb_device", "")).strip(); ff = find_ffmpeg()
+        if dev and ff and self.run is subprocess.run and self.cfg.get("webcam_usb_live", True):
+            img = self._live(ff, dev)
+            if img: return img
         if dev and ff:
             fmt = {"darwin": "avfoundation", "win32": "dshow"}.get(sys.platform, "v4l2")
             r = self.run([ff, "-loglevel", "error", "-f", fmt, "-framerate", "30", "-i", dev, "-frames:v", "1",
@@ -1227,6 +1230,57 @@ class Webcam:
             if r.returncode == 0 and r.stdout: return r.stdout
             raise RuntimeError("ffmpeg could not read the USB camera: " + (r.stderr or b"").decode(errors="replace")[-200:])
         raise RuntimeError("no webcam configured")
+
+    _proc = None; _last_req = 0.0; _lock = threading.Lock(); _cond = threading.Condition(); _frame = None; _seq = 0; _ft = 0.0
+    def _live(self, ff, dev, wait=True):
+        """One shared ffmpeg keeps the USB camera open (MJPEG frames to memory) while anyone is watching;
+        feeds both /snapshot and the /stream MJPEG view. Avoids the dark first frame and the ~4 s camera open.
+        Stops after 30 s with no viewers or requests."""
+        W = Webcam
+        with W._lock:
+            W._last_req = time.time()
+            if W._proc is None or W._proc.poll() is not None:
+                fmt = {"darwin": "avfoundation", "win32": "dshow"}.get(sys.platform, "v4l2")
+                fps = str(self.cfg.get("webcam_usb_fps", 10))
+                W._proc = subprocess.Popen([ff, "-loglevel", "error", "-f", fmt, "-framerate", "30", "-i", dev,
+                                            "-vf", "fps=" + fps, "-q:v", "6", "-f", "image2pipe", "-vcodec", "mjpeg", "-"],
+                                           stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                W._frame = None; t0 = time.time()
+                def reader(proc=W._proc, t0=t0):
+                    buf = b""
+                    while True:
+                        chunk = proc.stdout.read(65536)
+                        if not chunk: break
+                        buf += chunk
+                        while True:
+                            i = buf.find(b"\xff\xd8"); j = buf.find(b"\xff\xd9", i + 2)
+                            if i < 0 or j < 0: break
+                            fr = buf[i:j + 2]; buf = buf[j + 2:]
+                            if time.time() - t0 < 3: continue          # skip dark frames while exposure settles
+                            with W._cond: W._frame = fr; W._seq += 1; W._ft = time.time(); W._cond.notify_all()
+                        if len(buf) > 8 << 20: buf = b""
+                        if time.time() - W._last_req > 30: proc.terminate(); break
+                    with W._cond: W._cond.notify_all()
+                threading.Thread(target=reader, daemon=True).start()
+        if not wait: return None
+        with W._cond:
+            W._cond.wait_for(lambda: W._frame is not None and time.time() - W._ft < 3, timeout=8)
+            return W._frame if W._frame is not None and time.time() - W._ft < 3 else None
+    def usb_live_ok(self):
+        dev = str(self.cfg.get("webcam_usb_device", "")).strip()
+        return bool(dev and find_ffmpeg() and not self.cfg.get("webcam_snapshot_url") and self.cfg.get("webcam_usb_live", True))
+    def frames(self):
+        """Generator of JPEG frames for the MJPEG stream (USB camera)."""
+        W = Webcam; ff = find_ffmpeg(); dev = str(self.cfg.get("webcam_usb_device", "")).strip()
+        first = self._live(ff, dev)
+        if first is None: return
+        yield first; seq = W._seq
+        while True:
+            W._last_req = time.time(); self._live(ff, dev, wait=False)
+            with W._cond:
+                if not W._cond.wait_for(lambda: W._seq != seq, timeout=5): return
+                seq = W._seq; fr = W._frame
+            yield fr
 
 class Timelapse:
     """One snapshot per layer change of a USB job; assembled to MP4 with ffmpeg at the end (frames kept otherwise)."""
@@ -1838,9 +1892,9 @@ function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 async function J(u,o){const r=await fetch(u,o?{method:'POST',headers:H,body:JSON.stringify(o)}:{headers:H});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j}
 async function camInit(){try{CAM=await J('/api/ivi/webcam')}catch(e){return}
  if(!CAM.enabled){camoff.style.display='block';camimg.style.display='none';caminfo.textContent=CAM.usb_without_ffmpeg?'USB camera set, but ffmpeg was not found (brew install ffmpeg).':'';return}
- camoff.style.display='none';camimg.style.display='block';if(CAM.stream)camimg.src=CAM.stream_url;else camSnap();
- caminfo.textContent=(CAM.stream?'Live stream':'Snapshot every 3 s')+' · timelapse '+(CAM.timelapse?(CAM.snapshot?'on (one frame per layer, USB prints)':'needs a snapshot URL or USB camera'):'off')+(CAM.timelapse&&!CAM.ffmpeg?' · no ffmpeg: frames are kept, no video':'')}
-function camSnap(){if(CAM&&CAM.enabled&&!CAM.stream)camimg.src='/api/ivi/webcam/snapshot?apikey='+encodeURIComponent(K)+'&t='+Date.now()}
+ camoff.style.display='none';camimg.style.display='block';if(CAM.stream)camimg.src=CAM.stream_url;else if(CAM.usb_stream){camimg.src='/api/ivi/webcam/stream?apikey='+encodeURIComponent(K);camimg.onerror=()=>{CAM.usb_stream=false;camSnap()}}else camSnap();
+ caminfo.textContent=(CAM.stream||CAM.usb_stream?'Live stream':'Snapshot every second')+' · timelapse '+(CAM.timelapse?(CAM.snapshot?'on (one frame per layer, USB prints)':'needs a snapshot URL or USB camera'):'off')+(CAM.timelapse&&!CAM.ffmpeg?' · no ffmpeg: frames are kept, no video':'')}
+function camSnap(){if(CAM&&CAM.enabled&&!CAM.stream&&!CAM.usb_stream)camimg.src='/api/ivi/webcam/snapshot?apikey='+encodeURIComponent(K)+'&t='+Date.now()}
 async function tlLoad(){try{const v=(await J('/api/ivi/timelapse')).videos;tlv.innerHTML=v.length?'Timelapses: '+v.slice(0,5).map(x=>'<a target=_blank href="/api/ivi/timelapse/file?name='+encodeURIComponent(x.name)+'&apikey='+encodeURIComponent(K)+'">'+esc(x.name)+'</a>').join(' · '):''}catch(e){}}
 async function tgDraw(){let d;try{d=await J('/api/ivi/temps')}catch(e){return}const S=d.samples,c=tg.getContext('2d'),W=640,Hh=220,L=36;c.clearRect(0,0,W,Hh);
  const mx=Math.max(60,...S.flatMap(s=>[s.tool0?Math.max(s.tool0[0],s.tool0[1]):0,s.bed?Math.max(s.bed[0],s.bed[1]):0]))*1.1,now=Date.now()/1000,win=Math.min(d.window_s,Math.max(120,S.length?now-S[0].t:0));
@@ -1879,7 +1933,7 @@ async function conPoll(){let d;try{d=await J('/api/ivi/console?since='+CS)}catch
 async function csend(){const c=cin.value.trim();if(!c)return;try{await J('/api/ivi/console',{command:c});cin.value=''}catch(e){const x=document.createElement('div');x.className='ce';x.textContent='! '+e.message;con.appendChild(x);con.scrollTop=con.scrollHeight}conPoll()}
 function uLock(){const u=!usb.textContent.startsWith('off')&&!usb.textContent.startsWith('not');document.querySelectorAll('#p_files .u,#p_con .u').forEach(b=>b.disabled=!u)}
 camInit();tlLoad();tgDraw();filesLoad();histLoad();mLoad();conPoll();
-setInterval(()=>{camSnap();tgDraw();conPoll()},3000);setInterval(()=>{filesLoad();histLoad();tlLoad()},15000);
+setInterval(()=>{tgDraw();conPoll()},3000);setInterval(()=>{if(document.getElementById('p_cam').offsetParent)camSnap()},1000);setInterval(()=>{filesLoad();histLoad();tlLoad()},15000);
 tick();setInterval(tick,2000)</script>"""
 
 def status_page(cfg):
@@ -1952,6 +2006,16 @@ def make_handler(bridge):
                                             last_timelapse=bridge.last_timelapse,
                                             recording=bool(bridge.timelapse and bridge.busy()),
                                             frames=bridge.timelapse.frames if bridge.timelapse else 0))
+            if p == "/api/ivi/webcam/stream":
+                if not bridge.webcam.usb_live_ok(): return self._json(404, {"error": "no USB camera stream"})
+                self.send_response(200); self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+                self.send_header("Cache-Control", "no-cache"); self.end_headers()
+                try:
+                    for fr in bridge.webcam.frames():
+                        self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(fr)).encode() + b"\r\n\r\n" + fr + b"\r\n")
+                        self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError): pass
+                return
             if p == "/api/ivi/webcam/snapshot":
                 try: img = bridge.webcam.snapshot()
                 except Exception as e: return self._json(503, {"error": str(e)})
