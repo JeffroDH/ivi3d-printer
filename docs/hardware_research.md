@@ -1,55 +1,72 @@
 # IVI hardware research
 
-Compiled 2026-10-31 from public sources. No internal board photos were found online; an owner has since photographed the main board, see [mainboard.md](mainboard.md). Labels: **[P]** read from owner board photos, **[C]** confirmed by a source, **[F]** confirmed in firmware (see `supx_decompile_report.md`), **[G]** guess.
+Compiled 2026-10-31 from public sources; board photo pass extended **2026-11-05**. No internal board photos were found online; an owner has photographed the main board — see **[mainboard.md](mainboard.md)** (primary detail page). Labels: **[P]** owner photos, **[C]** public source, **[F]** firmware, **[D]** datasheet, **[G]** guess, **[U]** unknown.
 
 ## Architecture
-- **Boards [C][P]:** owner photos show one **combined main board, `A33_407MB_200916`**, carrying both the Allwinner A33 (Cortex-A7, Linux/Qt UI; this is the forum's "ARM A7 control board (Related with LCD)") and the STM32F407 motion MCU. Separately there are per-motor closed-loop driver boards and, per the forum's December 2020 update, a "power PCB and switch PCB". See [mainboard.md](mainboard.md).
-- **November 2020 [C]:** the first version of the main board was finished, with small affiliated PCBs.
-- **June 2019 [C]:** control board parts were sourced through Allchips.
-- **Closed-loop motors [C][F]:** IVI's FAQ says each motor has a magnetic angle sensor and a separate motor drive board. The firmware talks to each driver over its own UART, using a custom protocol.
-- **Toolhead identification [C][F]:** the FAQ says a chip on the printhead PCB identifies the head. The firmware queries the head over CAN2 (ID 0x12), and the head reports its type, serial number, firmware version, and nozzle size.
-- **Head connector [C visually / G roles]:** every head render shows 8 gold pads in 2 staggered rows of 4 (`images/renders/`). Power, GND, CAN-H, CAN-L, and a detect/ID line is **only a guess**. The pitch and pin order are unknown.
-- **Motion [C]:** a delta with HIWIN MGN9H rails and belt-driven carriages (`images/archive/IVI-joints.png`). The delta geometry matches the M503 dump.
+
+- **Boards [C][P]:** one **combined main board, `A33_407MB_200916`**, carrying:
+  - a **blue castellated SoM** with Allwinner (likely **A33**), **AXP223** PMIC, Samsung **K4B4G1646E**-class **512 MB** DDR3L, and Toshiba/Kioxia **THGBMNG5D1LBAIL 4 GB** eMMC **[P][D]**;
+  - carrier **STM32F407VET6** (512 KB flash, LQFP100) for Marlin motion **[P][D][F]**;
+  - Ampak **AP6236** Wi-Fi/BT module fitted **[P][D]** (RF path/firmware enablement **[U]**).
+  Separately: per-motor closed-loop driver boards and, per the forum's December 2020 update, a "power PCB and switch PCB". Full pad maps, connector caveats, and the bottom-left **5-pin + CH340G** notes are in [mainboard.md](mainboard.md).
+- **Software split [F]:** Linux/Qt UI + HTTP `:8080` on the A33 side; Marlin-derived image on the STM32; UI↔motion over internal serial; external USB-C CDC goes to Marlin. See `firmware_report.md`, `network.md`.
+- **November 2020 [C]:** first version of the main board finished, with small affiliated PCBs.
+- **June 2019 [C]:** control board parts sourced through Allchips.
+- **Closed-loop motors [C][F]:** FAQ: magnetic angle sensor + separate drive board per motor; firmware uses a custom UART protocol per driver.
+- **Toolhead identification [C][F]:** FAQ: chip on printhead PCB; firmware queries head over CAN2 (ID 0x12) for type, serial, FW version, nozzle size. **Do not put printer/toolhead serials in this repo.**
+- **Head connector [C visually / G roles]:** renders show 8 gold pads in 2 staggered rows of 4 (`images/renders/`). Power, GND, CAN-H, CAN-L, detect/ID **guess only**. Pitch/order unknown.
+- **Motion [C]:** delta with HIWIN MGN9H rails and belt-driven carriages (`images/archive/IVI-joints.png`). Geometry matches the M503 dump.
 
 ## Images
-- `images/renders/`: 14 BackerKit product renders (heads, base plate, full printer). See `SOURCES.md` there.
-- `images/board/`: owner photos of the main board.
-- `images/archive/`: renders retrieved from the Wayback Machine.
 
-All images are IVI's material, included for preservation.
+- `images/renders/`: 14 BackerKit product renders. See `SOURCES.md` there.
+- `images/board/`: owner photos of the main board (2026-10 and 2026-11). See `SOURCES_2026-11.md` for the newer set.
+- `images/archive/`: Wayback Machine renders.
+
+All images are IVI / owner material, included for preservation. Chip lot codes and `A33_407MB_200916` are **not** printer serials.
 
 ## Sources
-- IVI forum (archived, about 160 threads): https://web.archive.org/web/2021*/forum.ivi3d.com/*. The beta thread is 1877, "beta-testers-share-your-experience". About 21 beta testers received units in February 2021.
-- BackerKit updates: https://ivi.backerkit.com/hosted_preorders/project_updates. The December 15, 2020 update's "inner look of the printer" photos have been deleted.
-- ivi3d.com FAQ and site assets: https://web.archive.org/web/2020*/ivi3d.com/*
-- No results from FCC ID searches, Reddit, YouTube, or Chinese-language sources.
+
+- IVI forum (archived, ~160 threads): https://web.archive.org/web/2021*/forum.ivi3d.com/*. Beta thread 1877. ~21 beta units Feb 2021.
+- BackerKit updates: https://ivi.backerkit.com/hosted_preorders/project_updates. Dec 15, 2020 "inner look" photos deleted.
+- ivi3d.com FAQ/assets: https://web.archive.org/web/2020*/ivi3d.com/*
+- Chip datasheets cited in [mainboard.md](mainboard.md) §12.
+- No useful FCC / Reddit / YouTube / CN hits for board artwork.
 
 ## Not yet retrieved (retry later)
-The Wayback Machine listed `ivi3d.com` images named like `mcu-*.jpg`, `closed-loop-stepper-*.jpg`, and `Ivi_front_sensors_all-*.jpg`. On 2026-10-31 the Internet Archive had an outage, and CDX queries returned no captures for them. Retry with:
+
+Wayback listed `ivi3d.com` images like `mcu-*.jpg`, `closed-loop-stepper-*.jpg`, `Ivi_front_sensors_all-*.jpg`. On 2026-10-31 CDX returned none. Retry:
+
 `https://web.archive.org/cdx/search/cdx?url=ivi3d.com&matchType=domain&filter=original:.*(mcu|closed-loop|sensors).*`
 
 ## Open questions
-Photos answered the big architecture questions (see [mainboard.md](mainboard.md)). What is left is mostly pin-level and protocol work:
+
+Photos answered the big architecture questions. Still open (detail in [mainboard.md](mainboard.md)):
 
 **Resolved by board photos**
-- Hotend heater, head fan, laser, and spindle are **on the toolhead**, driven by the head MCU over **CAN** — there is no hotend MOSFET expected on the main board
-- Main-board power rails labeled: `VCCIN24V`, `BEDVCC24V` (heated bed supply), `FAN24V` (chassis/system fan rail), `HEADVCC24V` with `CAN+`/`CAN-`
-- `BEDTEMP` is the bed thermistor input; `INP`/`INN` is a differential input (likely the load cell, firmware `M2049`)
-- Four driver boards (`MTX`/`MTY`/`MTZ`/`MTF`) each have their own UART pads; SWD and likely `UGUART` console pads are located
+
+- Hotend heater/fan/laser/spindle on the **toolhead** over **CAN** — no hotend MOSFET expected on the main board
+- Labeled rails: `VCCIN24V`, `BEDVCC24V`, `FAN24V`, `HEADVCC24V` + `CAN±`
+- `BEDTEMP` bed thermistor; `INP`/`INN` differential (likely load cell / `M2049`)
+- Four driver boards with UART + STEP/DIR/EN; SWD found; rear **`DEBUGUART_*`** pads found (Nov 2026 silk); CH340G at front 5-pin
+- SoM memory/PMIC markings and AP6236 module marking (2026-11)
 
 **Still open**
-- Which **STM32 pins** the driver UARTs, bed heater switch, and `FAN24V` control map to (needs a multimeter continuity check from pads to the MCU; see `supx_decompile_report.md` §8)
-- Whether bed heat is switched on this board (MOSFET/relay on `BEDVCC24V`) or elsewhere on a power PCB
-- Head connector pinout and pitch; full CAN message set (needs a CAN capture)
-- STM32 readout protection (SWD pads located, not yet probed)
-- Confirm `UGUART_RX`/`UGUART_TX` is the A33 console (found, untested)
-- Why each axis has both `LIMITSW_` and `LIMIT_` pads
-- Part numbers of the 8-pin SOIC near SWD and the QFN by the second SWD port
+
+- STM32 pin map for driver UARTs, bed/`FAN24V` switching (`supx_decompile_report.md` §8)
+- Whether bed heat switches on this board or a power PCB
+- Head connector pinout/pitch; full CAN set
+- STM32 RDP status (**inspect only** - never unlock/disable); confirm whether `DEBUGUART_*` is a Linux console **after measuring voltage**
+- Front 3-pin vs `DEBUGUART_*` vs 5-pin/CH340G net relationships
+- Why each axis has both `LIMITSW_` and `LIMIT_`
+- SOIC-8 near SWD; QFN by second SWD; SOIC-16 exact marking by 5-pin
 
 ## Contributing board photos
-If you own an IVI, please open an issue or PR with:
-1. Clear, well-lit, top-down photos of each board (motion, ARM/LCD, power, switch, motor driver, and the toolhead PCB), with chip markings readable
-2. Close-ups of the connectors, debug headers (SWD, UART), and silkscreen
-3. Multimeter continuity results from MCU pins to connectors, if you can
 
-Remove the power cable first. Photos go in `docs/images/owners/`.
+If you own an IVI, please open an issue or PR with:
+
+1. Clear top-down photos of each board with chip markings readable
+2. Close-ups of connectors, SWD/UART, silkscreen
+3. Multimeter continuity results if possible
+
+Remove power first. Strip EXIF/GPS. **Redact printer serials.** Photos go in `docs/images/owners/` or `docs/images/board/`.
