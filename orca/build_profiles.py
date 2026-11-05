@@ -38,7 +38,8 @@ G1 X30 Y-97 E12 F450 ; prime line, 60 mm, slow and heavy
 G1 E11.2 F1500 ; small retract (0.8 mm)
 G1 X38 Y-90 F3000 ; wipe inward, no extrusion
 G92 E0
-; IVI3D start end"""
+; IVI3D start end
+M83 ; relative extrusion for the print"""
 
 END = """; IVI3D end (IVI 3licer 1.6.2 machine_end_gcode + fan off)
 M104 S0 ; extruder heater off
@@ -62,7 +63,7 @@ machine = {
     "gcode_flavor": "marlin", "printable_area": circle(RADIUS), "printable_height": str(HEIGHT),
     "bed_exclude_area": [], "bed_custom_texture": BED_TEXTURE, "bed_custom_model": BED_MODEL, "nozzle_diameter": ["0.3"], "nozzle_type": "brass", "extruder_offset": ["0x0"],
     "max_layer_height": ["0.24"], "min_layer_height": ["0.05"],
-    "use_relative_e_distances": "0", "use_firmware_retraction": "0",
+    "use_relative_e_distances": "1", "use_firmware_retraction": "0",
     "retraction_length": ["6.5"], "retraction_speed": ["25"], "deretraction_speed": ["25"],
     "retract_when_changing_layer": ["1"], "z_hop": ["0"], "retraction_minimum_travel": ["1.5"], "wipe": ["1"], "wipe_distance": ["2"],
     "machine_max_speed_x": ["500"], "machine_max_speed_y": ["500"], "machine_max_speed_z": ["500"], "machine_max_speed_e": ["100"],
@@ -75,7 +76,7 @@ machine = {
     # G21 cannot be turned off: GCodeWriter::preamble() writes "G90\nG21" for every flavour but MakerWare.
     # The bridge can strip it via strip_commands (off by default; G21 is harmless).
     "machine_start_gcode": START, "machine_end_gcode": END,
-    "before_layer_change_gcode": "", "layer_change_gcode": "", "change_filament_gcode": "M2410 ; pause for manual filament swap",
+    "before_layer_change_gcode": "G92 E0", "layer_change_gcode": "", "change_filament_gcode": "M2410 ; pause for manual filament swap",
     "thumbnails": "", "host_type": "octoprint", "print_host": "127.0.0.1:5001",
     "printhost_apikey": "PASTE-API-KEY-FROM-IVI-BRIDGE-INSTALLER", "print_host_webui": "http://127.0.0.1:5001/",
     "default_filament_profile": [FILAMENT], "default_print_profile": PROCESS,
@@ -181,8 +182,8 @@ EXTRA_FILAMENTS = [
                                   "Dry before use; enclosure recommended."]}),
 ]
 FILAMENTS = [filament] + EXTRA_FILAMENTS
-# Bowden: push 0.4 mm less back in after each retract to curb ooze/blobs on restart
-for _f in FILAMENTS: _f["filament_retract_restart_extra"] = ["-0.4"]
+# No negative extra restart: -0.4 starved every restart (prime came back 0.4 mm short of the retract)
+for _f in FILAMENTS: _f["filament_retract_restart_extra"] = ["0"]
 
 # Printer limits (touchscreen presets): nozzle up to 270 C, bed up to 100 C. Clamp every filament to them.
 MAX_NOZZLE, MAX_BED = 270, 100

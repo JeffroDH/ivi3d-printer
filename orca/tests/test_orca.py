@@ -53,7 +53,7 @@ class ProfileTests(unittest.TestCase):
         subprocess.run([sys.executable, os.path.join(D, "build_profiles.py")], check=True, capture_output=True)
         m = json.load(open(os.path.join(D, "machine", "IVI3D 0.3 nozzle.json")))
         self.assertEqual(m["nozzle_diameter"], ["0.3"]); self.assertEqual(m["printable_height"], "220")
-        self.assertEqual(m["gcode_flavor"], "marlin"); self.assertEqual(m["use_relative_e_distances"], "0")
+        self.assertEqual(m["gcode_flavor"], "marlin"); self.assertEqual(m["use_relative_e_distances"], "1")
         r = max((float(p.split("x")[0]) ** 2 + float(p.split("x")[1]) ** 2) ** .5 for p in m["printable_area"])
         self.assertAlmostEqual(r, 105, places=2)
         self.assertTrue(m["machine_start_gcode"].splitlines()[1].startswith("G53"))

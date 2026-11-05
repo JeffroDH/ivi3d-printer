@@ -89,6 +89,6 @@
         "EXPERIMENTAL. Stratasys SR-30 (alkaline-soluble terpolymer, NOT PVA). Dissolve in heated NaOH bath ~70 C. Pairs with ABS/ASA; single nozzle = whole-part tests only. Dry before use; enclosure recommended."
     ],
     "filament_retract_restart_extra": [
-        "-0.4"
+        "0"
     ]
 }

@@ -89,6 +89,6 @@
         "20"
     ],
     "filament_retract_restart_extra": [
-        "-0.4"
+        "0"
     ]
 }
