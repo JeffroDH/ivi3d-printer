@@ -10,6 +10,7 @@ Evidence labels used throughout:
 | **[F]** | Matches firmware / decompile findings (`firmware_report.md`, `supx_decompile_report.md`) |
 | **[D]** | Supported by a manufacturer / primary datasheet citation |
 | **[G]** | Inference or guess — not proven on this unit |
+| **[O]** | Owner statement (dated when noted) — distinct from photo-readable markings |
 | **[U]** | Unknown / not readable / not measured |
 
 **Orientation convention for this page**
@@ -73,7 +74,7 @@ Evidence labels used throughout:
 ## 1. Board marking
 
 - Silkscreen **`A33_407MB_200916`** **[P]** on the rear.
-- Reading of the name **[G]**: combined main board intended for an **Allwinner A33** application processor plus an **STM32F407** motion MCU (`407` + `MB`).
+- Reading of the name: combined main board for an **Allwinner A33** application processor plus an **STM32F407** motion MCU (`407` + `MB`). A33 identity is **owner-confirmed 2026-11-06 [O]** (not merely guessed from the silk). Silk etymology for `407`/`MB` remains interpretive **[G]**.
 - Suffix **`200916`**: often a design/fab date (2020-09-16) in Chinese vendor silk, but **that interpretation is not sourced** — treat it as a design marking only **[G]**. It is **not** a unit serial.
 
 ---
@@ -86,8 +87,8 @@ Evidence labels used throughout:
 | STM32 top mark `STM32F407` / `VET6` | **Confirmed visible [P]** | LQFP; lot lines `991D2 9R`, `MYS 99 019` |
 | STM32 flash / SRAM / package | **Datasheet-supported [D]** | VE = 512 KB flash; 192+4 KB SRAM; LQFP100 — [ST DS8626](https://www.st.com/resource/en/datasheet/stm32f407ve.pdf) |
 | Blue castellated SoM | **Confirmed visible [P]** | Soldered to carrier; not a socket |
-| Allwinner logo + lot `L2125BA…` on SoM | **Confirmed visible [P]** | Exact “A33” die marking not always readable on every photo; board name + AXP223 companion strongly support A33 **[G/D]** |
-| SoM = Allwinner A33 (quad Cortex-A7) | **Inferred [G] + ecosystem [D]** | Board name; AXP223 is the usual A33 PMIC ([linux-sunxi AXP223](https://linux-sunxi.org/AXP223), [AXP223 datasheet](https://dl.linux-sunxi.org/AXP/AXP223-en.pdf)); Linux/Qt UI ELF **[F]** |
+| Allwinner logo + lot `L2125BA…` on SoM | **Confirmed visible [P]** | Die text “A33” not always sharp on every photo **[P/U]** |
+| SoM = Allwinner **A33** (quad Cortex-A7) | **Owner-confirmed 2026-11-06 [O]** + ecosystem **[D]** + board silk/firmware **[P][F]** | Owner states the Allwinner is an **A33**. Board silk `A33_407MB_200916` and AXP223 companion remain consistent ([linux-sunxi AXP223](https://linux-sunxi.org/AXP223), [AXP223 datasheet](https://dl.linux-sunxi.org/AXP/AXP223-en.pdf)); Linux/Qt UI ELF **[F]**. Photo die marking may still be hard to read — that does **not** override the owner confirmation. |
 | Samsung RAM top mark | **Confirmed visible [P]** | `SEC 928` / `K4B4G16` / `46E BYKO` (final glyph **O vs 0 ambiguous** on photo) + lot line |
 | DRAM capacity / type | **Contingent [G→D]** | If the orderable is Samsung **K4B4G1646E-BYK0**, datasheets describe **4 Gb (512 MB) ×16 DDR3L**. That capacity is **not independently verified** here without an accessed primary Samsung PDF for the exact orderable; treat as contingent on the marking decode. Mirror PDF example: [K4B4G1646E datasheet (mirror)](https://file.icallin.com/resources/data-sheet/DS_K4B4G1646E_BY_M_Rev1_11-0.pdf). Related Samsung product pages exist for other `K4B4G1646E-*` suffixes ([example](https://semiconductor.samsung.com/us/dram/ddr/ddr3/k4b4g1646e-bcnb/)). |
 | Toshiba/Kioxia `THGBMNG5` / `D1LBAIL` | **Confirmed visible [P]** | Full orderable string **THGBMNG5D1LBAIL** |
@@ -107,7 +108,7 @@ Evidence labels used throughout:
 | Earlier RS-232 / MAX3232 guess | **Superseded** | Polarized caps near a SOIC-16 looked like a charge-pump footprint; **new marking proves CH340G instead**. Do not treat the 5-pin as RS-232 on that basis. |
 | 5-pin connector net (USB D± vs UART vs power) | **Unknown [U]** | CH340G has USB (`UD+`/`UD-`) and UART (`TXD`/`RXD`) pins — **which nets reach the 5-pin is untraced**. Still measure voltages before attaching anything. |
 | Axis `X_UART_*` / `Y_UART_*` (and Z/F on other edges) | **Confirmed visible [P]** | Do **not** assume driver IC type from pads alone |
-| CTP I²C + LCD bias rails | **Confirmed visible [P]** | See connector table |
+| CTP I²C + LCD bias rails | **Confirmed visible [P]** | See connector table. Owner display-assembly photos (flex / edge board) are summarized in [motors_and_display.md](motors_and_display.md) (**[Pᵗ]** this pass — originals not opened by tools). |
 | microSD slot + micro-USB | **Confirmed visible [P]** | Host vs device role of micro-USB **[U]** |
 | Yellow high-current power connector | **Confirmed Amass brand [P]**; series **[U]** | Embossed **Amass** (registered mark) on yellow **3-pin** right-angle PCB housing (`front_amass_power.jpg`). Exact series (MR30 / XT30-class / other) **not measured** — do not assume XT60 (XT60 is typically 2-pin). |
 | SSOP beside CH340G | **Confirmed visible [P]** | SSOP-28-class package next to CH340G + nearby ~12 MHz crystal (`front_usb_ch340_ssop_zone.jpg`) |
@@ -172,7 +173,7 @@ Front SWD header silk (by the chip), left → right: **`RST`, `GND`, `CLK`, `3V3
 
 | Chip | Readable marking **[P]** | Identity | Citation |
 |---|---|---|---|
-| SoC | Allwinner logo; lot `L2125BA…` | **Likely A33** (board name + PMIC match); die text “A33” not always sharp | Allwinner A33 product brief; board silk |
+| SoC | Allwinner logo; lot `L2125BA…` | **Allwinner A33** — **owner-confirmed 2026-11-06 [O]**; die text not always sharp on photos **[P/U]**; AXP223 + board silk agree **[P][D]** | Owner confirmation; board silk; Allwinner A33 / AXP223 ecosystem |
 | DRAM | `SEC … K4B4G16 46E BYK0` (+ lot line) | Samsung **K4B4G1646E-BYK0**, 4 Gb / **512 MB** ×16 DDR3L | Samsung K4B4G1646E-BYK0 datasheet family |
 | eMMC | `THGBMNG5` / `D1LBAIL` (+ `VC1995` / `2007KAE` / `CHINA`) | **THGBMNG5D1LBAIL**, **4 GB** eMMC 5.0 | [Kioxia eMMC table](https://www.mouser.com/specsheets/KIOXIA_Consumer_Grade_e_MMC.pdf) |
 | PMIC | **`AXP223`** (+ `KA185BC…`) | X-Powers AXP223 | [AXP223](https://dl.linux-sunxi.org/AXP/AXP223-en.pdf), [linux-sunxi](https://linux-sunxi.org/AXP223) |
@@ -430,6 +431,7 @@ Power removed unless a step explicitly says otherwise. No speculative part buys 
 - Amass connector exact series and mating part; PPTC orderables (050-class, UF300-class).
 - GL850G upstream/downstream port mapping vs micro-USB / CH340G / USB-C.
 - Video session clip (not analyzed) if reattached.
+- Motor/display assembly details: see [motors_and_display.md](motors_and_display.md) (partial `BJ42C29-01V…` label; bipolar-looking 4-lead + unknown 2-red-lead; flex partial text; edge board IC unread).
 
 ---
 

@@ -1,11 +1,11 @@
 # IVI hardware research
 
-Compiled 2026-10-31 from public sources; board photo pass extended **2026-11-05**. No internal board photos were found online; an owner has photographed the main board — see **[mainboard.md](mainboard.md)** (primary detail page). Labels: **[P]** owner photos, **[C]** public source, **[F]** firmware, **[D]** datasheet, **[G]** guess, **[U]** unknown.
+Compiled 2026-10-31 from public sources; board photo pass extended **2026-11-05**. No internal board photos were found online; an owner has photographed the main board — see **[mainboard.md](mainboard.md)** (primary detail page). Labels: **[P]** owner photos, **[O]** owner statement (dated), **[C]** public source, **[F]** firmware, **[D]** datasheet, **[G]** guess, **[U]** unknown.
 
 ## Architecture
 
 - **Boards [C][P]:** one **combined main board, `A33_407MB_200916`**, carrying:
-  - a **blue castellated SoM** with Allwinner (likely **A33**), **AXP223** PMIC, Samsung **K4B4G1646E**-class **512 MB** DDR3L, and Toshiba/Kioxia **THGBMNG5D1LBAIL 4 GB** eMMC **[P][D]**;
+  - a **blue castellated SoM** with Allwinner **A33** (**owner-confirmed 2026-11-06 [O]**; photo die text may still be hard to read), **AXP223** PMIC, Samsung **K4B4G1646E**-class **512 MB** DDR3L, and Toshiba/Kioxia **THGBMNG5D1LBAIL 4 GB** eMMC **[P][D]**;
   - carrier **STM32F407VET6** (512 KB flash, LQFP100) for Marlin motion **[P][D][F]**;
   - Ampak **AP6236** Wi-Fi/BT module fitted **[P][D]** (RF path/firmware enablement **[U]**).
   Separately: per-motor closed-loop driver boards and, per the forum's December 2020 update, a "power PCB and switch PCB". Full pad maps, connector caveats, **5-pin + CH340G**, wood-set **Amass** inlet / **GL850G** hub / unassigned black wires are in [mainboard.md](mainboard.md).
@@ -21,6 +21,8 @@ Compiled 2026-10-31 from public sources; board photo pass extended **2026-11-05*
 
 - `images/renders/`: 14 BackerKit product renders. See `SOURCES.md` there.
 - `images/board/`: owner photos of the main board (2026-10 and 2026-11). See `SOURCES_2026-11.md` for the newer set.
+- Motor body / display flex / glass-edge board: [motors_and_display.md](motors_and_display.md) (2026-11-05; partly **parent-transcribed** while attachments were unavailable to tools).
+- Extruder (remote dual-drive geared Bowden layout, hob grip notes): [extruder.md](extruder.md).
 - `images/archive/`: Wayback Machine renders.
 
 All images are IVI / owner material, included for preservation. Chip lot codes and `A33_407MB_200916` are **not** printer serials.
@@ -54,6 +56,11 @@ Photos answered the big architecture questions. Still open (detail in [mainboard
 - Evening JPEGs: front 3-pin silk RX/TX/GND; rear DEBUGUART pad order GND→RX→TX; external flat antenna + coax at AP6236/Kapton (visual only); Amass series still unknown
 
 **Still open**
+
+- Motor label full string after partial `BJ42C29-01V…`; upper two-red-lead connector role ([motors_and_display.md](motors_and_display.md))
+- Display flex complete marking; LCD vs CTP assignment of amber flex / white ribbon / edge board
+- Extruder: tooth counts/ratio; hob aggression vs pinch; PLA groove severity ([extruder.md](extruder.md))
+
 
 - STM32 pin map for driver UARTs, bed/`FAN24V` switching (`supx_decompile_report.md` §8)
 - Whether bed heat switches on this board or a power PCB

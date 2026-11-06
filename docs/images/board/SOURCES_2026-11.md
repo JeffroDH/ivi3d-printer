@@ -60,3 +60,13 @@ Held-board front/rear/edge/antenna JPEGs. Hash names under agent `attachments/` 
 | rear_overview_2026-11-evening.jpg | Rear overview | Evening |
 
 **Not analyzed:** session video; DNG raws (paths not materialized for tools).
+
+
+## Motor / display / edge-board photos (2026-11-05, later)
+
+Claimed attachment hashes (`e8ce01d0…` motor, `d39f4fa4…` display back, `8a93a3a7…` flex macro, `db2820e3…` small-board macro) were **not present** for Shell/Read when documented. No images were copied into this folder for that set. Narrative evidence is in [motors_and_display.md](../../motors_and_display.md) tagged **[Pᵗ]** (parent-transcribed). Re-archive here when files are available (strip EXIF/GPS; no printer serials).
+
+
+## IC close-up set (2026-11-06)
+
+Owner stated close-ups of most ICs were attached (nine JPEGs). At documentation/push time those attachment hashes were **not readable** by agent tools and were not newly present in the cursor store. No additional crops were committed from that drop. A33 identity for this push is from the **owner statement (2026-11-06)**, not from newly archived die photos.
