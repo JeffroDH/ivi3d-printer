@@ -12,7 +12,7 @@ machines, so this repo collects what's needed to keep them running and to drive 
 |---|---|
 | Kinematics | **Delta** — `M665 L357.50 R160.31 H233.22` (rod, radius, height). Homes to MAX endstops. |
 | Motion controller | STM32F407VET6, **Marlin "V1.3.2-alpha"** (vendor build of Marlin 2.0.x, Mar 2021), 64 KB bootloader + app at `0x08010000` |
-| Main board | One combined board, `A33_407MB_200916`: castellated **Allwinner A33** SoM (**owner-confirmed 2026-11-06**; AXP223, Samsung DDR3L contingent decode, 4 GB eMMC) for Linux/Qt UI + HTTP, and **STM32F407VET6** for Marlin. AP6236 Wi-Fi/BT + CH340C fitted. SWD + rear `DEBUGUART_*` pads located. See [docs/mainboard.md](docs/mainboard.md) |
+| Main board | One combined board, `A33_407MB_200916`: castellated **Allwinner A33** SoM (**owner-confirmed 2026-11-06**; AXP223, Samsung DDR3L contingent decode, 4 GB eMMC) for Linux/Qt UI + HTTP, **STM32F407VET6** for Marlin, and rear **GD32E230F4** (likely second SWD target). AP6236 Wi-Fi/BT + CH340C fitted. Dual SWD headers; front 3-pin ↔ rear `DEBUGUART_*` continuous (owner). See [docs/mainboard.md](docs/mainboard.md) |
 | Motors | Smart **closed-loop** drivers (the closed loop lives in the drivers; the STM32 still sends STEP/DIR and reads faults over UART) |
 | Tool heads | 3D print (0.15–0.4 mm nozzles; beta shipped 0.3 mm), laser, CNC (BLDC spindle). Each head has its own MCU on **CAN**; hotend heating/sensing, head fan, laser power and spindle are controlled through it |
 | Other sensors | Door switch, filament runout, temp/humidity, load cell, probe/auto-level, thermal runaway protection |
@@ -27,8 +27,8 @@ Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/mar
 
 - Four closed-loop motor drivers (X, Y, Z, F = filament feeder), each wired with step/dir/enable **plus its own UART**, powered from `MTX/MTY/MTZ/MTF_24V`.
 - Tool head on **CAN** (`CAN+`/`CAN-`, 3-wire cable) with its own `HEADVCC24V` supply; main input `VCCIN24V`; separate `BEDVCC24V` and `FAN24V`.
-- **STM32 SWD pads** (`RST#`, `DIO`, `CLK`, `3V3`, `GND`) for an ST-Link backup or reflash, plus a second SWD set beside a small unidentified MCU.
-- **Likely Linux console:** rear `DEBUGUART_RX`/`DEBUGUART_TX` pads (Nov 2026 silk; **measure voltage before attaching a USB-TTL adapter**). Front bottom-left 5-pin is next to a **CH340C** (USB-UART; corrected 2026-11-06) - trace before use. See [docs/mainboard.md](docs/mainboard.md).
+- **Two SWD headers:** central → **STM32F407** (owner); lower near SD (1 DIO / 2 3V3 / 3 CLK / 4 GND / 5 RST) ↔ rear pads by **GD32E230F4** (owner continuity; chip-pin nets unmeasured). ST-Link inspect-only — see [docs/tools.md](docs/tools.md).
+- **DEBUGUART / front 3-pin:** same nets by owner continuity (facing L→R TX, RX, GND). **Measure voltage** before USB-TTL. Front bottom-left 5-pin is the separate **CH340C** path — trace before use. See [docs/mainboard.md](docs/mainboard.md).
 - `INP`/`INN` differential input with its own analog supply, probably the load cell used for probing (firmware has `M2049` load cell), plus SD/eMMC lines, USB host pads, `BUTTON` and `LED_CTL`.
 
 **Tools for SWD and console access:** see [docs/tools.md](docs/tools.md).
@@ -143,7 +143,7 @@ bootloader) with an ST-Link on the SWD pads.
 - ✅ Discovery, serial link, and update format documented. Wi-Fi API tested: upload/execute_code work; print control is 404 on current firmware (USB serial works).
 - ✅ **Orca Slicer / Anycubic Next bridge (v0.1, [`bridge/`](bridge/README.md), untested on hardware):** a small local service that looks like an OctoPrint server to Orca and streams jobs over **USB serial** (`M2411 S2` + line-by-line G-code); Wi-Fi can only upload until firmware enables print control. Orca would use a delta profile built from the M665 values above. Snapmaker Luban can't be used directly: it only connects to Snapmaker machines.
 - 🔍 **Modern Marlin:** feasible but a big job. The delta motion, pins and endstops port directly; the smart-driver UART link, CAN tool-head link (including hotend temperature control via the head) and touchscreen compatibility must be written. Estimate **~3–5 weeks for FDM-only, ~2–3 months** for full laser/CNC/UI parity. Open items need hardware: mapping driver UART pads to STM32 pins (multimeter), bed/`FAN24V` switching, full CAN frame meanings (CANable capture), bootloader behaviour (SWD backup).
-- ❓ The HTTP server binary on the Linux side hasn't been recovered yet. Next step: measure `DEBUGUART_*` levels, listen with adapter RX+GND only, then decide on a matching USB-serial hookup (see [docs/mainboard.md](docs/mainboard.md)).
+- ❓ The HTTP server binary on the Linux side hasn't been recovered yet. Next step: measure `DEBUGUART_*` / front 3-pin levels (continuity already confirmed), listen with adapter RX+GND only, then decide on a matching USB-serial hookup (see [docs/mainboard.md](docs/mainboard.md)).
 
 ## Contributing
 

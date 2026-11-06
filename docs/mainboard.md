@@ -1,6 +1,6 @@
 # IVI main board: `A33_407MB_200916`
 
-Photos: owner set from **2026-10-31** (EXIF/GPS stripped; `images/board/mainboard_*.jpg`); a **2026-11-05** set with the board **exposed for inspection** in the chassis (standoffs visible; removal not claimed) (`images/board/front_*.jpg`, `rear_board_marking.jpg`); and a later **2026-11-05** still set with the board **removed onto a wood surface** for photography (`images/board/front_removed_wood_overview.jpg`, `front_amass_power.jpg`, `front_usb_ch340_ssop_zone.jpg`, `front_rf_kapton_wires.jpg`, …). A video clip from that session was **not analyzed** (attachment unavailable to tools). A further **2026-11-05 evening** JPEG set (front/rear/edges/antenna, held off wood) is under `images/board/front_3pin_rx_tx_gnd.jpg`, `rear_debuguart_gnd_rx_tx.jpg`, `side_flat_external_antenna.jpg`, `front_ap6236_kapton_antenna_feed.jpg`, etc. Raw DNGs from the same day were **not available** to tools. See `images/board/SOURCES_2026-11.md`.
+Photos: owner set from **2026-10-31** (EXIF/GPS stripped; `images/board/mainboard_*.jpg`); a **2026-11-05** set with the board **exposed for inspection** in the chassis (standoffs visible; removal not claimed) (`images/board/front_*.jpg`, `rear_board_marking.jpg`); and a later **2026-11-05** still set with the board **removed onto a wood surface** for photography (`images/board/front_removed_wood_overview.jpg`, `front_amass_power.jpg`, `front_usb_ch340_ssop_zone.jpg`, `front_rf_kapton_wires.jpg`, …). A video clip from that session was **not analyzed** (attachment unavailable to tools). A further **2026-11-05 evening** JPEG set (front/rear/edges/antenna, held off wood) is under `images/board/front_3pin_rx_tx_gnd.jpg`, `rear_debuguart_gnd_rx_tx.jpg`, `side_flat_external_antenna.jpg`, `front_ap6236_kapton_antenna_feed.jpg`, etc. Raw DNGs from the same day were **not available** to tools. A **2026-11-06** rear-debug closeup set adds `rear_chip_close.jpg` / Read-verified `gd32e230f4_chip_close_crop.jpg` (GD32E230F4) and a clearer unannotated `microusb_clear.jpg`. See `images/board/SOURCES_2026-11.md`.
 
 Evidence labels used throughout:
 
@@ -53,6 +53,14 @@ Evidence labels used throughout:
 |---|---|
 | ![3pin](images/board/front_3pin_rx_tx_gnd.jpg) | ![DEBUGUART order](images/board/rear_debuguart_gnd_rx_tx.jpg) |
 
+| Rear GD32E230F4 chip close (EXIF stripped) | GD32 chip crop (Read-verified upright) |
+|---|---|
+| ![rear chip](images/board/rear_chip_close.jpg) | ![GD32 crop](images/board/gd32e230f4_chip_close_crop.jpg) |
+
+| micro-USB clearer context (no pad annotations) | |
+|---|---|
+| ![microUSB clear](images/board/microusb_clear.jpg) | |
+
 | AP6236 + Kapton coax feed | Side: flat external antenna |
 |---|---|
 | ![RF feed](images/board/front_ap6236_kapton_antenna_feed.jpg) | ![antenna](images/board/side_flat_external_antenna.jpg) |
@@ -100,17 +108,18 @@ Evidence labels used throughout:
 | Shielded module `AP6236` / lot / `1843` | **Confirmed visible [P]** / **[Pᵗ]** | Prior wood macros read lot **`B112A005`**. Nov 2026-11-06 IC close-up transcription reads **`B112A015`** (parent-visible) — treat **`B112A005` as possible prior misread**; prefer **`B112A015`** until a archived crop settles it. Module function still AP6236 **[D]**. |
 | AP6236 function | **Datasheet-supported [D]** | Ampak 802.11b/g/n + Bluetooth SIP; Wi-Fi SDIO, BT UART — [AP6236 spec](https://www.boardcon.com/download/AP6236_WIFI_Module.pdf). **Fitted ≠ antenna wired or firmware enabled [U]** |
 | 12.000 MHz crystal near RF module | **Confirmed visible [P]** | |
-| Front SWD header silk `RST`, `GND`, `CLK`, `3V3`, `DIO` | **Confirmed visible [P]** | Order left→right on front header by STM32 |
-| Rear / pad SWD clusters `RST#`, `DIO`, `CLK`, `3V3`, `GND` | **Confirmed visible [P]** | At least one near STM32; a second set exists near bottom-right QFN area (see older table) |
-| Rear debug UART pads | **Confirmed visible [P] (2026-11 primary)** | Silk **`DEBUGUART_RX`**, **`DEBUGUART_TX`**, plus **`GND`**. Evening rear crop (`rear_debuguart_gnd_rx_tx.jpg`) shows pad reading order **along that strip: `GND` → `DEBUGUART_RX` → `DEBUGUART_TX`**. Older 2026-10 `UGUART_*` transcription is **not re-proven** and must not override. Voltage / which CPU **[U]**. Continuity to front 3-pin **[U]**. |
-| Front 3-pin by micro-USB / microSD | **Confirmed silk [P]** | Evening macro: silk reads **`RX`**, **`TX`**, **`GND`** next to the white 3-pin (`front_3pin_rx_tx_gnd.jpg`). Labels run **along the board edge / vertical board orientation** — that is **silk reading order, not a proven connector pin-1 numbering**. Levels **unmeasured**; continuity to rear `DEBUGUART_*` **unknown [U]**. |
+| Front **central** SWD-style 5-pin (by STM32) | **Confirmed [P]**; **target STM32 [O]** | Silk `RST`/`GND`/`CLK`/`3V3`/`DIO` **[P]**. Owner traces this header to the **STM32F407** **[O]**. Distinct from the lower 5-pin near SD. |
+| Front **lower** SWD-style 5-pin (near SD / bottom edge) | **Confirmed [P]**; **pin map [O]** | **Two distinct** SWD-style 5-pin headers on this board. Lower header **top→bottom: 1 DIO, 2 3V3, 3 CLK, 4 GND, 5 RST [O]**. Earlier “pin 2 = GND” reading is **superseded**. Owner continuity: lower header ↔ rear bottom-right `DIO`/`CLK`/`RST#`/`3V3`/`GND` pads **[O]**. |
+| Rear SWD-like pads near bottom-right chip | **Confirmed [P]**; **continuity to lower 5-pin [O]** | Pads `DIO`/`CLK`/`RST#`/`3V3`/`GND` **[P]**. Continuous with front lower 5-pin **[O]**. Nearby MCU marking **E230F4** = GigaDevice **GD32E230F4** **[P]** (see §4.5). **Header↔chip pin continuity not measured [U]** — GD32 is the **likely** lower-header target **[G]** only. |
+| Rear debug UART pads | **Confirmed visible [P]**; **continuity to front 3-pin [O] 2026-11-06** | Silk **`DEBUGUART_RX`**, **`DEBUGUART_TX`**, plus **`GND`**. Evening rear crop (`rear_debuguart_gnd_rx_tx.jpg`) shows pad reading order **along that strip: `GND` → `DEBUGUART_RX` → `DEBUGUART_TX`**. Older 2026-10 `UGUART_*` transcription is **not re-proven** and must not override. **Owner continuity** links these pads to the front 3-pin by micro-USB **[O]**. Which CPU owns the UART and idle voltage remain **unmeasured [U]**. |
+| Front 3-pin by micro-USB / microSD | **Confirmed silk [P]**; **nets [O]** | Evening macro silk **`RX`**, **`TX`**, **`GND`** (`front_3pin_rx_tx_gnd.jpg`). **Owner pin map facing the connector, left→right: TX, RX, GND [O]** (supersedes treating silk-along-edge alone as pin-1 order). Continuity to rear `DEBUGUART_*` **confirmed by owner [O]**. Levels / which CPU **[U]**. |
 | Front bottom-left **5-pin** + **SOIC-16** | **Confirmed visible [P]** | Distinct from STM32 SWD and from the 3-pin by USB; IC is **CH340C** per 2026-11-06 reupload **[Pᵖ]** |
 | SOIC-16 = **WCH CH340C** (was documented as G) | **First-hand [P]** 2026-11-06 | Recovered reupload `503fbbb7…` (3024×4032): top mark **`CH340C`**, lot **`205695A11`**, WCH logo (`front_ch340c_marking.jpg`). Earlier wood/evening “CH340G” readings **superseded**. Datasheet: **C = built-in oscillator** (XI/XO NC); **G needs external 12 MHz** ([CH340DS1](https://www.wch-ic.com/downloads/CH340DS1_PDF.html)). A **`12.000 MHZ`** can sits between CH340C and GL850G — **proximity is not net ownership**; do not treat it as proof of a CH340G or as proven GL850G clock without tracing. Executor recovered **1/16** reupload files this pass. |
 | Earlier RS-232 / MAX3232 guess | **Superseded** | Polarized caps near a SOIC-16 looked like a charge-pump footprint; marking is CH340-family (**CH340C**). Do not treat the 5-pin as RS-232 on that basis. |
 | 5-pin connector net (USB D± vs UART vs power) | **Unknown [U]** | CH340C has USB (`UD+`/`UD-`) and UART (`TXD`/`RXD`) pins — **which nets reach the 5-pin is untraced**. Still measure voltages before attaching anything. |
 | Axis `X_UART_*` / `Y_UART_*` (and Z/F on other edges) | **Confirmed visible [P]** | Do **not** assume driver IC type from pads alone |
 | CTP I²C + LCD bias rails | **Confirmed visible [P]** | See connector table. Owner display-assembly photos (flex / edge board) are summarized in [motors_and_display.md](motors_and_display.md) (**[Pᵗ]** this pass — originals not opened by tools). |
-| microSD slot + micro-USB | **Confirmed visible [P]** | Host vs device role of micro-USB **[U]** |
+| microSD slot + micro-USB | **Confirmed visible [P]**; USB enum **negative so far [O]** | Host vs device role of micro-USB **[U]**. Owner Mac scans with board powered and **new cables** saw **no USB endpoint** **[O]** — that does **not** prove host-only vs cable/fault; leave role open. Photo routing of D± through series parts to vias is **retracted** (earlier annotation offsets were wrong). Context-only clearer photo: `microusb_clear.jpg`. Do **not** use older annotated pad overlays. |
 | Yellow high-current power connector | **Confirmed Amass brand [P]**; series **[U]** | Embossed **Amass** (registered mark) on yellow **3-pin** right-angle PCB housing (`front_amass_power.jpg`). Exact series (MR30 / XT30-class / other) **not measured** — do not assume XT60 (XT60 is typically 2-pin). |
 | SSOP beside CH340C | **Confirmed visible [P]** | SSOP-28-class package next to CH340C + nearby ~12 MHz crystal (`front_usb_ch340_ssop_zone.jpg`) |
 | SSOP top mark = **GL850G** | **Confirmed visible [P]** (wood-set macro) | Top line reads **GL850G** on the later wood stills; earlier chassis macros did not resolve it. Genesys Logic USB 2.0 hub — [GL850G datasheet (Mouser/Olimex mirror)](https://www.mouser.com/datasheet/2/306/Olimex_GL850G-3198672.pdf), [product page](https://www.genesyslogic.com.tw/en/product-detail/USB2_Hub/GL850G) **[D]**. Downstream port count / which USB sockets it feeds **[U]** until traced. |
@@ -125,7 +134,7 @@ Evidence labels used throughout:
 | Power-area SOP-8 | **Partial [P]** | 2026-11-06 converter macro crop reads **`LP6221`**-class / `LPS` style mark on one pass (`front_power_converter_2026-11-06.jpg`) — **verify**; earlier TPS guess remains unconfirmed. Role: regulator/converter **[G/U]** until datasheet match. |
 | Large 3-lead tab `1821` / `GFE` | **Marking partial [Pᵗ]**; ID **[U]** | Ambiguous; **do not** invent a part number from those glyphs alone (could be inductor/code). |
 | Regulator mark `7133-?` | **Partial [P]/[Pᵗ]**; class **[G]** | Consistent with Holtek/clone **71xx** 3.3 V LDO family (e.g. HT7133-1) **[D]** if mark is `7133`/`7133-1`; full suffix **verify**. Not every board 7133 mark is proven identical. |
-| Bottom QFN by rear `DIO`/`CLK` | **Present [P]**; mark **indistinct [U]** | Second SWD-like port target still unknown. |
+| Rear bottom-right MCU mark **E230F4** | **Confirmed [P]** 2026-11-06 | GigaDevice **GD32E230F4** (family: Cortex-M23, **16 KB** flash / **4 KB** SRAM for F4 density) **[P][D]**. Exact orderable suffix (e.g. F4V6 LGA20 vs F4P6 TSSOP20) **uncertain from photo alone [U]**. Embed: `rear_chip_close.jpg`, Read-verified crop `gd32e230f4_chip_close_crop.jpg`. Prior worker crop that showed only passives is **rejected**. Likely lower-SWD target **[G]**; chip↔header nets **not continuity-proven [U]**. |
 | IC close-up JPEG set (2026-11-06, nine files) | **Not tool-accessible** | Claimed hashes missing for Shell/Read; narrative below uses **[Pᵗ]**. |
 | Video / DNG from session | **Not analyzed** | Attachment/tools unavailable for video and DNG; no content inferred. |
 | Thermistor short as root cause of cold head reading ~248/250 °C | **User report only** | See §8 — do not treat as proven hardware failure from photos |
@@ -146,7 +155,7 @@ Evidence labels used throughout:
 **What is still a hypothesis [G]**
 
 - Exact on-board wiring between A33 UART and STM32 USART (which pins, level shifting, who is DCE).
-- Whether the front 3-pin, rear `DEBUGUART_*`, and/or the bottom-left 5-pin / CH340C share nets.
+- Whether the bottom-left **CH340C 5-pin** shares nets with the front 3-pin / rear `DEBUGUART_*` (those two UART paths **are** continuous per owner **[O]**; CH340C path still **[U]**).
 - Which CPU owns the AP6236 SDIO/UART lines (almost certainly the A33 on typical A33 tablets, but not traced here).
 
 **Safe exploration (read-only first)**
@@ -155,7 +164,7 @@ Evidence labels used throughout:
 |---|---|---|
 | STM32 **SWD** (`RST`/`GND`/`CLK`/`3V3`/`DIO`) | Inspect connection / RDP **status** with ST-Link | **Never** unlock or disable readout protection (can mass-erase). Do **not** claim a full flash dump is possible until RDP level is known. Never force 5 V onto `3V3`. |
 | Rear **`DEBUGUART_RX`/`DEBUGUART_TX`** (Nov 2026 silk) | Candidate **debug / Linux console** | Measure idle/active levels first. Do **not** assume 3.3 V TTL. |
-| Front **3-pin** by USB | Possible convenient breakout | Confirm continuity + voltage before use |
+| Front **3-pin** by USB | Convenient breakout of rear `DEBUGUART_*` **[O]** | Continuity confirmed **[O]**; still **measure voltage** before attaching a USB-TTL adapter. CPU owner **[U]**. |
 | Front **5-pin** by **CH340C** | Unknown — may be USB or UART side of the bridge **[U]** | Trace to CH340C pins before use. CH340C ≠ automatic “TTL-safe header.” Measure first. |
 | USB-C CDC | Marlin G-code | Already used by the bridge; not a Linux shell |
 
@@ -193,6 +202,21 @@ Shield top mark **`AP6236`** / lot / **`1843`** **[P]**. Lot line: wood macros p
 
 Caveats: a soldered module does not prove the antenna path is intact, that Linux has drivers/firmware loaded, or that BT is used.
 
+
+### 4.5 GigaDevice GD32E230F4 (rear bottom-right MCU) — new 2026-11-06
+
+| Field | Value | Tag |
+|---|---|---|
+| Top marking | GigaDevice **G** logo; **`E230F4`**; lot **`JJ2014`** | **[P]** (`rear_chip_close.jpg`; Read-verified crop `gd32e230f4_chip_close_crop.jpg`) |
+| Identity | **GD32E230F4** (F4 density) | **[P][D]** |
+| Core / memory (family) | ARM **Cortex-M23**; F4 = **16 KB** Flash, **4 KB** SRAM; up to 72 MHz | **[D]** |
+| Package / orderable | Photo looks LGA20-class; exact suffix (e.g. **F4V6** LGA20 vs **F4P6** TSSOP20) **uncertain [U]** | **[U]** |
+| Citation | [GD32E230xx Datasheet Rev 3.1 (GigaDevice)](https://download.gigadevice.com/Datasheet/GD32E230xx%20Datasheet_Rev3.1.pdf); [download index](https://www.gd32mcu.com/en/download?kw=GD32E230) | |
+
+**Association with lower SWD:** rear pads beside this chip match the front **lower** 5-pin by owner continuity **[O]**. Treat GD32 as the **likely** program target for that header **[G]** until someone continuity-tests chip pins ↔ header (not claimed here).
+
+**Probe caution:** ST-Link V2-style clones can talk SWD electrically, but **software / target-database / readout-protection** behaviour for GD32 is **not** guaranteed to match STM32 tooling. See [tools.md](tools.md). **No unlock / mass-erase** to dump firmware.
+
 ### 4.4 Other carrier parts (partial)
 
 | Part | Observation | Tag |
@@ -217,13 +241,16 @@ Caveats: a soldered module does not prove the antenna path is intact, that Linux
 | Item | Location | Silk / notes | Status |
 |---|---|---|---|
 | microSD push-push cage | Front edge | Boot / storage candidate for A33; also rear SDMMC test pads | **[P]**; which device is primary boot **[U]** |
-| 3-pin white header | Between microSD and micro-USB | Silk **`RX`**, **`TX`**, **`GND`** (board-edge reading order ≠ proven pin map) | Silk **[P]**; nets/levels/continuity to rear DEBUGUART **[U]** |
+| 3-pin white header | Between microSD and micro-USB | Silk **`RX`/`TX`/`GND` [P]**; owner facing L→R **TX, RX, GND [O]** | Continuity to rear `DEBUGUART_*` **[O]**; levels/CPU **[U]** |
 | micro-USB | Front edge | Data vs charge / host vs device **[U]** (rear also has `USBH_D±` silk for a **host** path) |
 | 5-pin white header | Front **bottom-left**, near mounting hole | Traces into adjacent **CH340C** | **[P]**; net roles **[U]** until traced/measured |
-| SWD 5-pin header | Beside STM32 | `RST GND CLK 3V3 DIO` | **[P]** |
+| **Central** SWD 5-pin | Beside STM32 | Silk `RST GND CLK 3V3 DIO` **[P]**; traces to STM32 **[O]** | **[P][O]** |
+| **Lower** SWD 5-pin | Near SD / bottom edge | Top→bottom **1 DIO, 2 3V3, 3 CLK, 4 GND, 5 RST [O]** (pin2≠GND) | Continuous to rear SWD pads **[O]**; likely GD32 target **[G]** (chip nets unmeasured) |
 | LCD FFC / CTP FFC | Edge ZIF | Matches rear CTP/LCD rail pads | **[P]** |
 | Motor / sensor white JST-style | Multiple along edges | Bundles present | Mating family/pitch **[U]** until measured |
 | Yellow high-current inlet | Near electrolytics / top-right when removed on wood | Embossed Amass brand, **3** thick pins | Brand **[P]**; series/pitch **[U]** |
+| Unused **2-pin** fan headers (×2) | Below yellow main input | Owner: pin1 **`FAN24V`**, pin2 **`GND` [O]** | Present / unused on this unit **[O]**; switched vs always-on **[U]** |
+| Adjacent **4-pin** (head power/CAN) | Next to the fan headers | Owner continuity: **1 HEADVCC24V, 2 CAN+, 3 CAN−, 4 GND [O]** | Agrees with rear silk rails **[P][O][F]** |
 
 ### 5.2 Rear test pads (from 2026-10 set; still valid)
 
@@ -249,7 +276,7 @@ Caveats: a soldered module does not prove the antenna path is intact, that Linux
 | `VBUS_5V` / `V3US_5V`, `USBH_D+`, `USBH_D-` | Right edge | USB **host** differential pair **[P]** (use **[G]**) |
 | `CMD_USB`, `GND_USB` | Right edge | Likely USB device-side / command path **[G]** |
 | `BUTTON`, `LED_CTL` | Right edge | Front power/user button and LED **[P]** (use **[G]**) |
-| Second `DIO`, `CLK`, `RST#`, `3V3`, `GND` | Bottom right, by small QFN | Second SWD-like port **[P]**; what it programs **[U]** |
+| Second `DIO`, `CLK`, `RST#`, `3V3`, `GND` | Bottom right, by **GD32E230F4** | Continuous with front **lower** SWD 5-pin **[O]**; chip-net continuity **unmeasured [U]**; likely GD32 SWD **[G]** |
 | `DEBUGUART_RX`, `DEBUGUART_TX`, `GND` | Lower center (Nov 2026 ruler photo) | Debug UART pads **[P]** - full visible strings on primary photo. Older docs transcribed nearby pads as `UGUART_*`; treat that as an **unverified older reading**, not current primary evidence. Role/voltage **[U]** until measured. |
 | `D2`, `D3`, `CMD`, `CLK`, `D0`, `D1`, `CD#` | Lower center | SD/MMC test pads **[P]** |
 | `CTP_SDA/SCL/RST/INT`, `CTPVCC_3V3` | Top | Capacitive touch I²C **[P]** |
@@ -336,7 +363,7 @@ Ten additional JPEGs (front/rear/edges/antenna). Shell could not always list has
 - White 3-pin between microSD and micro-USB.
 - Silk clearly **`RX`**, **`TX`**, **`GND`** (`front_3pin_rx_tx_gnd.jpg`).
 - **Caveat:** those words are the **silkscreen reading order along the board**, not a measured mapping of connector cavity pin 1→N. Do not probe by assumed pin numbers.
-- Idle levels and continuity to rear `DEBUGUART_*` remain **unmeasured [U]**.
+- Continuity to rear `DEBUGUART_*` **confirmed by owner [O] 2026-11-06**. Idle levels / CPU owner remain **unmeasured [U]**.
 
 ### Rear DEBUGUART pad order [P]
 
@@ -358,9 +385,10 @@ Ten additional JPEGs (front/rear/edges/antenna). Shell could not always list has
 
 ### Still open after this set
 
-- 3-pin ↔ DEBUGUART continuity; UART voltage.
+- UART voltage / which CPU owns DEBUGUART (continuity 3-pin↔DEBUGUART now **[O]**).
 - Amass exact series; rear SOIC-8 identity.
 - Whether Kapton covers only the coax joint or also an onboard antenna feature.
+- GD32 ↔ lower-SWD **chip-pin** continuity (header↔rear pads already **[O]**).
 
 ---
 
@@ -368,7 +396,7 @@ Ten additional JPEGs (front/rear/edges/antenna). Shell could not always list has
 
 Nine owner IC macros were claimed after the A33 push; a **16-file reupload** followed (extruder + motor + IC macros). All **16/16** reupload originals are in `/workspace/ivi-board-recovered/nov6-reupload/originals/` (3024×4032). First-hand **[P]** crops embedded under `images/board/` and `images/extruder/`.
 
-**2026-11-06 reupload (16 JPGs):** parent Read succeeded on at least the first extruder path; **this executor recovered 0/16 binaries** (Shell/Read/store). Chip-ID corrections that depend on those macros (notably **CH340C**) are tagged **[Pᵖ]**. No new sanitized crops were embedded until files materialize for this agent. Display flex/edge-board photos from earlier passes remain **[Pᵗ]** / unverified in this reupload set.
+**2026-11-06 reupload (16 JPGs):** originals under `/workspace/ivi-board-recovered/nov6-reupload/originals/` (where recovered). CH340C / A33 / AP6236 / NP14P04 corrections are first-hand **[P]** where embedded. Display flex/edge-board photos from earlier passes remain **[Pᵗ]** where noted. Separate rear-debug closeup set added GD32E230F4 evidence (see §4.5).
 
 | Marking (as read) | Location / context | Identification | Circuit role |
 |---|---|---|---|
@@ -383,7 +411,7 @@ Nine owner IC macros were claimed after the A33 push; a **16-file reupload** fol
 | 3-lead tab **`1821` / `GFE`** | Power area | **Not** a finalized part ID **[U]** | Unknown |
 | Inductor **`4R7`**; electrolytics **`100` `35V`** | Power | Values **[Pᵗ]/[P]** | Passives |
 | **`7133-?`** | Near SWD / prior SOIC-8 area | **71xx** 3.3 V LDO family candidate (e.g. HT7133-1) **[D]** if mark confirmed | 3.3 V LDO **[G]** |
-| Bottom QFN by rear `DIO`/`CLK` | Carrier rear | Mark indistinct **[U]** | Second SWD target **[U]** |
+| **`E230F4`** / `JJ2014` (GigaDevice G) | Carrier rear by SWD pads | **GD32E230F4** **[P][D]** | Likely lower-SWD MCU **[G]**; chip nets **[U]** |
 
 **Non-claims:** no pinouts, Rdson, current ratings, or which FET switches `BEDVCC24V` from photos alone.
 
@@ -424,7 +452,7 @@ Possible explanations (none proven from photos):
 Power removed unless a step explicitly says otherwise. No speculative part buys until mating series and pitch are measured.
 
 1. **Calipers:** pitch of front 3-pin, front 5-pin, SWD header, yellow power inlet, and rear gold pad clusters.
-2. **Continuity:** front 3-pin <-> rear `DEBUGUART_RX`/`DEBUGUART_TX`/`GND` (and any older-labeled pads in the same cluster).
+2. **Continuity:** front 3-pin <-> rear `DEBUGUART_*` — **done by owner [O]** (facing L→R TX,RX,GND). Still measure **voltage** before adapters.
 3. **Continuity:** front 5-pin <-> **CH340C** pins (`UD+/-`, `TXD`/`RXD`, `VCC`/`GND`, ...) - one net at a time.
 4. **Voltage (powered, careful):** idle levels on front 3-pin, rear debug UART, and 5-pin **before** attaching adapters or USB hosts.
 5. **Continuity:** SWD header <-> STM32 pins (LQFP100 pinout in [DS8626](https://www.st.com/resource/en/datasheet/stm32f407ve.pdf)), with steady fine tips - **do not drag** a probe across adjacent MCU pins.
@@ -434,7 +462,7 @@ Power removed unless a step explicitly says otherwise. No speculative part buys 
 9. **AP6236:** confirm antenna feed continuity; check Linux for wireless interface once console exists.
 10. **Thermistor / head connector:** resistance and wiring after the cold-hotend report.
 11. **CHA/CHB**, `INP`/`INN`, dual `LIMIT*` pads — still open.
-12. Identify SOIC-8 near SWD and the QFN by the second SWD port (better macro photos or continuity).
+12. Identify SOIC-8 near SWD. Rear MCU by second SWD is **GD32E230F4 [P]**; still need chip-pin ↔ header continuity if asserting nets.
 13. **GL850G:** continuity from hub upstream D± to micro-USB / other USB paths; note which downstream port (if any) feeds the CH340C.
 14. **Amass inlet:** caliper series/pitch; continuity to `VCCIN24V` / fuse / PPTC path.
 15. **Black wires:** continuity ends; check vs AP6236 antenna pad / U.FL — do not assume function.
@@ -453,12 +481,13 @@ Power removed unless a step explicitly says otherwise. No speculative part buys 
 ## 11. Open questions
 
 - Exact A33 ↔ STM32 interconnect and protocol beyond “serial G-code” **[F]** at the software layer.
-- Front 3-pin (now silk-confirmed RX/TX/GND) vs rear `DEBUGUART_*` vs 5-pin / CH340C net relationships; measure levels.
+- Front 3-pin ↔ rear `DEBUGUART_*` continuous **[O]**; still measure levels and which CPU; CH340C 5-pin vs that UART path **[U]**.
 - Which side of the CH340C the 5-pin exposes; which CPU owns the UART.
-- micro-USB role; whether microSD or eMMC is the boot device.
-- STM32 RDP level.
+- micro-USB role (enum negative so far **[O]** — inconclusive); whether microSD or eMMC is the boot device.
+- STM32 RDP level; GD32 readout-protection / OpenOCD `gd32e23x` behaviour.
 - `CHA/CHB`, `INP`/`INN`, dual limit labels.
-- Second SWD target identity.
+- Confirm lower-SWD ↔ GD32 **chip-pin** continuity (pads already continuous with lower header **[O]**).
+- Fan 2-pin: switched vs always-on `FAN24V`.
 - Confirm AP6236 antenna + driver stack; identity of black loop wires / Kapton near RF.
 - Amass connector exact series and mating part; PPTC orderables (050-class, UF300-class).
 - GL850G upstream/downstream port mapping vs micro-USB / CH340C / USB-C.
@@ -477,4 +506,5 @@ Power removed unless a step explicitly says otherwise. No speculative part buys 
 - Samsung DRAM: photo mark `K4B4G16` / `46E BYKO` (O/0 ambiguous). Capacity contingent on decoding as [K4B4G1646E-BYK0](https://file.icallin.com/resources/data-sheet/DS_K4B4G1646E_BY_M_Rev1_11-0.pdf) (mirror PDF; not an accessed `semiconductor.samsung.com` primary for that exact suffix). Related official listing example: [K4B4G1646E-BCNB](https://semiconductor.samsung.com/us/dram/ddr/ddr3/k4b4g1646e-bcnb/).
 - WCH CH340 family (**CH340C** on this board per 2026-11-06 reupload; not G): [CH340DS1 download page](https://www.wch-ic.com/downloads/CH340DS1_PDF.html)
 - Genesys Logic GL850G USB 2.0 hub: [datasheet (Mouser/Olimex mirror)](https://www.mouser.com/datasheet/2/306/Olimex_GL850G-3198672.pdf), [product page](https://www.genesyslogic.com.tw/en/product-detail/USB2_Hub/GL850G), [Radxa-hosted PDF](https://dl.radxa.com/rock/docs/hw/ds/GL850G.pdf)
+- GigaDevice **GD32E230xx** (board mark **E230F4** → **GD32E230F4**; F4 = 16 KB Flash / 4 KB SRAM, Cortex-M23): [Datasheet Rev 3.1 PDF](https://download.gigadevice.com/Datasheet/GD32E230xx%20Datasheet_Rev3.1.pdf), [GigaDevice download index](https://www.gd32mcu.com/en/download?kw=GD32E230)
 - Project firmware notes: [firmware_report.md](firmware_report.md), [supx_report.md](supx_report.md), [supx_decompile_report.md](supx_decompile_report.md), [network.md](network.md)

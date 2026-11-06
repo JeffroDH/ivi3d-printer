@@ -91,3 +91,14 @@ Executor recovery **1/16** of the Nov 6 reupload set; see `/workspace/ivi-board-
 | front_power_converter_2026-11-06.jpg | Power SOP-8 | `a6945446…` |
 
 Full 16-file set: `/workspace/ivi-board-recovered/nov6-reupload/originals/` (all 3024×4032).
+
+## 2026-11-06 rear-debug / USB context (EXIF stripped)
+
+| File | Notes |
+|---|---|
+| `rear_chip_close.jpg` | Owner rear closeup of bottom-right MCU area; EXIF/GPS stripped. Marking **E230F4** / GigaDevice **G** / lot **JJ2014** → **GD32E230F4** **[P]**. |
+| `gd32e230f4_chip_close_crop.jpg` | Crop from `rear_chip_close.jpg`, rotated upright; **Read-verified** before embed (shows chip face, not nearby passives). Prior wrong “upright” crop that showed only passives was **not** committed. |
+| `microusb_clear.jpg` | Clearer micro-USB context photo only. **No pad-annotation overlays** (earlier annotated boxes had bad offsets and are **not** used). USB D± photo-routing claims retracted. |
+
+Confidence: chip ID **[P]** + family datasheet **[D]**; lower-SWD ↔ rear pads **[O]**; chip↔header nets **[U]**.
+
