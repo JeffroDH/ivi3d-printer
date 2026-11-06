@@ -42,3 +42,21 @@ Board photographed on a wood surface (removed from chassis for this set). Local 
 **Video:** a `.mov` from this session was present in chat but **not analyzed** (shell/`watchVideo` could not access the attachment). No content is inferred from any thumbnail. Reattach if video findings are needed.
 
 Earlier board photos (`mainboard_*.jpg`) remain from 2026-10-31.
+
+
+## Evening JPEG set (2026-11-05, later)
+
+Held-board front/rear/edge/antenna JPEGs. Hash names under agent `attachments/` were not always visible to Shell; files were recovered from the cursor store batch `01M6Q8D*` (19:43 America/Chicago), EXIF-stripped copies under `/workspace/ivi-board-raw/nov5-evening/`.
+
+| Repo file | Subject | Notes |
+|---|---|---|
+| front_3pin_rx_tx_gnd.jpg | Front 3-pin silk RX/TX/GND | From store `01M6Q8DKX25…` / hash bb713… |
+| rear_debuguart_gnd_rx_tx.jpg | Rear GND → DEBUGUART_RX → DEBUGUART_TX | Crop from rear still `01M6Q8DFED…` |
+| front_ap6236_kapton_antenna_feed.jpg | AP6236 + Kapton coax attach | Front evening |
+| side_flat_external_antenna.jpg | Flat external antenna + coax | Side view |
+| edge_power_connector_row.jpg | Power-row edge (Amass + white headers) | Edge view |
+| edge_view_d8b.jpg | Opposite edge / antenna leave | Edge view |
+| front_overview_2026-11-evening.jpg | Front overview | Evening |
+| rear_overview_2026-11-evening.jpg | Rear overview | Evening |
+
+**Not analyzed:** session video; DNG raws (paths not materialized for tools).

@@ -1,6 +1,6 @@
 # IVI main board: `A33_407MB_200916`
 
-Photos: owner set from **2026-10-31** (EXIF/GPS stripped; `images/board/mainboard_*.jpg`); a **2026-11-05** set with the board **exposed for inspection** in the chassis (standoffs visible; removal not claimed) (`images/board/front_*.jpg`, `rear_board_marking.jpg`); and a later **2026-11-05** still set with the board **removed onto a wood surface** for photography (`images/board/front_removed_wood_overview.jpg`, `front_amass_power.jpg`, `front_usb_ch340_ssop_zone.jpg`, `front_rf_kapton_wires.jpg`, …). A video clip from that session was **not analyzed** (attachment unavailable to tools). See `images/board/SOURCES_2026-11.md`.
+Photos: owner set from **2026-10-31** (EXIF/GPS stripped; `images/board/mainboard_*.jpg`); a **2026-11-05** set with the board **exposed for inspection** in the chassis (standoffs visible; removal not claimed) (`images/board/front_*.jpg`, `rear_board_marking.jpg`); and a later **2026-11-05** still set with the board **removed onto a wood surface** for photography (`images/board/front_removed_wood_overview.jpg`, `front_amass_power.jpg`, `front_usb_ch340_ssop_zone.jpg`, `front_rf_kapton_wires.jpg`, …). A video clip from that session was **not analyzed** (attachment unavailable to tools). A further **2026-11-05 evening** JPEG set (front/rear/edges/antenna, held off wood) is under `images/board/front_3pin_rx_tx_gnd.jpg`, `rear_debuguart_gnd_rx_tx.jpg`, `side_flat_external_antenna.jpg`, `front_ap6236_kapton_antenna_feed.jpg`, etc. Raw DNGs from the same day were **not available** to tools. See `images/board/SOURCES_2026-11.md`.
 
 Evidence labels used throughout:
 
@@ -47,6 +47,18 @@ Evidence labels used throughout:
 |---|---|
 | ![RF wires](images/board/front_rf_kapton_wires.jpg) | ![bottom](images/board/front_bottom_kapton_wires.jpg) |
 
+| Front 3-pin RX/TX/GND silk (evening) | Rear DEBUGUART GND/RX/TX order |
+|---|---|
+| ![3pin](images/board/front_3pin_rx_tx_gnd.jpg) | ![DEBUGUART order](images/board/rear_debuguart_gnd_rx_tx.jpg) |
+
+| AP6236 + Kapton coax feed | Side: flat external antenna |
+|---|---|
+| ![RF feed](images/board/front_ap6236_kapton_antenna_feed.jpg) | ![antenna](images/board/side_flat_external_antenna.jpg) |
+
+| Edge: power-row connectors | Edge: opposite / antenna side |
+|---|---|
+| ![edge power](images/board/edge_power_connector_row.jpg) | ![edge ant](images/board/edge_view_d8b.jpg) |
+
 | Center/right (2026-10) | Left edge connectors (2026-10) |
 |---|---|
 | ![center](images/board/mainboard_center.jpg) | ![left edge](images/board/mainboard_left_edge.jpg) |
@@ -88,8 +100,8 @@ Evidence labels used throughout:
 | 12.000 MHz crystal near RF module | **Confirmed visible [P]** | |
 | Front SWD header silk `RST`, `GND`, `CLK`, `3V3`, `DIO` | **Confirmed visible [P]** | Order left→right on front header by STM32 |
 | Rear / pad SWD clusters `RST#`, `DIO`, `CLK`, `3V3`, `GND` | **Confirmed visible [P]** | At least one near STM32; a second set exists near bottom-right QFN area (see older table) |
-| Rear debug UART pads | **Confirmed visible [P] (2026-11 primary)** | Nov 2026 ruler photo silk reads **`GND`**, **`DEBUGUART_RX`**, **`DEBUGUART_TX`**. An older 2026-10 crop was previously transcribed as `UGUART_*`; that older reading is **not re-proven** against the current photos and must not override them. |
-| Front 3-pin by micro-USB (`GND` / `TX` / `RX` reported) | **Partially confirmed [P]** | Candidate breakout; **continuity to rear debug UART pads not proven** |
+| Rear debug UART pads | **Confirmed visible [P] (2026-11 primary)** | Silk **`DEBUGUART_RX`**, **`DEBUGUART_TX`**, plus **`GND`**. Evening rear crop (`rear_debuguart_gnd_rx_tx.jpg`) shows pad reading order **along that strip: `GND` → `DEBUGUART_RX` → `DEBUGUART_TX`**. Older 2026-10 `UGUART_*` transcription is **not re-proven** and must not override. Voltage / which CPU **[U]**. Continuity to front 3-pin **[U]**. |
+| Front 3-pin by micro-USB / microSD | **Confirmed silk [P]** | Evening macro: silk reads **`RX`**, **`TX`**, **`GND`** next to the white 3-pin (`front_3pin_rx_tx_gnd.jpg`). Labels run **along the board edge / vertical board orientation** — that is **silk reading order, not a proven connector pin-1 numbering**. Levels **unmeasured**; continuity to rear `DEBUGUART_*` **unknown [U]**. |
 | Front bottom-left **5-pin** + **SOIC-16** | **Confirmed visible [P]** | Distinct from STM32 SWD and from the 3-pin by USB |
 | SOIC-16 = **WCH CH340G** | **Confirmed visible [P]** | Rotated macro: WCH logo + `CH340G` + lot ~`206696A11`. Official USB↔UART bridge ([WCH CH340 datasheet](https://www.wch-ic.com/downloads/CH340DS1_PDF.html)). |
 | Earlier RS-232 / MAX3232 guess | **Superseded** | Polarized caps near a SOIC-16 looked like a charge-pump footprint; **new marking proves CH340G instead**. Do not treat the 5-pin as RS-232 on that basis. |
@@ -102,7 +114,12 @@ Evidence labels used throughout:
 | SSOP top mark = **GL850G** | **Confirmed visible [P]** (wood-set macro) | Top line reads **GL850G** on the later wood stills; earlier chassis macros did not resolve it. Genesys Logic USB 2.0 hub — [GL850G datasheet (Mouser/Olimex mirror)](https://www.mouser.com/datasheet/2/306/Olimex_GL850G-3198672.pdf), [product page](https://www.genesyslogic.com.tw/en/product-detail/USB2_Hub/GL850G) **[D]**. Downstream port count / which USB sockets it feeds **[U]** until traced. |
 | PPTC / fuse marks near Amass | **Partially confirmed [P]** | SMD mark including **050** (alpha-prefix style) beside Amass; larger yellow/orange body with **300** / UF300-style mark nearby (`front_power_amass_pptc.jpg`). Exact PolySwitch orderable **[G]** until clearer macro. |
 | Black loop wires + Kapton near RF | **Confirmed visible [P]**; role **[U]** | Thin black wires looped near AP6236 / mounting hole under yellow Kapton (`front_rf_kapton_wires.jpg`). **Unassigned** — do not assume antenna, harness, or rework purpose from photos alone. |
-| Video from wood session | **Not analyzed** | Attachment unavailable to analysis tools; no content inferred from any thumbnail. Reattach if video findings are needed. |
+| Flat black **external** antenna + coax | **Confirmed visible [P]** | Side/edge photos: thin coax from AP6236 / Kapton area to a separate flat black antenna body (`side_flat_external_antenna.jpg`, `edge_view_d8b.jpg`). **Visual routing only** — continuity not measured. |
+| Kapton / gold area by AP6236 | **Confirmed visible [P]**; onboard-antenna claim **[U]** | Kapton over gold contact/trace where coax attaches (`front_ap6236_kapton_antenna_feed.jpg`). Do **not** equate that taped PCB area with the separate flat external antenna. Whether any onboard trace antenna also exists is **unproven**. |
+| Front SWD silk `RST`/`GND`/`CLK`/`3V3`/`DIO` | **Reconfirmed [P]** | Evening sharp front + prior macros. |
+| Rear SOIC-8 top mark | **Still unread [U]** | Packages visible on rear; evening macros did not yield a conclusive top mark. |
+| Amass series (XT30?) | **Brand only [P]**; series **[U]** | Still no datasheet-grade series ID from emboss alone — **do not** document as XT30. |
+| Video / DNG from session | **Not analyzed** | Attachment/tools unavailable for video and DNG; no content inferred. |
 | Thermistor short as root cause of cold head reading ~248/250 °C | **User report only** | See §8 — do not treat as proven hardware failure from photos |
 
 ---
@@ -192,7 +209,7 @@ Caveats: a soldered module does not prove the antenna path is intact, that Linux
 | Item | Location | Silk / notes | Status |
 |---|---|---|---|
 | microSD push-push cage | Front edge | Boot / storage candidate for A33; also rear SDMMC test pads | **[P]**; which device is primary boot **[U]** |
-| 3-pin white header | Between microSD and micro-USB | Reports include `GND`, `TX`, `RX` | **[P]** partial; function **[U]** until traced |
+| 3-pin white header | Between microSD and micro-USB | Silk **`RX`**, **`TX`**, **`GND`** (board-edge reading order ≠ proven pin map) | Silk **[P]**; nets/levels/continuity to rear DEBUGUART **[U]** |
 | micro-USB | Front edge | Data vs charge / host vs device **[U]** (rear also has `USBH_D±` silk for a **host** path) |
 | 5-pin white header | Front **bottom-left**, near mounting hole | Traces into adjacent **CH340G** | **[P]**; net roles **[U]** until traced/measured |
 | SWD 5-pin header | Beside STM32 | `RST GND CLK 3V3 DIO` | **[P]** |
@@ -302,6 +319,43 @@ These stills show the board **removed onto wood** for photography (not in-chassi
 
 ---
 
+## 6c. Evening JPEG set (2026-11-05): 3-pin silk, DEBUGUART order, antenna
+
+Ten additional JPEGs (front/rear/edges/antenna). Shell could not always list hash names under `attachments/`; store files were copied to `/workspace/ivi-board-raw/nov5-evening/` (EXIF stripped). Video and DNGs remain unavailable.
+
+### Front 3-pin silk [P]
+
+- White 3-pin between microSD and micro-USB.
+- Silk clearly **`RX`**, **`TX`**, **`GND`** (`front_3pin_rx_tx_gnd.jpg`).
+- **Caveat:** those words are the **silkscreen reading order along the board**, not a measured mapping of connector cavity pin 1→N. Do not probe by assumed pin numbers.
+- Idle levels and continuity to rear `DEBUGUART_*` remain **unmeasured [U]**.
+
+### Rear DEBUGUART pad order [P]
+
+- Labels **`DEBUGUART_RX`** / **`DEBUGUART_TX`** reconfirmed; evening crop also shows adjacent **`GND`**.
+- Along the photographed strip: **`GND` → `DEBUGUART_RX` → `DEBUGUART_TX`** (`rear_debuguart_gnd_rx_tx.jpg`).
+- Same safe rules as §3/§10: measure first; listen with adapter RX+GND only.
+
+### RF path visual [P] / continuity [U]
+
+- **External** flat black antenna on a thin coax, separate from the PCB (`side_flat_external_antenna.jpg`).
+- Coax attaches near AP6236 under/at Kapton over a gold contact (`front_ap6236_kapton_antenna_feed.jpg`).
+- Photos show routing; they do **not** prove continuity, VSWR, or that Linux RF is enabled.
+- Kapton/gold PCB area ≠ the flat external antenna body. Onboard trace-antenna presence **unproven [U]**.
+
+### Edge connector inventory (visual counts only) [P]/[U]
+
+- Power-row edge photo (`edge_power_connector_row.jpg`): white headers plus yellow **3-pin** Amass inlet — pin counts from the edge view are approximate pending calipers; Amass **series still [U]** (not XT30 by assumption).
+- Opposite edge shows multiple white JST-style headers and the antenna coax leaving the board (`edge_view_d8b.jpg`).
+
+### Still open after this set
+
+- 3-pin ↔ DEBUGUART continuity; UART voltage.
+- Amass exact series; rear SOIC-8 identity.
+- Whether Kapton covers only the coax joint or also an onboard antenna feature.
+
+---
+
 ## 7. Mechanical / access notes
 
 - Chassis set: board on metal standoffs; some mounting holes empty **[P]**. Later wood stills: board **removed** onto a wood surface for photography **[P]**.
@@ -366,7 +420,7 @@ Power removed unless a step explicitly says otherwise. No speculative part buys 
 ## 11. Open questions
 
 - Exact A33 ↔ STM32 interconnect and protocol beyond “serial G-code” **[F]** at the software layer.
-- Front 3-pin vs rear `DEBUGUART_*` vs 5-pin / CH340G net relationships.
+- Front 3-pin (now silk-confirmed RX/TX/GND) vs rear `DEBUGUART_*` vs 5-pin / CH340G net relationships; measure levels.
 - Which side of the CH340G the 5-pin exposes; which CPU owns the UART.
 - micro-USB role; whether microSD or eMMC is the boot device.
 - STM32 RDP level.

@@ -51,6 +51,7 @@ Photos answered the big architecture questions. Still open (detail in [mainboard
 - Four driver boards with UART + STEP/DIR/EN; SWD found; rear **`DEBUGUART_*`** pads found (Nov 2026 silk); CH340G at front 5-pin
 - SoM memory/PMIC markings and AP6236 module marking (2026-11)
 - Wood-set stills: Amass brand on yellow 3-pin inlet; GL850G USB hub beside CH340G; black loop wires + Kapton near RF (role unknown); session video not analyzed
+- Evening JPEGs: front 3-pin silk RX/TX/GND; rear DEBUGUART pad order GND→RX→TX; external flat antenna + coax at AP6236/Kapton (visual only); Amass series still unknown
 
 **Still open**
 
