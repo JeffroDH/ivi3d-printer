@@ -8,7 +8,7 @@ Compiled 2026-10-31 from public sources; board photo pass extended **2026-11-05*
   - a **blue castellated SoM** with Allwinner (likely **A33**), **AXP223** PMIC, Samsung **K4B4G1646E**-class **512 MB** DDR3L, and Toshiba/Kioxia **THGBMNG5D1LBAIL 4 GB** eMMC **[P][D]**;
   - carrier **STM32F407VET6** (512 KB flash, LQFP100) for Marlin motion **[P][D][F]**;
   - Ampak **AP6236** Wi-Fi/BT module fitted **[P][D]** (RF path/firmware enablement **[U]**).
-  Separately: per-motor closed-loop driver boards and, per the forum's December 2020 update, a "power PCB and switch PCB". Full pad maps, connector caveats, and the bottom-left **5-pin + CH340G** notes are in [mainboard.md](mainboard.md).
+  Separately: per-motor closed-loop driver boards and, per the forum's December 2020 update, a "power PCB and switch PCB". Full pad maps, connector caveats, **5-pin + CH340G**, wood-set **Amass** inlet / **GL850G** hub / unassigned black wires are in [mainboard.md](mainboard.md).
 - **Software split [F]:** Linux/Qt UI + HTTP `:8080` on the A33 side; Marlin-derived image on the STM32; UI↔motion over internal serial; external USB-C CDC goes to Marlin. See `firmware_report.md`, `network.md`.
 - **November 2020 [C]:** first version of the main board finished, with small affiliated PCBs.
 - **June 2019 [C]:** control board parts sourced through Allchips.
@@ -50,6 +50,7 @@ Photos answered the big architecture questions. Still open (detail in [mainboard
 - `BEDTEMP` bed thermistor; `INP`/`INN` differential (likely load cell / `M2049`)
 - Four driver boards with UART + STEP/DIR/EN; SWD found; rear **`DEBUGUART_*`** pads found (Nov 2026 silk); CH340G at front 5-pin
 - SoM memory/PMIC markings and AP6236 module marking (2026-11)
+- Wood-set stills: Amass brand on yellow 3-pin inlet; GL850G USB hub beside CH340G; black loop wires + Kapton near RF (role unknown); session video not analyzed
 
 **Still open**
 
@@ -59,7 +60,8 @@ Photos answered the big architecture questions. Still open (detail in [mainboard
 - STM32 RDP status (**inspect only** - never unlock/disable); confirm whether `DEBUGUART_*` is a Linux console **after measuring voltage**
 - Front 3-pin vs `DEBUGUART_*` vs 5-pin/CH340G net relationships
 - Why each axis has both `LIMITSW_` and `LIMIT_`
-- SOIC-8 near SWD; QFN by second SWD; SOIC-16 exact marking by 5-pin
+- SOIC-8 near SWD; QFN by second SWD
+- Amass connector series/pitch; GL850G port mapping; black-wire identity; PPTC orderables
 
 ## Contributing board photos
 

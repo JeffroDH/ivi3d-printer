@@ -1,6 +1,6 @@
 # IVI main board: `A33_407MB_200916`
 
-Photos: owner set from **2026-10-31** (EXIF/GPS stripped; `images/board/mainboard_*.jpg`) plus a second set from **2026-11-05** with the board **exposed for inspection** in the chassis (standoffs visible; removal not claimed) (`images/board/front_*.jpg`, `rear_board_marking.jpg`). See `images/board/SOURCES_2026-11.md`.
+Photos: owner set from **2026-10-31** (EXIF/GPS stripped; `images/board/mainboard_*.jpg`); a **2026-11-05** set with the board **exposed for inspection** in the chassis (standoffs visible; removal not claimed) (`images/board/front_*.jpg`, `rear_board_marking.jpg`); and a later **2026-11-05** still set with the board **removed onto a wood surface** for photography (`images/board/front_removed_wood_overview.jpg`, `front_amass_power.jpg`, `front_usb_ch340_ssop_zone.jpg`, `front_rf_kapton_wires.jpg`, …). A video clip from that session was **not analyzed** (attachment unavailable to tools). See `images/board/SOURCES_2026-11.md`.
 
 Evidence labels used throughout:
 
@@ -34,6 +34,18 @@ Evidence labels used throughout:
 | Rear DEBUGUART pads (2026-11 ruler) | Rear board marking |
 |---|---|
 | ![DEBUGUART](images/board/rear_debuguart_pads.jpg) | ![rear marking](images/board/rear_board_marking.jpg) |
+
+| Removed on wood (2026-11 later stills) | Amass brand power inlet |
+|---|---|
+| ![wood overview](images/board/front_removed_wood_overview.jpg) | ![Amass](images/board/front_amass_power.jpg) |
+
+| CH340G + SSOP (GL850G) zone | Power / PPTC near Amass |
+|---|---|
+| ![USB ICs](images/board/front_usb_ch340_ssop_zone.jpg) | ![power](images/board/front_power_amass_pptc.jpg) |
+
+| RF / Kapton / black wires | Bottom Kapton area |
+|---|---|
+| ![RF wires](images/board/front_rf_kapton_wires.jpg) | ![bottom](images/board/front_bottom_kapton_wires.jpg) |
 
 | Center/right (2026-10) | Left edge connectors (2026-10) |
 |---|---|
@@ -85,7 +97,12 @@ Evidence labels used throughout:
 | Axis `X_UART_*` / `Y_UART_*` (and Z/F on other edges) | **Confirmed visible [P]** | Do **not** assume driver IC type from pads alone |
 | CTP I²C + LCD bias rails | **Confirmed visible [P]** | See connector table |
 | microSD slot + micro-USB | **Confirmed visible [P]** | Host vs device role of micro-USB **[U]** |
-| Yellow high-current power connector | **Confirmed visible [P]** | Family/pitch not measured (XT30/XT60-class appearance only) **[U]** |
+| Yellow high-current power connector | **Confirmed Amass brand [P]**; series **[U]** | Embossed **Amass** (registered mark) on yellow **3-pin** right-angle PCB housing (`front_amass_power.jpg`). Exact series (MR30 / XT30-class / other) **not measured** — do not assume XT60 (XT60 is typically 2-pin). |
+| SSOP beside CH340G | **Confirmed visible [P]** | SSOP-28-class package next to CH340G + nearby ~12 MHz crystal (`front_usb_ch340_ssop_zone.jpg`) |
+| SSOP top mark = **GL850G** | **Confirmed visible [P]** (wood-set macro) | Top line reads **GL850G** on the later wood stills; earlier chassis macros did not resolve it. Genesys Logic USB 2.0 hub — [GL850G datasheet (Mouser/Olimex mirror)](https://www.mouser.com/datasheet/2/306/Olimex_GL850G-3198672.pdf), [product page](https://www.genesyslogic.com.tw/en/product-detail/USB2_Hub/GL850G) **[D]**. Downstream port count / which USB sockets it feeds **[U]** until traced. |
+| PPTC / fuse marks near Amass | **Partially confirmed [P]** | SMD mark including **050** (alpha-prefix style) beside Amass; larger yellow/orange body with **300** / UF300-style mark nearby (`front_power_amass_pptc.jpg`). Exact PolySwitch orderable **[G]** until clearer macro. |
+| Black loop wires + Kapton near RF | **Confirmed visible [P]**; role **[U]** | Thin black wires looped near AP6236 / mounting hole under yellow Kapton (`front_rf_kapton_wires.jpg`). **Unassigned** — do not assume antenna, harness, or rework purpose from photos alone. |
+| Video from wood session | **Not analyzed** | Attachment unavailable to analysis tools; no content inferred from any thumbnail. Reattach if video findings are needed. |
 | Thermistor short as root cause of cold head reading ~248/250 °C | **User report only** | See §8 — do not treat as proven hardware failure from photos |
 
 ---
@@ -155,13 +172,16 @@ Caveats: a soldered module does not prove the antenna path is intact, that Linux
 
 | Part | Observation | Tag |
 |---|---|---|
-| SOIC-16 by bottom-left 5-pin | Faint top mark (possible `ADM…` / `…HM`); surrounded by multiple polarized (`+`) caps | **[P]** layout; marking **[U]** |
+| SOIC-16 by bottom-left 5-pin | **WCH CH340G** (see §6); polarized (`+`) caps nearby | Marking **[P]**; see §6 |
 | SOIC-8 near STM32 SWD pads | Present; marking poorly readable | **[P]**; role EEPROM/flash **[G]** (decompile shows bit-banged I²C EEPROM **[F]**) |
 | SOT-89 `7133` near second SWD | 3.3 V LDO class | **[P]**; exact vendor **[G]** |
 | Large inductors | e.g. rear `1821 GFE`; front `220`, `4R7` | **[P]** values only where legible |
 | Electrolytics | e.g. `100` / `35V` near power input | **[P]** |
-| Yellow radial near power (`CC 30` / `UF300` style marking reported) | Possible **30 V PPTC** resettable fuse class (Raychem/PolySwitch-style **UF300** marking appears on [RUEF300 SCD](https://akizukidenshi.com/goodsaffix/ruef300.pdf)) | Marking **[P]** if confirmed on unit; identity **[G]** until read clearly |
-| Larger SSOP above CH340G area | Partial marks reported on a later macro | Exact part **[U]** - do **not** assume USB hub without a clear top mark |
+| Yellow radial / large PPTC near power (`300` / UF300-style) | Candidate **PPTC** resettable fuse (Raychem/PolySwitch-style **UF300** class appears on [RUEF300 SCD](https://akizukidenshi.com/goodsaffix/ruef300.pdf)) | Marking partially visible **[P]** on wood stills; exact orderable **[G]** |
+| SMD PPTC near Amass (050-class mark) | Resettable fuse class mark | **[P]**; vendor/orderable **[U]** |
+| SSOP-28 beside CH340G | Top mark **GL850G** on wood-set macro | **[P]**; USB 2.0 hub **[D]** — [GL850G datasheet](https://www.mouser.com/datasheet/2/306/Olimex_GL850G-3198672.pdf) |
+| Amass yellow 3-pin inlet | Embossed Amass brand | Brand **[P]**; connector series/pitch **[U]** |
+| Black wires + Kapton near AP6236 | Loop wires under/near Kapton | Present **[P]**; function **[U]** |
 
 ---
 
@@ -178,7 +198,7 @@ Caveats: a soldered module does not prove the antenna path is intact, that Linux
 | SWD 5-pin header | Beside STM32 | `RST GND CLK 3V3 DIO` | **[P]** |
 | LCD FFC / CTP FFC | Edge ZIF | Matches rear CTP/LCD rail pads | **[P]** |
 | Motor / sensor white JST-style | Multiple along edges | Bundles present | Mating family/pitch **[U]** until measured |
-| Yellow high-current inlet | Near electrolytics | Appearance only | Exact connector series **[U]** |
+| Yellow high-current inlet | Near electrolytics / top-right when removed on wood | Embossed Amass brand, **3** thick pins | Brand **[P]**; series/pitch **[U]** |
 
 ### 5.2 Rear test pads (from 2026-10 set; still valid)
 
@@ -254,9 +274,37 @@ This is **not** the STM32 SWD header and **not** the 3-pin next to micro-USB.
 3. CH340G presence does **not** make the header automatically TTL-safe or USB-safe - wiring decides.
 
 
+## 6b. Wood-surface stills (2026-11 later): Amass, GL850G, wires
+
+These stills show the board **removed onto wood** for photography (not in-chassis). They do **not** replace the chassis “exposed for inspection” wording for the earlier Nov 5 set.
+
+### Amass power inlet [P]
+
+- Yellow housing with embossed **Amass** branding and **three** heavy gold pins soldered right-angle into the PCB (`front_amass_power.jpg`, `front_power_amass_pptc.jpg`).
+- Nearby: SMD **050**-class PPTC-style mark, `CS 100` / `35V` electrolytics, and a larger yellow/orange body with a **300** / UF300-style mark **[P]** partial.
+- **Series unknown [U]** — measure pitch/housing before ordering mates. Do not call it XT60 from photos alone.
+
+### GL850G USB hub [P][D]
+
+- SSOP package immediately beside the **CH340G**, with a ~**12 MHz** crystal in the same neighborhood (`front_usb_ch340_ssop_zone.jpg`).
+- Top mark on the wood-set macro reads **GL850G** **[P]** (glare still hides some lot lines).
+- Genesys Logic **GL850G** is a USB 2.0 hub controller (SSOP-28 option among others) — [datasheet PDF](https://www.mouser.com/datasheet/2/306/Olimex_GL850G-3198672.pdf), [Genesys product page](https://www.genesyslogic.com.tw/en/product-detail/USB2_Hub/GL850G) **[D]**.
+- Which upstream/downstream ports (micro-USB, USB-C path, internal) the hub serves remains **[U]** until traced. CH340G may sit on a hub downstream port or a separate USB path — **unproven**.
+
+### Black loop wires + Kapton [P] / role [U]
+
+- Thin **black wires** loop near the AP6236 / corner mounting hole, with yellow **Kapton** over part of the RF / edge area (`front_rf_kapton_wires.jpg`, `front_bottom_kapton_wires.jpg`).
+- **Unassigned:** photos do not prove antenna pigtail, factory harness, or field rework. Leave as present-but-unknown until continuity / connector mapping.
+
+### Video
+
+- A `.mov` from this session was **not analyzed** (tools could not access the attachment). Do not infer content from any thumbnail. Reattach the video if motion/audio findings are required.
+
+---
+
 ## 7. Mechanical / access notes
 
-- Board is held on metal standoffs; some mounting holes empty in photos **[P]**.
+- Chassis set: board on metal standoffs; some mounting holes empty **[P]**. Later wood stills: board **removed** onto a wood surface for photography **[P]**.
 - Front has tall connectors and the SoM; rear is mostly pads — clamp or pogo fixtures must clear front-side parts and not short chassis metal.
 - Stackup / internal layers unknown **[U]** — photos cannot prove continuity.
 - Chassis / frame ground vs board `GND` relationship **unverified** — check continuity before bridging adapter GND to the frame.
@@ -300,6 +348,9 @@ Power removed unless a step explicitly says otherwise. No speculative part buys 
 10. **Thermistor / head connector:** resistance and wiring after the cold-hotend report.
 11. **CHA/CHB**, `INP`/`INN`, dual `LIMIT*` pads — still open.
 12. Identify SOIC-8 near SWD and the QFN by the second SWD port (better macro photos or continuity).
+13. **GL850G:** continuity from hub upstream D± to micro-USB / other USB paths; note which downstream port (if any) feeds the CH340G.
+14. **Amass inlet:** caliper series/pitch; continuity to `VCCIN24V` / fuse / PPTC path.
+15. **Black wires:** continuity ends; check vs AP6236 antenna pad / U.FL — do not assume function.
 
 ---
 
@@ -321,7 +372,10 @@ Power removed unless a step explicitly says otherwise. No speculative part buys 
 - STM32 RDP level.
 - `CHA/CHB`, `INP`/`INN`, dual limit labels.
 - Second SWD target identity.
-- Confirm AP6236 antenna + driver stack.
+- Confirm AP6236 antenna + driver stack; identity of black loop wires / Kapton near RF.
+- Amass connector exact series and mating part; PPTC orderables (050-class, UF300-class).
+- GL850G upstream/downstream port mapping vs micro-USB / CH340G / USB-C.
+- Video session clip (not analyzed) if reattached.
 
 ---
 
@@ -334,4 +388,5 @@ Power removed unless a step explicitly says otherwise. No speculative part buys 
 - TI MAX3232 datasheet was cited only for an earlier (now **superseded**) RS-232 layout guess: [MAX3232](https://www.ti.com/lit/ds/symlink/max3232.pdf)
 - Samsung DRAM: photo mark `K4B4G16` / `46E BYKO` (O/0 ambiguous). Capacity contingent on decoding as [K4B4G1646E-BYK0](https://file.icallin.com/resources/data-sheet/DS_K4B4G1646E_BY_M_Rev1_11-0.pdf) (mirror PDF; not an accessed `semiconductor.samsung.com` primary for that exact suffix). Related official listing example: [K4B4G1646E-BCNB](https://semiconductor.samsung.com/us/dram/ddr/ddr3/k4b4g1646e-bcnb/).
 - WCH CH340 / CH340G: [CH340DS1 download page](https://www.wch-ic.com/downloads/CH340DS1_PDF.html)
+- Genesys Logic GL850G USB 2.0 hub: [datasheet (Mouser/Olimex mirror)](https://www.mouser.com/datasheet/2/306/Olimex_GL850G-3198672.pdf), [product page](https://www.genesyslogic.com.tw/en/product-detail/USB2_Hub/GL850G), [Radxa-hosted PDF](https://dl.radxa.com/rock/docs/hw/ds/GL850G.pdf)
 - Project firmware notes: [firmware_report.md](firmware_report.md), [supx_report.md](supx_report.md), [supx_decompile_report.md](supx_decompile_report.md), [network.md](network.md)
