@@ -11,8 +11,7 @@ Evidence tags (same spirit as [mainboard.md](mainboard.md)):
 | **[G]** | Inference |
 | **[U]** | Unknown |
 
-**Access (this pass):** claimed paths  
-`bd92a292….jpg`, `2d65ee94….jpg`, `9727b940….jpg` were **not found** by Shell or Read; store had no newer extruder batch. **No crops** were added under `docs/images/extruder/`. Re-archive when files are readable (strip EXIF/GPS; no printer serials).
+**Photos (2026-11-06 reupload):** three extruder views archived EXIF-stripped as `images/extruder/extruder_view{1,2,3}_2026-11-06.jpg` **[P]**. Earlier attachment hashes that failed for tools are superseded by this set.
 
 **Safety:** power off before poking gears, pinch, or filament path. Never hot-unplug a driven extruder under load.
 
@@ -20,16 +19,23 @@ Owner note that started this pass: interest in **more refined extruder gears** �
 
 ---
 
-## 1. Layout (visual) — [Pᵗ]
+## 1. Layout (visual) — [P]
+
+| View | File |
+|---|---|
+| 1 | ![v1](images/extruder/extruder_view1_2026-11-06.jpg) |
+| 2 | ![v2](images/extruder/extruder_view2_2026-11-06.jpg) |
+| 3 | ![v3](images/extruder/extruder_view3_2026-11-06.jpg) |
+
 
 Orthogonal motor → bevel stage → spur train → dual hobbed feed looks like a **geared dual-drive Bowden** feeder (remote of the toolhead).
 
 | Stage | Visible parts | Tag |
 |---|---|---|
-| Motor pinion | Small **brass** bevel / face pinion on the stepper shaft; **radial grub screw** | **[Pᵗ]** |
-| Bevel driven | Large **ivory plastic** face/bevel gear on a **transverse** shaft; **hub screw** | **[Pᵗ]** |
-| Spur train | Two **smaller ivory spur gears** on **parallel** shafts, appear meshed | **[Pᵗ]** |
-| Filament drive | **Metal toothed / hobbed rollers** at the filament path by a **brass tube fitting** | **[Pᵗ]** |
+| Motor pinion | Small **brass** bevel / face pinion on the stepper shaft; **radial grub screw** | **[P]** |
+| Bevel driven | Large **ivory plastic** face/bevel gear on a **transverse** shaft; **hub screw** | **[P]** |
+| Spur train | Two **smaller ivory spur gears** on **parallel** shafts, appear meshed | **[P]** |
+| Filament drive | **Metal toothed / hobbed rollers** at the filament path by a **brass tube fitting** | **[P]** |
 
 **Distinguish:** ivory/brass **transmission gears** ≠ metal **filament hobs**. Refining one does not automatically fix the other.
 

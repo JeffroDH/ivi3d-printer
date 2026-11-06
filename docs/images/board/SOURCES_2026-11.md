@@ -69,4 +69,25 @@ Claimed attachment hashes (`e8ce01d0…` motor, `d39f4fa4…` display back, `8a9
 
 ## IC close-up set (2026-11-06)
 
-Owner stated close-ups of most ICs were attached (nine JPEGs). At documentation/push time those attachment hashes were **not readable** by agent tools and were not newly present in the cursor store. No additional crops were committed from that drop. A33 identity for this push is from the **owner statement (2026-11-06)**, not from newly archived die photos.
+Owner stated close-ups of most ICs were attached (nine JPEGs). At documentation/push time those attachment hashes were **not readable** by agent tools and were not newly present in the cursor store. No additional crops were committed from that drop (hashes still missing for tools). Parent-visible inventory (A33 die, AP6236 **B112A015**, NP1404 SOIC-8s, etc.) is in [mainboard.md](../../mainboard.md) §6d tagged **[Pᵗ]** — **local/unpushed** relative to the A33 docs push unless separately approved.
+
+
+## 2026-11-06 16-file reupload
+
+Hashes listed in the agent task (extruder×3, motor, rear QFN, NP1404×n, AXP223, eMMC, A33, CH340/GL850G, GL850G). Parent Read of first path succeeded; **executor staged 0/16** into `/workspace/ivi-board-recovered/nov6-reupload/` this pass. Critical marking update from parent: USB-UART IC reads **CH340C** (not G). No GPS/serial-bearing binaries committed.
+
+
+| front_ch340c_gl850g_2026-11-06.jpg | CH340C + GL850G overview | `503fbbb7…` reupload (EXIF stripped) |
+| front_ch340c_marking.jpg | CH340C top mark crop | same |
+| front_gl850g_marking.jpg | GL850G top mark crop | same |
+
+Executor recovery **1/16** of the Nov 6 reupload set; see `/workspace/ivi-board-recovered/nov6-reupload/ACCESS.md` for the 15 missing hashes.
+
+
+| front_a33_die_marking.jpg / front_a33_overview_2026-11-06.jpg | A33 die | `902e9745…` |
+| front_np14p04_marking.jpg | NP14P04 SOIC-8 | `1fdade3f…` |
+| front_axp223_2026-11-06.jpg | AXP223 | `e9ed08f3…` |
+| front_emmc_2026-11-06.jpg | eMMC | `59c3e7e4…` |
+| front_power_converter_2026-11-06.jpg | Power SOP-8 | `a6945446…` |
+
+Full 16-file set: `/workspace/ivi-board-recovered/nov6-reupload/originals/` (all 3024×4032).

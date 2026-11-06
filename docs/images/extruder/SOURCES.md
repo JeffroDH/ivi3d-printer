@@ -1,9 +1,9 @@
-# Extruder photo sources
+# Extruder photo sources (2026-11-06)
 
-Owner extruder JPEGs from 2026-11-05 were claimed as:
+| File | Source hash |
+|---|---|
+| extruder_view1_2026-11-06.jpg | fb0971ef4ee1b5e741319ab791337f7ab9d3e82f350c5e1c8097501dcc14173e |
+| extruder_view2_2026-11-06.jpg | 76779841d984f0a040eb40d5a0c838ba285cb9f65349d913e233e1521594221f |
+| extruder_view3_2026-11-06.jpg | 8e6187bd9eb83407f8c4a2c15816a41a58300e842c57c665c20477bb86c0ac59 |
 
-- `bd92a292a9414a016c0b5157c8dd4d19af41e0d9dab49e51094d99ca61b35de6.jpg`
-- `2d65ee9401ac6d99767d774a971fa8744f6682e1db557d17d51352212fae732f.jpg`
-- `9727b940075a7b48c85089e369064817bd0c348b13e55429f32529240a352a8c.jpg`
-
-At documentation time these paths were **not readable** by agent Shell/Read and were not present as new files in the cursor store. Narrative evidence is in [../../extruder.md](../../extruder.md) tagged **[Pᵗ]** / **[O]**. When available: copy here, strip EXIF/GPS, no printer serials.
+EXIF/GPS stripped. No printer serials.
