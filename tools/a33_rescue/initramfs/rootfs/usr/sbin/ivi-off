@@ -1,0 +1,6 @@
+#!/bin/sh
+. /usr/lib/ivi/common.sh
+ivi-ums-ro stop >/dev/null 2>&1
+sync; umount /mnt/sd 2>/dev/null; sync
+echo "Powering off."
+poweroff -f

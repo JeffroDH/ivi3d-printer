@@ -1,0 +1,44 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * IVI3D touchscreen board (Allwinner A33, Sinlinx SinA33-class) - rescue DT.
+ *
+ * Based on the mainline sun8i-a33-sinlinx-sina33.dts. Only the parts the
+ * rescue system needs are kept: debug UART on PB0/PB1, microSD (mmc0),
+ * eMMC (mmc2, 8-bit), the AXP223 PMIC over RSB, and the USB OTG port in
+ * peripheral mode. Display, audio and the USB host port (GL850G hub ->
+ * CH340 -> STM32) are disabled so the rescue system never talks to the
+ * motion controller or drives the LCD.
+ *
+ * UNVERIFIED on the IVI board: the SinA33 pin/regulator choices are taken
+ * from the stock IVI script.bin where it agrees (UART PB0/PB1, SD on
+ * PF0-PF5 with card detect PB4, eMMC on PC5-PC16, AXP22x, DCDC1 3.0 V,
+ * DCDC5 1.5 V). Anything else is the SinA33 reference.
+ */
+#include "sun8i-a33-sinlinx-sina33.dts"
+
+/ {
+	model = "IVI3D A33 rescue (SinA33-based DT)";
+
+	aliases {
+		mmc0 = &mmc0;	/* microSD  -> /dev/mmcblk0 */
+		mmc1 = &mmc2;	/* eMMC     -> /dev/mmcblk1 */
+	};
+};
+
+/* Stay at the bootloader clock; drop the SinA33 overclock OPPs. */
+&cpu0_opp_table {
+	/delete-node/ opp-1104000000;
+	/delete-node/ opp-1200000000;
+};
+
+&codec   { status = "disabled"; };
+&dai     { status = "disabled"; };
+&sound   { status = "disabled"; };
+&de      { status = "disabled"; };
+&tcon0   { status = "disabled"; };
+&ehci0   { status = "disabled"; };
+&ohci0   { status = "disabled"; };
+
+&usbphy {
+	/delete-property/ usb1_vbus-supply;
+};

@@ -1,0 +1,16 @@
+#!/bin/sh
+# [W3 eMMC] e2fsck the eMMC rootfs (p7). Shows a read-only report first.
+. /usr/lib/ivi/common.sh
+ivi_find_devices; [ -n "$EMMC" ] || die "eMMC not found"
+t=${EMMC}p7; [ -b /dev/$t ] || die "/dev/$t missing"
+ivi_mounted $EMMC && die "an eMMC partition is mounted; refusing"
+risk "R0 first: e2fsck -fn (read-only report)"
+e2fsck -fn /dev/$t; echo "(exit $?)"
+needs_recovery /dev/$t && echo "journal: NEEDS RECOVERY" || echo "journal: clean"
+risk "W3 WRITES /dev/$t: e2fsck -fy replays the journal and repairs."
+relock_on_exit
+confirm_typed "FSCK p7"
+blockdev --setrw /dev/$EMMC && blockdev --setrw /dev/$t || die "could not enable writes"
+e2fsck -fy /dev/$t; rc=$?
+blockdev --setro /dev/$t; blockdev --setro /dev/$EMMC; sync
+say "e2fsck exit code $rc (0 = clean, 1 = fixed, 2+ = see output)"

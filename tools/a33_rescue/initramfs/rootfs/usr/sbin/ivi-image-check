@@ -1,0 +1,24 @@
+#!/bin/sh
+# [R0 READ] Check a backup image file: size, MD5, partition layout vs the eMMC,
+# and whether p7 still has an unreplayed journal. The image is attached read-only.
+. /usr/lib/ivi/common.sh
+img="$1"; [ -f "$img" ] || die "usage: ivi-image-check /mnt/sd/path/mmcblk0.img [--parts]"
+ivi_find_devices
+risk "R0 read-only (image attached with losetup -r)."
+sz=$(file_bytes "$img"); ks=$(known_size mmcblk0.img)
+[ "$sz" = "$ks" ] && say "size : $sz  OK" || say "size : $sz  (backup image is $ks)"
+say "md5  : hashing ..."
+m=$(md5_of "$img"); k=$(known_md5 mmcblk0.img)
+if [ "$m" = "$k" ]; then say "md5  : $m  MATCH known backup"
+elif [ -f "$img.md5" ] && [ "$m" = "$(cut -d' ' -f1 "$img.md5")" ]; then say "md5  : $m  matches its sidecar $img.md5 (not the 2026-11-07 backup)"
+else say "md5  : $m  NO MATCH (known $k)"; fi
+l=$(loop_ro "$img") || die "could not attach image read-only"
+if [ -n "$EMMC" ]; then echo "layout vs /dev/$EMMC:"; same_layout $l $EMMC && say "layout: identical" || say "layout: DIFFERENT"; fi
+if [ -b /dev/${l}p7 ]; then
+	needs_recovery /dev/${l}p7 && say "p7   : journal NEEDS RECOVERY (run ivi-prep-p7 before restoring p7 from this image)" \
+	                          || say "p7   : journal clean"
+fi
+if [ "$2" = "--parts" ]; then
+	for n in 1 2 5 6 7; do [ -b /dev/${l}p$n ] && say "  p$n : $(md5_of /dev/${l}p$n $(ivi_bytes ${l}p$n))"; done
+fi
+losetup -d /dev/$l

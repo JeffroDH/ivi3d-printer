@@ -21,9 +21,9 @@ at low power on scrap with laser safety glasses, or with the CNC bit raised abov
   and return to X0 Y0 at the end). For CNC put Z0 at the **top** of the stock.
 - Arcs are linearized (IVI files contain only G0/G1).
 - Laser: create a cutting/laser operation (2D profile etc. with a laser tool). Power is the post property
-  **Laser power (%)** → `M3 S<percent>` (first segment), bare `M3` after, `M5` after each segment. `M106 P0` /
-  `M107 P0` (fan/air assist) wrap the job; turn off with the *Fan / air assist* property. Feed comes from the
-  operation; jog speed from the property (default 1500).
+  **Laser power (%)** → `M3 S<percent>` (first segment), bare `M3` after, `M5` after each segment. The post wraps the job in `M106 P0` /
+  `M107 P0` under the property *Fan / air assist*. The firmware has no air-assist output, and on a laser head `M106 P0` sends nothing; the heatsink fan is P1 and the auto-fan rule is already on from boot. Proposed post changes (clamp S to 0–100, `M106 P1`, leave that rule on, no `M107`) are pending a hardware test and are not in this tree. Feed comes from the
+  operation; jog speed from the property (default 1500). Keep S in 0–100: a larger S reads past the firmware power table.
 - CNC: spindle is the property **Spindle power (%)** → `M3 S<percent>` (the firmware reads S as percent and ignores P; IVI 3licer's `M3 P100` is available via *Spindle word = P*). Fusion RPM is ignored. Safe Z 10 and
   retract Z 5 as in IVI 3licer; plunges are capped at 300 mm/min.
 

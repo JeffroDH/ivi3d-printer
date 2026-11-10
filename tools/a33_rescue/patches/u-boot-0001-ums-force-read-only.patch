@@ -1,0 +1,13 @@
+diff --git a/drivers/usb/gadget/f_mass_storage.c b/drivers/usb/gadget/f_mass_storage.c
+index 76ee08dc..4d2f3021 100644
+--- a/drivers/usb/gadget/f_mass_storage.c
++++ b/drivers/usb/gadget/f_mass_storage.c
+@@ -2500,6 +2500,8 @@ static struct fsg_common *fsg_common_init(struct fsg_common *common,
+ 
+ 	for (i = 0; i < nluns; i++) {
+ 		common->luns[i].removable = 1;
++		/* IVI3D rescue build: every UMS LUN is exported write-protected. */
++		common->luns[i].initially_ro = 1;
+ 
+ 		rc = fsg_lun_open(&common->luns[i], ums[i].num_sectors, ums->block_dev.blksz, "");
+ 		if (rc)

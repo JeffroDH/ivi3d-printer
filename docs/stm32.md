@@ -1,6 +1,6 @@
 # STM32F407 motion controller
 
-Stock application image: `firmware/Firmware/firmware.supx`, reported as Marlin **V1.3.2-alpha**. The container format and the Ghidra pin / driver-UART notes live in [supx_decompile_report.md](supx_decompile_report.md) and [supx_report.md](supx_report.md). This page is the current map of flash, the update protocol, fans, CAN, and the serial ports.
+Stock application image: `firmware/Firmware/firmware.supx`, reported as Marlin **V1.3.2-alpha**. The container format and the Ghidra pin / driver-UART notes live in [supx_decompile_report.md](supx_decompile_report.md) and [supx_report.md](supx_report.md). This page is the current map of flash, the update protocol, fans, the laser head, CAN, and the serial ports.
 
 Tags: **[V]** in the image or the A33 app · **[I]** inferred · **[U]** unknown · **[D]** datasheet.
 
@@ -72,20 +72,31 @@ Both host ports share one 6-deep command FIFO, tagged with the source port, stri
 
 ## Fans
 
-Head fans are **on/off**, not PWM. Both channels are CAN frames, not mainboard pins **[V]**.
+Head fans are **on/off**, not PWM. Both channels are CAN frames, not mainboard pins **[V]**. The firmware has no air-assist output. The only fan frames are `B3` (P0) and `B4` (P1).
+
+The auto heatsink-fan rule is **on from boot**. Head init stores `1.0` in the auto-fan flag at boot (`FUN_08026420` at `0x0802642C`, flag at struct +8, RAM `0x200063C8`) **[V]**. `M2006` is the command that changes it. It is not saved by M500, and the touchscreen app and the stock slicer samples do not send it. `M2006 S1` is the boot state. `M2006 S0` turns the rule off.
+
+With the rule on, a 1 s tick (`FUN_08026254` → `FUN_0802620c`) applies it **[V]**:
+
+- FDM (class 3): P1 on when the head reports above 40 °C, off at or below that.
+- Laser (class 1): P1 forced on (`B4 01`) every second, for as long as a laser head is installed.
+- CNC (class 2): the tick does nothing.
+
+`M107` turns the fans off at once. On a laser head the next tick turns P1 back on, so the off lasts at most about 1 s. The laser-head fan stays off only after `M2006 S0`. On an FDM head the same tick turns P1 back on once the reported temperature is above 40 °C.
 
 | Command | Effect |
 |---|---|
 | `M106` with **no `P`** | **Both fans on. `S` is ignored.** `M106 S0` turns both fans **on** |
 | `M106 P0 S<n>` | FDM head only: fan 0 on when `S` ≠ 0, off when `S` = 0. On a laser or CNC head, P0 sends nothing |
-| `M106 P1 S<n>` | Fan 1, any head class. `S` = 0 is off, any other `S` is on |
+| `M106 P1 S<n>` | Fan 1, any head class. `S` = 0 is off, any other `S` is on. On a laser head the 1 s tick forces it back on while the auto-fan rule is on |
 | `M106 P2` or higher | Ignored |
-| `M107` | Both fans off. **`P` is ignored**, so `M107 P0` still turns both off |
-| `M2006 S1` | Enables a thermostatic rule (not saved by M500, not sent by the app or by stock slicer samples): FDM turns P1 on above 40 °C reported by the head; laser forces P1 on; CNC does nothing |
+| `M107` | Both fans off at once. **`P` is ignored**, so `M107 P0` still turns both off. The tick above can turn P1 back on |
+| `M2006 S0` | Auto-fan rule off |
+| `M2006 S1` | Auto-fan rule on. This is also the state after boot |
 
-IVI 3licer and Orca both emit `M106 S0` where a stock Marlin profile means "fan off". On this firmware that line turns the head fans on, and they stay on until an `M107`. Prefer **`M107`** or **`M106 P0 S0`**.
+IVI 3licer and Orca both emit `M106 S0` where a stock Marlin profile means "fan off". On this firmware that line turns the head fans on. For an FDM head, **`M107`** or **`M106 P0 S0`** is the off command. On a laser head `M106 P0` sends nothing, and `M107` does not hold P1 off.
 
-The touchscreen fan switch sends bare `M106` / `M107` (both channels). Laser samples from IVI 3licer use `M106 P0`, which does not drive a fan unless the installed head is FDM.
+The touchscreen fan switch sends bare `M106` / `M107` (both channels). Laser samples from IVI 3licer use `M106 P0`. That line is not air assist, and it drives a fan only when the installed head is FDM.
 
 No `M106` / `M107` / `M2006` path drives a mainboard MOSFET **[V]**. The two unused `FAN24V` headers cannot be selected with `P` ≥ 2. They may be always-on 24 V **[U]** until measured. `M42` can toggle a free GPIO only after that pin is traced, and not on stepper or endstop pins.
 
@@ -100,7 +111,7 @@ Controller → head, byte 0 **[V]**:
 | `A0` | — | Type and version query |
 | `A3` | — | Info query (`M2080`) |
 | `A7` | — | CNC BLDC speed query |
-| `B1` | byte | Laser / spindle power (`M3` / `M5`) |
+| `B1` | byte | Laser power from the 101-entry table, or CNC spindle power (`M3` / `M5`). See [Laser](#laser) |
 | `B2` | 0/1 | Tool enable |
 | `B6` | u16 LE | Hotend target °C **[I]** |
 | `B3` | 0/1 | Fan P0, FDM class only |
@@ -130,6 +141,77 @@ There is no PID on the wire and no head-firmware update command. Reported temper
 | other | `error:No Print Type Unknown` | unchanged |
 
 Codes 3–8 change the display string only. Motion, extrusion, and temperature limits do not scale with the diameter **[V]**. The head serial number is in controller EEPROM, not on CAN. `M2056` prints it. `M2055` checks the CRC-16 and rewrites the record if the check fails. `M2005` prints controller firmware plus the head firmware, hardware, and that serial. The class is refreshed at boot and on every `M2051`.
+
+## Laser
+
+This is the motion firmware's laser behaviour **[V]**, plus the host where noted. It has not been run on a laser head. Power the printer on with the laser already attached.
+
+### Identification and arming
+
+Boot setup calls head init (`FUN_08026420`). That sends CAN `A0` (controller standard id 0x12, 500 kbit/s) and reads byte 1 of the head's `A0` reply. Type code 1 sets class 1. `M2051` then prints `info:Head Laser`, `Current Status: ON/OFF` (head `A1` byte 2), and `Current Power:` of the last S **[V]**. The controller's receive filter accepts every frame. The head's own CAN id is **[U]**.
+
+Only that boot path arms a laser (`FUN_080261c0`, taken when the class is 1). It sends CAN `B2 01` (tool enable) and sets the power-ceiling byte to `0xFF`. `M2051` refreshes the class and does neither **[V]**. Plug the laser in after power-on and the ceiling stays 0, so every `M3 S…` maps to power 0. How the head itself treats a later plug-in is **[U]**.
+
+No G-code or M-code exists only to arm the laser. `M104` and `M109` share the `B2` frame. `M104 S0` sends `B2 00` to a laser head. Whether the head treats that as disabled is **[U]**. The touchscreen's stop cleanup sends `M104 S0` anyway. Leave `M104` out of laser files. Whether the laser still fires after a stopped job is **[U]**.
+
+### Commands
+
+| Code | What the firmware does |
+|---|---|
+| `M3 S<n>` | Waits until queued moves finish, then `power = table[min(n, 255)]` and CAN `B1 <power>`. Stores n as the last S |
+| `M3` with no S | Re-sends the last S |
+| `M4` | Same handler as `M3`. The M3/M4 distinction is not read. There is no dynamic or inline mode |
+| `M5` | Waits for queued moves, then `B1 00`. The last S is kept, so a later bare `M3` restores it |
+| `G4 P<ms> L<n>` | Waits for queued moves, sends `B1` for table entry n, dwells, then `B1 00`. A bare `L` re-uses the last S. `L` is honoured only on a laser head |
+| `G0` / `G1` with `S` | `S` is not parsed (X/Y/Z/E/F only). Planner blocks copy the last S and the stepper ISR recomputes the table value, and that path sends no CAN frame. There is no inline power |
+| `M3` just after pause | Ignored for 3 s once a pause starts (status 3–5) |
+
+Pause (`FUN_08026bd0`) and stop (`FUN_08026708`) send `B1 00`. Resume (`FUN_08026aa8`) re-sends the last S when the laser was on. `M2411 S3` and the touchscreen's end-of-file `M5` both turn the laser off **[V]**.
+
+Each `M3` and `M5` drains the planner, so the head stops briefly on every segment boundary. IVI 3licer files do the same.
+
+### Power table
+
+S is a percent, 0–100. It indexes a 101-byte table at `0x08035D34`. The byte is the `B1` payload **[V]**:
+
+| S | `B1` |
+|---|---|
+| 0 | 0 |
+| 1 | 50 |
+| 5 | 108 |
+| 6 | 77 |
+| 10 | 129 |
+| 20 | 153 |
+| 50 | 204 |
+| 80 | 237 |
+| 90 | 254 |
+| 96–100 | 255 |
+
+The curve is steep at the low end and is not monotonic (S5 is 108, S6 is 77). What the head does with the byte is **[U]**. A PWM duty out of 255 is the reading the table suggests **[I]**.
+
+**Never send S above 100.** The index is clamped to 255, and a negative or oversized value becomes 255. S101–S255 read past the table into the bytes that follow it: S101 → 101, S128 → 0, S200 → 32, S255 → 101 **[V]**.
+
+### Door
+
+The door input is PE3 (`DOOR_STAUS` on the board). The check is enabled at boot. `M2010 S0` turns it off and `M2010 S1` turns it on (`Auto door check on` / `off`). For every head except FDM, the idle loop prints `warning:Door opened` or `warning:Door closed` when the pin changes. Pin high means opened **[V]**.
+
+A door-open prints that warning and leaves laser power where it is. `B1` stays set until `M5`, pause, stop, or the end of a `G4`. There is no enclosure-fan check, no tube check, and no watchdog that clears laser power when the host goes quiet. The 8 s IWDG resets the MCU when the firmware stops kicking it **[V]**.
+
+The host has to act on the warning. IVI 3licer maps `warning:Door opened` to a pause (`M2410`, which sends `B1 00`) **[V]**. The touchscreen app has a door-warning path; whether that path pauses a job is **[U]**. The Mac bridge does not watch for the warning.
+
+### Posts
+
+IVI 3licer laser files, and the Fusion post in [../fusion/](../fusion/README.md), emit `M106 P0` at the start and `M107 P0` at the end. On a laser head the first sends nothing. The second turns P1 off until the next 1 s tick. Proposed post changes are pending a hardware test and are not in this tree: clamp S to an integer 0–100, assert `M2010 S1` and `M2006 S1`, turn P1 on with `M106 P1`, and leave the heatsink fan running at the end (no `M107`, no air-assist property).
+
+### Still to measure on the machine
+
+Low power, scrap, laser safety glasses, door closed. Each item is its own decision.
+
+1. Laser installed at power-on. `M2051` should print `info:Head Laser` and `Current Power: 0`. `M107` should stop the head fan, and the fan should restart within about 1 s. `M2006 S0` followed by `M107` should leave it off. Then `M2006 S1`.
+2. Open and close the door at idle and look for the warning lines on USB. Whether the touchscreen pauses a job is a separate dry run at S0.
+3. Short burns at S1, S5, S10, and S20. S1 maps to 50/255, so a mark at S1 is expected if the head treats `B1` as duty.
+4. After a touchscreen stop (`M104 S0` → `B2 00`), one S5 segment, to see whether the laser still fires.
+5. Optional listen-only CAN capture of boot, `M3`, `M5`, and `M107`, for the `B1` / `B4` frames and the head's id.
 
 ## Commands the touchscreen sends
 

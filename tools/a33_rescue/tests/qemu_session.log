@@ -1,0 +1,301 @@
+[    0.035920] /cpus/cpu@0 missing clock-frequency property
+[    0.036166] /cpus/cpu@1 missing clock-frequency property
+[    0.036191] /cpus/cpu@2 missing clock-frequency property
+[    0.036211] /cpus/cpu@3 missing clock-frequency property
+[    0.689543] musb-sunxi 1c19000.usb: Invalid or missing 'dr_mode' property
+[    0.689760] musb-sunxi 1c19000.usb: probe with driver musb-sunxi failed with error -22
+
+==============================================================
+ IVI3D A33 RESCUE  (kernel 6.18.62-ivi3d-rescue, running from RAM)
+==============================================================
+ eMMC : NOT FOUND
+ SD   : /dev/mmcblk0  data partition mounted rw at /mnt/sd
+
+ READ-ONLY commands : ivi-status  ivi-verify  ivi-image-check  ivi-ums-ro
+ SD-ONLY writes     : ivi-backup  ivi-prep-p7
+ eMMC WRITES        : ivi-restore-part  ivi-restore-full  ivi-fsck-p7
+                      (each asks for a typed confirmation and checks MD5 first)
+ Leave              : ivi-off   (sync + power off; nothing was written unless you ran a write command)
+ Docs               : RESCUE.md on the build zip; 'ivi-help' here
+==============================================================
+
+Please press Enter to activate this console. 
+
+==============================================================
+ IVI3D A33 RESCUE  (kernel 6.18.62-ivi3d-rescue, running from RAM)
+==============================================================
+ eMMC : NOT FOUND
+ SD   : /dev/mmcblk0  data partition mounted rw at /mnt/sd
+
+ READ-ONLY commands : ivi-status  ivi-verify  ivi-image-check  ivi-ums-ro
+ SD-ONLY writes     : ivi-backup  ivi-prep-p7
+ eMMC WRITES        : ivi-restore-part  ivi-restore-full  ivi-fsck-p7
+                      (each asks for a typed confirmation and checks MD5 first)
+ Leave              : ivi-off   (sync + power off; nothing was written unless you ran a write command)
+ Docs               : RESCUE.md on the build zip; 'ivi-help' here
+==============================================================
+ivi-rescue# ivi-status
+kernel     : 6.18.62-ivi3d-rescue
+cmdline    : console=ttyS0,115200 regulator_ignore_unused clk_ignore_unused rdinit=/sbin/init loglevel=4 ivi.boot=qemu
+memory     : 1029944 kB
+
+eMMC       : NOT FOUND
+
+microSD    : /dev/mmcblk0  536870912 bytes
+/dev/mmcblk0p1          507.0M     64.0M    443.0M  13% /mnt/sd
+ivi-rescue# mount -o remount,size=400m /tmp; cp /mnt/sd/bk/mmcblk0.img /tmp/emmc
+.img && losetup -P /dev/loop0 /tmp/emmc.img && sleep 1 && ls /dev/loop0p*
+[1;35m/dev/loop0p1[m  [1;35m/dev/loop0p3[m  [1;35m/dev/loop0p6[m
+[1;35m/dev/loop0p2[m  [1;35m/dev/loop0p5[m  [1;35m/dev/loop0p7[m
+ivi-rescue# export IVI_TEST_EMMC=loop0 IVI_TEST_SD=mmcblk0 IVI_TEST_KNOWN=/mnt/s
+d/test-known.txt
+ivi-rescue# . /usr/lib/ivi/common.sh; ivi_find_devices; ivi_lock_emmc
+TEST MODE: IVI_TEST_EMMC=loop0
+ivi-rescue# blockdev --getro /dev/loop0; blockdev --getro /dev/loop0p7
+1
+1
+ivi-rescue# dd if=/dev/zero of=/dev/loop0p7 bs=1k count=1
+dd: error writing '/dev/loop0p7': Operation not permitted
+1+0 records in
+0+0 records out
+0 bytes (0B) copied, 0.001534 seconds, 0B/s
+ivi-rescue# echo RC=$?
+RC=1
+ivi-rescue# dd if=/dev/zero of=/dev/loop0 bs=1k count=1
+dd: error writing '/dev/loop0': Operation not permitted
+1+0 records in
+0+0 records out
+0 bytes (0B) copied, 0.000397 seconds, 0B/s
+ivi-rescue# echo RC=$?
+RC=1
+ivi-rescue# ivi-verify
+TEST MODE: IVI_TEST_EMMC=loop0
+
+---- RISK: R0 read-only. Reads the whole eMMC (about 4 GB, several minutes). ----
+
+user area: hashing 67108864 bytes ...
+user area: 233eb12559d3ef8361cd188521100f32  MATCH backup (eMMC is byte-identical to the 2026-11-07 image)
+ivi-rescue# ivi-image-check /mnt/sd/bk/mmcblk0.img
+TEST MODE: IVI_TEST_EMMC=loop0
+
+---- RISK: R0 read-only (image attached with losetup -r). ----
+
+size : 67108864  OK
+md5  : hashing ...
+md5  : 233eb12559d3ef8361cd188521100f32  MATCH known backup
+layout vs /dev/loop0:
+  p1  start/size (sectors): 2048 40960  (match)
+  p2  start/size (sectors): 43008 8192  (match)
+  p5  start/size (sectors): 53248 2048  (match)
+  p6  start/size (sectors): 57344 8192  (match)
+  p7  start/size (sectors): 67584 63488  (match)
+layout: identical
+p7   : journal NEEDS RECOVERY (run ivi-prep-p7 before restoring p7 from this image)
+ivi-rescue# ivi-restore-part p7 --from-image /mnt/sd/bk/mmcblk0.img
+TEST MODE: IVI_TEST_EMMC=loop0
+checking full image MD5 first ...
+image md5 233eb12559d3ef8361cd188521100f32 OK
+  p1  start/size (sectors): 2048 40960  (match)
+  p2  start/size (sectors): 43008 8192  (match)
+  p5  start/size (sectors): 53248 2048  (match)
+  p6  start/size (sectors): 57344 8192  (match)
+  p7  start/size (sectors): 67584 63488  (match)
+ERROR: p7 source has an unreplayed journal. Run ivi-prep-p7 first and restore its output.
+ivi-rescue# blockdev --setrw /dev/loop0; blockdev --setrw /dev/loop0p6; dd if=/d
+ev/zero of=/dev/loop0p6 bs=1M count=1 conv=fsync; . /usr/lib/ivi/common.sh; ivi_
+find_devices; ivi_lock_emmc
+1+0 records in
+1+0 records out
+1048576 bytes (1.0MB) copied, 0.037087 seconds, 27.0MB/s
+TEST MODE: IVI_TEST_EMMC=loop0
+ivi-rescue# ivi-restore-part p6 --from-image /mnt/sd/bk/mmcblk0.img
+TEST MODE: IVI_TEST_EMMC=loop0
+checking full image MD5 first ...
+image md5 233eb12559d3ef8361cd188521100f32 OK
+  p1  start/size (sectors): 2048 40960  (match)
+  p2  start/size (sectors): 43008 8192  (match)
+  p5  start/size (sectors): 53248 2048  (match)
+  p6  start/size (sectors): 57344 8192  (match)
+  p7  start/size (sectors): 67584 63488  (match)
+
+---- RISK: W3 WRITES the eMMC partition /dev/loop0p6 (4194304 bytes). Other partitions stay read-only. ----
+
+  source : /dev/loop1p6
+  md5    : e6b2e0887e7b4275f7b22a27941dd6bf
+  target : /dev/loop0p6 (start sector 57344)
+
+To continue, type exactly:   WRITE p6 e6b2e088
+> wrong phrase
+Aborted (confirmation did not match). Nothing was written.
+ivi-rescue# blockdev --getro /dev/loop0p6
+1
+ivi-rescue# ivi-restore-part p6 --from-image /mnt/sd/bk/mmcblk0.img
+TEST MODE: IVI_TEST_EMMC=loop0
+checking full image MD5 first ...
+image md5 233eb12559d3ef8361cd188521100f32 OK
+  p1  start/size (sectors): 2048 40960  (match)
+  p2  start/size (sectors): 43008 8192  (match)
+  p5  start/size (sectors): 53248 2048  (match)
+  p6  start/size (sectors): 57344 8192  (match)
+  p7  start/size (sectors): 67584 63488  (match)
+
+---- RISK: W3 WRITES the eMMC partition /dev/loop0p6 (4194304 bytes). Other partitions stay read-only. ----
+
+  source : /dev/loop2p6
+  md5    : e6b2e0887e7b4275f7b22a27941dd6bf
+  target : /dev/loop0p6 (start sector 57344)
+
+To continue, type exactly:   WRITE p6 e6b2e088
+> WRITE p6 e6b2e088
+writing ...
+read-back verify ...
+VERIFIED: /dev/loop0p6 md5 e6b2e0887e7b4275f7b22a27941dd6bf
+ivi-rescue# blockdev --getro /dev/loop0p6; blockdev --getro /dev/loop0
+1
+1
+ivi-rescue# ivi-prep-p7 /mnt/sd/bk/mmcblk0.img /mnt/sd/work
+
+---- RISK: W1 writes a new file on the microSD only. ----
+
+checking source image MD5 ...
+image md5 233eb12559d3ef8361cd188521100f32 OK
+extracting p7 (32505856 bytes) -> /mnt/sd/work/p7_prepped_233eb125.img
+raw p7 md5 4b8792019d798d59c9f24f43c8e1ba53 (matches image)
+e2fsck -fy on the SD copy (journal replay) ...
+e2fsck 1.47.3 (8-Jul-2025)
+rootfs: recovering journal
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+rootfs: 34/7936 files (0.0% non-contiguous), 3850/31744 blocks
+prepped p7: /mnt/sd/work/p7_prepped_233eb125.img  md5 0065767511d9864b7a25ee95ca09f1c6
+restore it with: ivi-restore-part p7 /mnt/sd/work/p7_prepped_233eb125.img
+ivi-rescue# mkdir -p /mnt/sd/work; ls /mnt/sd/work
+[1;32mp7_prepped_233eb125.img[m             [1;32mp7_prepped_233eb125.img.md5[m
+[1;32mp7_prepped_233eb125.img.e2fsck.log[m  [1;32mp7_prepped_233eb125.img.prepped[m
+ivi-rescue# ivi-restore-part p7 $(ls /mnt/sd/work/p7_prepped_*.img)
+TEST MODE: IVI_TEST_EMMC=loop0
+checking source MD5 first ...
+source md5 0065767511d9864b7a25ee95ca09f1c6 OK
+
+---- RISK: W3 WRITES the eMMC partition /dev/loop0p7 (32505856 bytes). Other partitions stay read-only. ----
+
+  source : /mnt/sd/work/p7_prepped_233eb125.img
+  md5    : 0065767511d9864b7a25ee95ca09f1c6
+  target : /dev/loop0p7 (start sector 67584)
+
+To continue, type exactly:   WRITE p7 00657675
+> WRITE p7 00657675
+writing ...
+read-back verify ...
+VERIFIED: /dev/loop0p7 md5 0065767511d9864b7a25ee95ca09f1c6
+ivi-rescue# dumpe2fs -h /dev/loop0p7 2>/dev/null | grep features
+Filesystem features:      has_journal ext_attr resize_inode dir_index orphan_file filetype extent 64bit flex_bg metadata_csum_seed sparse_super large_file huge_file dir_nlink extra_isize metadata_csum
+Journal features:         (none)
+ivi-rescue# blockdev --setrw /dev/loop0; dd if=/dev/urandom of=/dev/loop0 bs=1M 
+count=8 conv=fsync; blockdev --setro /dev/loop0
+8+0 records in
+8+0 records out
+8388608 bytes (8.0MB) copied, 3.042397 seconds, 2.6MB/s
+ivi-rescue# ivi-restore-full /mnt/sd/bk/mmcblk0.img
+TEST MODE: IVI_TEST_EMMC=loop0
+checking image MD5 first (about 4 GB) ...
+image md5 233eb12559d3ef8361cd188521100f32 = known 2026-11-07 backup
+
+---- RISK: W4 OVERWRITES THE ENTIRE eMMC USER AREA, bootloaders included. ----
+
+If power is lost during this write the board will not boot from eMMC until it is
+rewritten (from FEL or microSD). Keep power stable. Takes several minutes.
+
+No ivi-backup-* folder on this SD: the CURRENT eMMC contents have not been saved.
+
+To continue, type exactly:   NO CURRENT BACKUP
+> NO CURRENT BACKUP
+
+To continue, type exactly:   RESTORE FULL EMMC 233eb125
+> RESTORE FULL EMMC 233eb125
+writing 67108864 bytes ...
+TEST MODE: IVI_TEST_EMMC=loop0
+read-back verify ...
+VERIFIED: eMMC user area md5 233eb12559d3ef8361cd188521100f32
+Next: the restored p7 still carries the backup's unreplayed journal. Run ivi-fsck-p7
+(the stock ramdisk would also run e2fsck -y on first boot).
+ivi-rescue# ivi-verify
+TEST MODE: IVI_TEST_EMMC=loop0
+
+---- RISK: R0 read-only. Reads the whole eMMC (about 4 GB, several minutes). ----
+
+user area: hashing 67108864 bytes ...
+user area: 233eb12559d3ef8361cd188521100f32  MATCH backup (eMMC is byte-identical to the 2026-11-07 image)
+ivi-rescue# ivi-fsck-p7
+TEST MODE: IVI_TEST_EMMC=loop0
+
+---- RISK: R0 first: e2fsck -fn (read-only report) ----
+
+e2fsck 1.47.3 (8-Jul-2025)
+Warning: skipping journal recovery because doing a read-only filesystem check.
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+rootfs: 34/7936 files (0.0% non-contiguous), 3850/31744 blocks
+(exit 0)
+journal: NEEDS RECOVERY
+
+---- RISK: W3 WRITES /dev/loop0p7: e2fsck -fy replays the journal and repairs. ----
+
+
+To continue, type exactly:   FSCK p7
+> FSCK p7
+e2fsck 1.47.3 (8-Jul-2025)
+rootfs: recovering journal
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+rootfs: 34/7936 files (0.0% non-contiguous), 3850/31744 blocks
+e2fsck exit code 0 (0 = clean, 1 = fixed, 2+ = see output)
+ivi-rescue# dumpe2fs -h /dev/loop0p7 2>/dev/null | grep features
+Filesystem features:      has_journal ext_attr resize_inode dir_index orphan_file filetype extent 64bit flex_bg metadata_csum_seed sparse_super large_file huge_file dir_nlink extra_isize metadata_csum
+Journal features:         (none)
+ivi-rescue# ivi-backup
+TEST MODE: IVI_TEST_EMMC=loop0
+
+---- RISK: W1 writes the microSD only. eMMC stays read-only (ro=1). ----
+
+Destination: /mnt/sd/ivi-backup-1
+Proceed? [y/N] y
+copy user area (67108864 bytes) ...
+verify: hashing device and copies ...
+  mmcblk0.img : 72553b33e693bbe3e650ebf5e66665c8 OK
+Backup complete and verified: /mnt/sd/ivi-backup-1
+This backup can contain credentials (password hash, Wi-Fi config). Keep it off the repo.
+ivi-rescue# cat /mnt/sd/ivi-backup-1/images.md5; ls /mnt/sd/ivi-backup-1
+72553b33e693bbe3e650ebf5e66665c8  mmcblk0.img
+[1;32mdd.log[m           [1;32mlayout.txt[m       [1;32mmmcblk0.img.md5[m
+[1;32mimages.md5[m       [1;32mmmcblk0.img[m      [1;32msource.md5[m
+ivi-rescue# echo "RESTORE FULL EMMC x" | ivi-restore-full /mnt/sd/bk/mmcblk0.img
+TEST MODE: IVI_TEST_EMMC=loop0
+checking image MD5 first (about 4 GB) ...
+image md5 233eb12559d3ef8361cd188521100f32 = known 2026-11-07 backup
+
+---- RISK: W4 OVERWRITES THE ENTIRE eMMC USER AREA, bootloaders included. ----
+
+If power is lost during this write the board will not boot from eMMC until it is
+rewritten (from FEL or microSD). Keep power stable. Takes several minutes.
+ERROR: refusing: no interactive terminal for confirmation
+ivi-rescue# ivi-restore-part p5 /tmp/x
+ERROR: only p6 or p7 can be restored with this command
+ivi-rescue# tail -5 /mnt/sd/ivi-rescue-logs/session.log
+[111.23s] Backup complete and verified: /mnt/sd/ivi-backup-1
+[111.52s] checking image MD5 first (about 4 GB) ...
+[125.07s] image md5 233eb12559d3ef8361cd188521100f32 = known 2026-11-07 backup
+[125.13s] ERROR: refusing: no interactive terminal for confirmation
+[125.34s] ERROR: only p6 or p7 can be restored with this command
+ivi-rescue# sync; umount /mnt/sd
+umount: can't unmount /mnt/sd: Device or resource busy
+ivi-rescue# 

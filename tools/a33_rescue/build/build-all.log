@@ -1,0 +1,12 @@
+/workspace/a33_build/src/linux-6.18.62.tar.xz: OK
+/workspace/a33_build/src/busybox-1.37.0.tar.bz2: OK
+/workspace/a33_build/src/e2fsprogs-1.47.3.tar.xz: OK
+shell/hush.c: In function ‘expand_one_var’:
+shell/hush.c:6642:15: warning: ‘exp_word’ is used uninitialized [-Wuninitialized]
+ 6642 |         char *exp_word = exp_word; /* for compiler */
+      |               ^~~~~~~~
+shell/hush.c:6642:15: note: ‘exp_word’ was declared here
+ 6642 |         char *exp_word = exp_word; /* for compiler */
+      |               ^~~~~~~~
+SD image: /workspace/a33_rescue_20261110/out/ivi-rescue-sd-64M.img
+BUILD OK -> /workspace/a33_rescue_20261110/out

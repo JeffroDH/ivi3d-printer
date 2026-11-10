@@ -1,0 +1,77 @@
+# IVI3D rescue U-Boot: applied on top of Sinlinx_SinA33_defconfig (U-Boot v2026.10).
+# Goal: U-Boot cannot write to any MMC device, never saves an environment,
+# never scans the eMMC for boot files, and only boots the rescue system
+# from RAM (FEL) or from the microSD card's first partition.
+
+# DRAM: match the stock IVI boot0 [dram_para] (408 MHz, ZQ 0x3bbb, ODT on).
+CONFIG_DRAM_CLK=408
+CONFIG_DRAM_ZQ=15291
+CONFIG_DRAM_ODT_EN=y
+
+# PMIC (AXP223): match stock [power_sply] where it is set; others = A33 defaults.
+CONFIG_AXP_DCDC1_VOLT=3000
+CONFIG_AXP_DCDC2_VOLT=1100
+CONFIG_AXP_DCDC3_VOLT=1200
+CONFIG_AXP_DCDC5_VOLT=1500
+CONFIG_AXP_ALDO2_VOLT=2500
+CONFIG_AXP_ALDO3_VOLT=3000
+
+# No storage writes from U-Boot at all.
+# CONFIG_MMC_WRITE is not set
+# CONFIG_SPL_MMC_WRITE is not set
+# CONFIG_SUPPORT_EMMC_BOOT is not set
+# CONFIG_CMD_GPT is not set
+# CONFIG_CMD_ERASEENV is not set
+# CONFIG_CMD_SAVEENV is not set
+# CONFIG_CMD_FAT_WRITE is not set
+# CONFIG_FAT_WRITE is not set
+# CONFIG_CMD_EXT4_WRITE is not set
+# CONFIG_EXT4_WRITE is not set
+CONFIG_ENV_IS_NOWHERE=y
+# CONFIG_ENV_IS_IN_MMC is not set
+# CONFIG_ENV_IS_IN_FAT is not set
+# CONFIG_ENV_IS_IN_EXT4 is not set
+# CONFIG_ENV_IS_IN_SPI_FLASH is not set
+
+# No flashing gadgets, no EFI (EFI variable store could write a FAT file).
+# CONFIG_CMD_FASTBOOT is not set
+# CONFIG_USB_FUNCTION_FASTBOOT is not set
+# CONFIG_FASTBOOT is not set
+# CONFIG_CMD_DFU is not set
+# CONFIG_DFU is not set
+# CONFIG_DFU_RAM is not set
+# CONFIG_EFI_LOADER is not set
+# CONFIG_CMD_BOOTEFI is not set
+
+# UMS (read-only via patch u-boot-0001) for imaging from a host.
+CONFIG_CMD_USB_MASS_STORAGE=y
+CONFIG_USB_FUNCTION_MASS_STORAGE=y
+CONFIG_USB_MUSB_GADGET=y
+
+# No LCD init (IVI panel differs from the SinA33 reference panel).
+# CONFIG_VIDEO is not set
+# CONFIG_VIDEO_SUNXI is not set
+# CONFIG_DM_VIDEO is not set
+
+# No network boot paths.
+# CONFIG_NET is not set
+# CONFIG_CMD_NET is not set
+# CONFIG_CMD_PXE is not set
+# CONFIG_CMD_DHCP is not set
+
+# Fixed boot command: FEL script in RAM, else ivi-rescue.scr on microSD p1, else prompt.
+# CONFIG_BOOTSTD_DEFAULTS is not set
+# CONFIG_BOOTSTD_BOOTCOMMAND is not set
+# CONFIG_DISTRO_DEFAULTS is not set
+CONFIG_USE_BOOTCOMMAND=y
+CONFIG_BOOTCOMMAND="echo '== IVI3D rescue U-Boot (read-only MMC build) =='; if test -n \"${fel_booted}\" && test -n \"${fel_scriptaddr}\"; then echo '(FEL boot) sourcing script from RAM'; source ${fel_scriptaddr}; fi; if test -e mmc 0:1 ivi-rescue.scr; then load mmc 0:1 ${scriptaddr} ivi-rescue.scr && source ${scriptaddr}; fi; echo 'IVI3D rescue: nothing to boot. Staying at the prompt.'"
+CONFIG_BOOTDELAY=3
+CONFIG_LOCALVERSION="-ivi3d-rescue"
+# CONFIG_LOCALVERSION_AUTO is not set
+
+# Never power up / enumerate the USB host side (GL850G hub -> CH340 -> STM32).
+CONFIG_PREBOOT=""
+# CONFIG_USB_KEYBOARD is not set
+# CONFIG_USB_EHCI_HCD is not set
+# CONFIG_USB_OHCI_HCD is not set
+# CONFIG_USB_STORAGE is not set

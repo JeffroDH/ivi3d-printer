@@ -1,0 +1,36 @@
+#!/bin/sh
+# [W4 eMMC] Write a full backup image over the whole eMMC user area
+# (MBR, stock boot0 at 8 KiB, U-Boot at sector 38192, env, kernel, rootfs, UDISK).
+. /usr/lib/ivi/common.sh
+img="$1"; [ -f "$img" ] || die "usage: ivi-restore-full /mnt/sd/path/mmcblk0.img"
+ivi_find_devices; [ -n "$EMMC" ] || die "eMMC not found"
+ivi_mounted $EMMC && die "an eMMC partition is mounted; refusing"
+eb=$(ivi_bytes $EMMC); sz=$(file_bytes "$img")
+[ "$sz" = "$eb" ] || die "image is $sz bytes but the eMMC user area is $eb bytes; refusing"
+say "checking image MD5 first (about 4 GB) ..."
+m=$(md5_of "$img"); k=$(known_md5 mmcblk0.img)
+side=""; [ -f "$img.md5" ] && side=$(cut -d' ' -f1 "$img.md5")
+if [ "$m" = "$k" ]; then say "image md5 $m = known 2026-11-07 backup"
+elif [ -n "$side" ] && [ "$m" = "$side" ]; then say "image md5 $m = its sidecar ($img.md5)"
+else die "image MD5 $m matches neither the known backup ($k) nor a sidecar"; fi
+risk "W4 OVERWRITES THE ENTIRE eMMC USER AREA, bootloaders included."
+echo "If power is lost during this write the board will not boot from eMMC until it is"
+echo "rewritten (from FEL or microSD). Keep power stable. Takes several minutes."
+ls -d $SD_MNT/ivi-backup-* >/dev/null 2>&1 || {
+	echo; echo "No ivi-backup-* folder on this SD: the CURRENT eMMC contents have not been saved."
+	confirm_typed "NO CURRENT BACKUP"; }
+relock_on_exit
+confirm_typed "RESTORE FULL EMMC $(echo $m | cut -c1-8)"
+blockdev --setrw /dev/$EMMC || die "could not enable writes"
+say "writing $sz bytes ..."
+dd if="$img" of=/dev/$EMMC bs=1M conv=fsync 2>/tmp/dd.err; rc=$?
+blockdev --setro /dev/$EMMC; sync
+[ $rc -eq 0 ] || { cat /tmp/dd.err; die "dd failed rc=$rc. eMMC is PARTIALLY written. Re-run this command."; }
+blockdev --flushbufs /dev/$EMMC 2>/dev/null; echo 3 > /proc/sys/vm/drop_caches
+blockdev --rereadpt /dev/$EMMC 2>/dev/null
+ivi_find_devices; ivi_lock_emmc
+say "read-back verify ..."
+back=$(md5_of /dev/$EMMC $sz)
+[ "$back" = "$m" ] && say "VERIFIED: eMMC user area md5 $back" || die "READ-BACK MISMATCH: $back != $m"
+echo "Next: the restored p7 still carries the backup's unreplayed journal. Run ivi-fsck-p7"
+echo "(the stock ramdisk would also run e2fsck -y on first boot)."

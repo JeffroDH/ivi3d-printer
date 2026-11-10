@@ -1,0 +1,33 @@
+#!/bin/sh
+# [W1 SD] Extract p7 (rootfs) from a full backup image onto the SD and replay its journal.
+# The original image is attached read-only and never modified. Writes ONLY the SD.
+. /usr/lib/ivi/common.sh
+img="$1"; [ -f "$img" ] || die "usage: ivi-prep-p7 IMG [OUTDIR]"
+out="${2:-$(dirname "$img")}"
+case "$out" in $SD_MNT/*) ;; *) die "output must be on the microSD ($SD_MNT/...)";; esac
+risk "W1 writes a new file on the microSD only."
+mkdir -p "$out" || die "cannot create $out"
+say "checking source image MD5 ..."
+m=$(md5_of "$img"); k=$(known_md5 mmcblk0.img)
+side=""; [ -f "$img.md5" ] && side=$(cut -d' ' -f1 "$img.md5")
+[ "$m" = "$k" ] || [ -n "$side" -a "$m" = "$side" ] || die "image MD5 $m matches neither the known backup nor a sidecar .md5"
+say "image md5 $m OK"
+l=$(loop_ro "$img") || die "could not attach image"; [ -b /dev/${l}p7 ] || { losetup -d /dev/$l; die "image has no p7"; }
+pb=$(ivi_bytes ${l}p7)
+work="$out/p7_prepped_$(echo $m | cut -c1-8).img"
+say "extracting p7 ($pb bytes) -> $work"
+dd if=/dev/${l}p7 of="$work" bs=1M conv=fsync 2>/dev/null || { losetup -d /dev/$l; die "extract failed"; }
+raw=$(md5_of /dev/${l}p7 $pb); losetup -d /dev/$l
+[ "$(md5_of "$work")" = "$raw" ] || die "extracted copy does not match the image's p7"
+say "raw p7 md5 $raw (matches image)"
+say "e2fsck -fy on the SD copy (journal replay) ..."
+e2fsck -fy "$work" > "$work.e2fsck.log" 2>&1; rc=$?
+cat "$work.e2fsck.log"
+[ $rc -le 1 ] || die "e2fsck exit $rc on the work copy; do not restore it"
+needs_recovery "$work" && die "journal still needs recovery after e2fsck"
+e2fsck -fn "$work" >> "$work.e2fsck.log" 2>&1 || say "note: second e2fsck -fn reported issues; see log"
+p=$(md5_of "$work"); echo "$p  $(basename "$work")" > "$work.md5"
+echo "source_image_md5=$m raw_p7_md5=$raw prepped_md5=$p e2fsck_rc=$rc" > "$work.prepped"
+sync
+say "prepped p7: $work  md5 $p"
+say "restore it with: ivi-restore-part p7 $work"
