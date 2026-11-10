@@ -1,0 +1,5 @@
+# IVI3D rescue: busybox init. No getty, no login, nothing from the eMMC.
+::sysinit:/etc/rescue-init.sh
+::askfirst:-/bin/sh -l
+::ctrlaltdel:/sbin/reboot
+::shutdown:/bin/sync

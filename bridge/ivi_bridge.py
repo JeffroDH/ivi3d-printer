@@ -11,7 +11,7 @@ Commands:  serve | send FILE | postprocess FILE | watch DIR      (see --help)
 License: CC BY-NC-SA 4.0 (same as the repo).
 """
 import argparse, bisect, email.parser, fnmatch, html, secrets, select, subprocess, email.policy, glob, json, os, re, shutil, sys, tempfile, threading, time
-import urllib.error, urllib.parse, urllib.request, uuid, base64, collections
+import urllib.error, urllib.parse, urllib.request, uuid, base64, collections, unicodedata
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 try:
     import fcntl, termios          # macOS / Linux: raw serial without pyserial
@@ -88,6 +88,7 @@ DEFAULT_CONFIG = {
     "timelapse_dir": os.path.join(_data_dir(), "timelapse"),
     "timelapse_fps": 15,
     "history_file": os.path.join(_data_dir(), "history.json"),
+    "wifi_names_file": os.path.join(_data_dir(), "wifi_names.json"),  # printer name -> original name (Wi-Fi uploads)
     "macros_file": os.path.join(_cfg_dir(), "macros.json"),
     "backup_dir": os.path.join(_cfg_dir(), "backups"),
     "temp_history_s": 1800,             # temperature graph window
@@ -107,7 +108,7 @@ def load_config(path=None):
             cfg.update(json.load(f))
     if os.environ.get("IVI_PRINTER_TOKEN"):
         cfg["printer_token"] = os.environ["IVI_PRINTER_TOKEN"]
-    for k in ("spool_dir", "timelapse_dir", "history_file", "macros_file", "backup_dir"):
+    for k in ("spool_dir", "timelapse_dir", "history_file", "macros_file", "backup_dir", "wifi_names_file"):
         cfg[k] = os.path.expanduser(cfg[k])
     return cfg
 
@@ -212,6 +213,75 @@ def encode_multipart(fields, files):
     out.append(f"--{b}--\r\n".encode())
     return b"".join(out), f"multipart/form-data; boundary={b}"
 
+# Names the printer's upload route accepts (printer_http_api.so file_upload() at 0x1186c, kore 4.x):
+#   kore_split_string(name, ".", parts, 3) keeps the first TWO non-empty "."-separated pieces, and the second
+#   must be exactly "gcode", "cnc" or "nc" (strcmp, case-sensitive); otherwise 412 "File type error".
+#   So "cube.gcode" works but "Cube_0.2mm_PLA.gcode", "x.GCODE" and "x.g" do not. The name is strcpy'd
+#   into a 128-byte buffer and appended unchecked to "/userdata/WifiFile/"; an existing file is overwritten.
+# The bridge sends a stricter form: <stem>.<ext>, stem of [A-Za-z0-9_-] only, one dot, <= 100 bytes.
+WIFI_EXTS = ("gcode", "cnc", "nc")
+WIFI_EXT_ALIASES = {"g": "gcode", "gco": "gcode", "gc": "gcode", "ngc": "nc", "tap": "nc"}
+WIFI_NAME_MAX = 100
+_WIFI_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+\.(gcode|cnc|nc)$")
+
+def wifi_name_ok(name):
+    """True if `name` is already in the form the bridge sends (and kore accepts)."""
+    return bool(name) and len(name.encode()) <= WIFI_NAME_MAX and bool(_WIFI_NAME_RE.match(name))
+
+def wifi_safe_name(name, suffix=""):
+    """'Cube_0.2mm_PLA.gcode' -> 'Cube_0-2mm_PLA.gcode'. Keeps the extension (case-folded; .g/.gco -> .gcode,
+    unknown -> .gcode), turns every other '.' and any character outside [A-Za-z0-9_-] into '-', collapses
+    runs of '-', trims to WIFI_NAME_MAX bytes including `suffix` (e.g. '-2')."""
+    base = re.split(r"[\\/]", name or "")[-1]
+    stem, dot, ext = base.rpartition(".")
+    if not dot: stem, ext = ext, ""
+    ext = ext.lower(); ext = WIFI_EXT_ALIASES.get(ext, ext)
+    if ext not in WIFI_EXTS:
+        if ext: stem = f"{stem}-{ext}" if stem else ext   # keep the unknown suffix in the name, send as .gcode
+        ext = "gcode"
+    stem = unicodedata.normalize("NFKD", stem).encode("ascii", "ignore").decode()   # 'Ünï' -> 'Uni'
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "-", stem)
+    stem = re.sub(r"-{2,}", "-", stem).strip("-") or "print"
+    stem = stem[:max(1, WIFI_NAME_MAX - len(ext) - 1 - len(suffix))].rstrip("-") or "print"
+    return f"{stem}{suffix}.{ext}"
+
+class WifiNameMap:
+    """Remembers which original name each printer-side name came from (JSON file), so two different
+    originals that sanitize to the same name don't overwrite each other on the printer (kore opens with
+    O_TRUNC). Re-sending the same original reuses its printer name, i.e. it replaces the earlier upload,
+    as before. Files put on the printer by other tools are not visible to this map."""
+    def __init__(self, path=None):
+        self.path, self.lock, self.mem = path, threading.Lock(), {}
+    def load(self):
+        if not self.path: return dict(self.mem)
+        try:
+            with open(self.path) as f: d = json.load(f)
+            return d if isinstance(d, dict) else {}
+        except (OSError, ValueError): return dict(self.mem)
+    def save(self, d):
+        self.mem = dict(d)
+        if not self.path: return
+        try:
+            os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+            tmp = self.path + ".tmp"
+            with open(tmp, "w") as f: json.dump(d, f, indent=1, sort_keys=True)
+            os.replace(tmp, self.path)
+        except OSError as e: log(f"could not save Wi-Fi name map ({e}); keeping it in memory")
+    def assign(self, original):
+        """Printer-side name for `original`; records and logs the mapping when it differs."""
+        with self.lock:
+            d = self.load()
+            cand = original if wifi_name_ok(original) else wifi_safe_name(original)
+            n = 1
+            while d.get(cand) not in (None, original):
+                n += 1; cand = wifi_safe_name(original, f"-{n}")
+            if d.get(cand) != original:
+                d[cand] = original
+                if len(d) > 2000: d = dict(list(d.items())[-2000:])
+                self.save(d)
+            if cand != original: log(f"Wi-Fi name: {original!r} -> {cand!r}")
+            return cand
+
 class WifiPrinter:
     """Upload-only client for the kore HTTP API."""
     def __init__(self, host, port, token, retries=3, timeout=30, sleep=time.sleep):
@@ -243,6 +313,8 @@ class WifiPrinter:
 
     def upload(self, path, name=None):
         name = name or os.path.basename(path)
+        if not wifi_name_ok(name):     # kore would answer 412 "File type error" (or worse); see wifi_safe_name
+            raise ValueError(f"printer would reject the file name {name!r}; use wifi_safe_name()")
         with open(path, "rb") as f:
             data = f.read()
         self._retry("connect", {"token": self.token})
@@ -1394,6 +1466,8 @@ class Bridge:
         self.console = collections.deque(maxlen=400); self.console_seq = 0; self.clock = time.time
         if self.monitor: self.monitor.on_line = lambda l: self.log_console("<", l)
         self.history = History(cfg.get("history_file") or os.path.join(cfg["spool_dir"], "..", "history.json"))
+        names_path = cfg.get("wifi_names_file") or os.path.join(cfg["spool_dir"], "..", "wifi_names.json")
+        self.wifi_names = WifiNameMap(os.path.expanduser(names_path))
         self.webcam = Webcam(cfg); self.timelapse = None; self.last_timelapse = None
         self.temps = collections.deque(maxlen=max(10, int(cfg.get("temp_history_s", 1800)) // 2))
         self.queue = []
@@ -1589,17 +1663,21 @@ class Bridge:
         self.last_file = name
         if route == "wifi":
             if self.busy(): raise RuntimeError("a USB job is already running")
-            try: self.wifi_factory().upload(path, name)
+            pname = self.wifi_names.assign(name)     # the printer only takes NAME.gcode/.nc/.cnc with one dot
+            try: self.wifi_factory().upload(path, pname)
             except Exception as e:
                 notify(self.cfg, f"Wi-Fi upload of {name} failed: {e}"); raise
-            self.lock_usb(name)
+            self.lock_usb(pname)
             try:
                 st = gcode_stats(path)
-                self.history.add({"name": name, "started": time.time(), "ended": None, "duration_s": None,
-                                  "state": "Sent to printer (Wi-Fi)", "via": "wifi", "estimate_s": st.get("time_s"),
-                                  "filament_mm": st.get("filament_mm"), "filament_g": st.get("filament_g")})
+                rec = {"name": name, "started": time.time(), "ended": None, "duration_s": None,
+                       "state": "Sent to printer (Wi-Fi)", "via": "wifi", "estimate_s": st.get("time_s"),
+                       "filament_mm": st.get("filament_mm"), "filament_g": st.get("filament_g")}
+                if pname != name: rec["printer_name"] = pname
+                self.history.add(rec)
             except Exception as e: log("history:", e)
-            m = (f"Uploaded {name} to the printer over Wi-Fi. Start it on the touch screen. "
+            shown = name if pname == name else f"{name} as {pname}"
+            m = (f"Uploaded {shown} to the printer over Wi-Fi. Start it on the touch screen. "
                  "USB controls are off until you press 'Printer idle, re-enable USB' on the Device page.")
             notify(self.cfg, m); return m
         if route == "spool":

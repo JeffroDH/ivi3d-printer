@@ -121,7 +121,7 @@ The stock slicer prepends a `;Header Start … ;Header End` block to jobs (see `
 (`M3 S<percent>` on / `M5` off per segment), CNC jobs are `.cnc` (`M3 P<percent>` / `M5`), both centre-origin.
 Decoded from IVI 3licer test files in [docs/laser_cnc_gcode.md](docs/laser_cnc_gcode.md); Fusion posts in [fusion/](fusion/README.md). Not yet run on hardware.
 
-> **Fan command.** On this firmware `M106 S0` **without `P` turns both head fans on** (`S` is ignored). IVI 3licer and Orca both emit that line meaning "fan off". Use `M107` or `M106 P0 S0`. `M106 P0` is sent only when the head class is FDM, so it does nothing on a laser or CNC head. See [docs/stm32.md](docs/stm32.md#fans).
+> **Fan command.** On this firmware `M106 S0` **without `P` turns both head fans on** (`S` is ignored). IVI 3licer and Orca both emit that line meaning "fan off". Use `M107` or `M106 P0 S0` on an FDM head. `M106 P0` is sent only when the head class is FDM, so it does nothing on a laser or CNC head. The auto heatsink-fan rule is on from boot; with a laser head it forces P1 on every second, so `M107` holds that fan off for at most about 1 s. See [docs/stm32.md](docs/stm32.md#fans).
 
 ## Firmware findings (summary)
 

@@ -66,9 +66,10 @@ Current layout is in [stm32.md](stm32.md). Short form:
 
 ### 3b. Tool-head protocol (CAN2, ID 0x12, 8-byte frames, byte0 = command) [V cmd bytes, I meaning]
 Host → head: `A0` request version/SN · `A3` request head info (type / nozzle) · `A7` query u16 (likely CNC BLDC speed) ·
-`B1 n` laser/spindle power % (ramped in 10 % steps, 300 ms apart) · `B2 0/1` hotend heater on/off ·
-`B6 u16` hotend target temp (clamped to MAXTEMP−15) · `B3 0/1` fan (head type 3) · `B4 0/1` head fan
-(auto on above 40 °C) · `B8 1/2` head power/tool enable on/off.
+`B1` laser power is a byte from a 101-entry table (S above 100 reads past it); CNC spindle power ramps in 10 % steps, 300 ms apart · `B2 0/1` tool enable (also shared with hotend on/off) ·
+`B6 u16` hotend target temp (clamped to MAXTEMP−15) · `B3 0/1` fan P0, FDM class only · `B4 0/1` fan P1, any class.
+The auto-fan rule is on from boot: FDM holds P1 on above 40 °C, and a laser head forces P1 on every second · `B8 1/2` head power/tool enable on/off.
+Current map: [stm32.md](stm32.md#fans) and [stm32.md](stm32.md#laser).
 Head → host: `A0` version/hw/SN fields · `A1` 8-byte status bitfield (7 flags + u32 + byte) · `A2` u32 ·
 `A3` 3×u16 head info · `A6` byte · `A7` u16 · `C0` byte. Head serial number is stored in EEPROM as 16 bytes with a
 CRC-16/XMODEM over 14 ("serial number check crc error").
@@ -149,7 +150,7 @@ serial at 115200, `VECT_TAB_OFFSET 0x10000` / `board_build.offset = 0x10000`, th
 **Risks:** the update path only rewrites 0x08010000+; the bootloader stays, so a bad app is normally recoverable by
 re-sending a good .supx (if the bootloader enters update mode without a working app [?]). Worst case recovery =
 SWD (ST-Link, ~$10) to reflash, *if* RDP is not set — check RDP level first and **back up the full 512 KB flash incl.
-bootloader over SWD before any experiment**. Also: laser/spindle safety (door interlock must be kept), thermal
+bootloader over SWD before any experiment**. Also: laser/spindle safety (the stock door check only prints a warning and leaves the beam on; a replacement has to decide the cut itself), thermal
 runaway now depends on CAN temp reports (must fault on CAN loss), driver fault handling.
 
 **Effort (one experienced firmware dev):** FDM-only, UI-compatible, no laser/CNC: ~3–5 weeks. Full parity incl.

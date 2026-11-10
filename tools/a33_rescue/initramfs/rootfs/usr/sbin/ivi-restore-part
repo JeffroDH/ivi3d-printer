@@ -1,0 +1,57 @@
+#!/bin/sh
+# [W3 eMMC] Restore ONE partition (p6 boot image or p7 rootfs) onto the eMMC.
+#   ivi-restore-part p6 FILE                 FILE = raw partition image with FILE.md5 next to it
+#   ivi-restore-part p6 --from-image IMG     take p6 straight out of a full backup image
+#   ivi-restore-part p7 FILE                 FILE should be the output of ivi-prep-p7
+# Refuses p7 sources whose journal still needs recovery.
+. /usr/lib/ivi/common.sh
+part="$1"; shift
+case "$part" in p6|p7) ;; *) die "only p6 or p7 can be restored with this command";; esac
+ivi_find_devices; [ -n "$EMMC" ] || die "eMMC not found"
+target=${EMMC}$part; [ -b /dev/$target ] || die "/dev/$target missing"
+tbytes=$(ivi_bytes $target)
+ivi_mounted $EMMC && die "an eMMC partition is mounted; refusing"
+loop=""
+cleanup_loop() { [ -n "$loop" ] && losetup -d /dev/$loop 2>/dev/null; }
+if [ "$1" = "--from-image" ]; then
+	img="$2"; [ -f "$img" ] || die "image not found: $img"
+	say "checking full image MD5 first ..."
+	m=$(md5_of "$img"); k=$(known_md5 mmcblk0.img)
+	side=""; [ -f "$img.md5" ] && side=$(cut -d' ' -f1 "$img.md5")
+	[ "$m" = "$k" ] || [ -n "$side" -a "$m" = "$side" ] || die "image MD5 $m matches neither known backup nor sidecar"
+	say "image md5 $m OK"
+	loop=$(loop_ro "$img") || die "could not attach image read-only"
+	same_layout $loop $EMMC || { cleanup_loop; die "image partition layout differs from the eMMC; refusing"; }
+	src=/dev/${loop}$part
+	srcmd5=$(md5_of $src $(ivi_bytes ${loop}$part))
+	srcbytes=$(ivi_bytes ${loop}$part)
+else
+	src="$1"; [ -f "$src" ] || die "source file not found"
+	[ -f "$src.md5" ] || die "missing $src.md5 (expected MD5 of the source)"
+	exp=$(cut -d' ' -f1 "$src.md5")
+	say "checking source MD5 first ..."
+	srcmd5=$(md5_of "$src"); [ "$srcmd5" = "$exp" ] || die "source MD5 $srcmd5 != $exp"
+	srcbytes=$(file_bytes "$src")
+	say "source md5 $srcmd5 OK"
+fi
+[ "$srcbytes" = "$tbytes" ] || { cleanup_loop; die "size mismatch: source $srcbytes, /dev/$target $tbytes"; }
+if [ "$part" = p7 ] && needs_recovery "$src"; then
+	cleanup_loop; die "p7 source has an unreplayed journal. Run ivi-prep-p7 first and restore its output."
+fi
+risk "W3 WRITES the eMMC partition /dev/$target ($tbytes bytes). Other partitions stay read-only."
+echo "  source : $src"
+echo "  md5    : $srcmd5"
+echo "  target : /dev/$target (start sector $(ivi_start $target))"
+short=$(echo $srcmd5 | cut -c1-8)
+relock_on_exit
+confirm_typed "WRITE $part $short"
+blockdev --setrw /dev/$EMMC && blockdev --setrw /dev/$target || die "could not enable writes"
+say "writing ..."
+dd if="$src" of=/dev/$target bs=1M conv=fsync 2>/tmp/dd.err; rc=$?
+blockdev --setro /dev/$target; blockdev --setro /dev/$EMMC; sync
+[ $rc -eq 0 ] || { cat /tmp/dd.err; cleanup_loop; die "dd failed (rc=$rc). Partition may be partially written."; }
+blockdev --flushbufs /dev/$target 2>/dev/null; echo 3 > /proc/sys/vm/drop_caches
+say "read-back verify ..."
+back=$(md5_of /dev/$target $tbytes)
+cleanup_loop
+[ "$back" = "$srcmd5" ] && say "VERIFIED: /dev/$target md5 $back" || die "READ-BACK MISMATCH: $back != $srcmd5"

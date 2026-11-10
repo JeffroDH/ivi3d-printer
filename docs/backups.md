@@ -23,10 +23,16 @@ A redacted console log from the backup session and from earlier read-only UART s
 |---|---|
 | UI binary damaged, Linux still boots | ttyS2 shell. Copy a known-good `firmware` onto `/userapp/app/IVI-Main-Controller` from a stick. Do not run the USB update package if the goal is only to replace that one file: the package copies `script/` and `printer_http_api/` before its checks |
 | Rootfs will not mount, console still reaches U-Boot or a rescue ramdisk | Restore individual partitions from the off-repo image. Do not `dd` p7 while it is the running root. Run `e2fsck` so the journal replays before relying on the copy |
-| No boot at all | FEL plus a host tool that exposes the eMMC, or a microSD boot0 that only jumps to FEL. Stock boot0+U-Boot on a card is not that rescue: `work_mode=0` does not burn, and a failed card boot is not a tested path. OTG gadget was disabled in the live capture (`enable=0`), and the micro-USB wiring is **[U]** |
+| No boot at all | [tools/a33_rescue/](../tools/a33_rescue/README.md). Safest is FEL plus a RAM boot, which writes nothing (risk **R1**). Read-only UMS and a rescue microSD are the next paths. A card the BootROM ignores falls through to a normal stock boot (**W2**). Partition restores and a full user-area write are **W3** / **W4** and stay unauthorized. Stock `work_mode=0` on a card does not burn. OTG gadget was disabled in the live capture (`enable=0`), and the micro-USB wiring is **[U]** |
 | Motion application damaged, bootloader intact, UI intact | Settings → Update Firmware with a stock package whose `firmware.supx` MD5 matches `config2.ini`. This rewrites `0x08010000` onward only. It does not restore the bootloader or the settings sectors. Entry depends on the bootloader answering `M997`, which needs a working app or a bootloader that waits on its own. The second case is **[U]**. See [stm32.md](stm32.md#update-protocol) |
 
 `saveenv`, partition restores, FEL writes, and SD/eMMC image writes need an explicit decision before anyone runs them.
+
+## A33 rescue kit
+
+[tools/a33_rescue/](../tools/a33_rescue/README.md) is the FEL and microSD kit for the routes above. The safest path is FEL plus a RAM boot: the BootROM loads the rescue system into DRAM, and the eMMC is not written. Risk labels run from **R0** (read only) to **W4** (whole user-area write). QEMU checked the userspace scripts, 24 of 24, on a stand-in disk. SPL, DRAM, FEL, the USB gadget, and EXT_CSD reads have not been run on this board. The hardware verification list in [RESCUE.md](../tools/a33_rescue/RESCUE.md) is still open.
+
+Built binaries that fit are in `tools/a33_rescue/out/`, with checksums in `SHA256SUMS`. The 64 MiB rescue card image is left out of the repo. Its sha256 stays in that file. Rebuild it from [BUILD.md](../tools/a33_rescue/BUILD.md). No eMMC image is in the repo.
 
 ## STM32
 
@@ -40,4 +46,4 @@ Two SWD reads of the 16 KiB flash matched. The image is not published here; the 
 
 ## Related
 
-[a33.md](a33.md) · [stm32.md](stm32.md) · [gd32.md](gd32.md) · [tools.md](tools.md)
+[a33.md](a33.md) · [stm32.md](stm32.md) · [gd32.md](gd32.md) · [tools.md](tools.md) · [../tools/a33_rescue/README.md](../tools/a33_rescue/README.md)

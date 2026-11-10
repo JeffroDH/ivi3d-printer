@@ -1,0 +1,42 @@
+bootcmd=echo '== IVI3D rescue U-Boot (read-only MMC build) =='; if test -n "${fel_booted}" && test -n "${fel_scriptaddr}"; then echo '(FEL boot) sourcing script from RAM'; source ${fel_scriptaddr}; fi; if test -e mmc 0:1 ivi-rescue.scr; then load mmc 0:1 ${scriptaddr} ivi-rescue.scr && source ${scriptaddr}; fi; echo 'IVI3D rescue: nothing to boot. Staying at the prompt.'
+bootdelay=3
+baudrate=115200
+loadaddr=0x42000000
+arch=arm
+cpu=armv7
+board=sunxi
+board_name=sunxi
+soc=sunxi
+stdin=serial
+stdout=serial
+stderr=serial
+bootm_size=0xa000000
+kernel_addr_r=0x42000000
+fdt_addr_r=0x43000000
+scriptaddr=0x43100000
+pxefile_addr_r=0x43200000
+fdtoverlay_addr_r=0x43300000
+ramdisk_addr_r=0x43400000
+dfu_alt_info_ram=kernel ram 0x42000000 0x1000000;fdt ram 0x43000000 0x100000;ramdisk ram 0x43400000 0x4000000
+fdtfile=sun8i-a33-sinlinx-sina33.dtb
+console=ttyS0,115200
+uuid_gpt_esp=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+uuid_gpt_system=69dad710-2ce4-4e3c-b16c-21a1d49abed3
+partitions=name=loader1,start=8k,size=32k,uuid=${uuid_gpt_loader1};name=loader2,size=984k,uuid=${uuid_gpt_loader2};name=esp,size=128M,bootable,uuid=${uuid_gpt_esp};name=system,size=-,uuid=${uuid_gpt_system};
+mmc_boot=if mmc dev ${devnum}; then devtype=mmc; run scan_dev_for_boot_part; fi
+boot_prefixes=/ /boot/
+boot_scripts=boot.scr.uimg boot.scr
+boot_script_dhcp=boot.scr.uimg
+boot_targets=fel mmc_auto 
+boot_syslinux_conf=extlinux/extlinux.conf
+boot_extlinux=sysboot ${devtype} ${devnum}:${distro_bootpart} any ${scriptaddr} ${prefix}${boot_syslinux_conf}
+scan_dev_for_extlinux=if test -e ${devtype} ${devnum}:${distro_bootpart} ${prefix}${boot_syslinux_conf}; then echo Found ${prefix}${boot_syslinux_conf}; run boot_extlinux; echo EXTLINUX FAILED: continuing...; fi
+boot_a_script=load ${devtype} ${devnum}:${distro_bootpart} ${scriptaddr} ${prefix}${script}; source ${scriptaddr}
+scan_dev_for_scripts=for script in ${boot_scripts}; do if test -e ${devtype} ${devnum}:${distro_bootpart} ${prefix}${script}; then echo Found U-Boot script ${prefix}${script}; run boot_a_script; echo SCRIPT FAILED: continuing...; fi; done
+scan_dev_for_boot=echo Scanning ${devtype} ${devnum}:${distro_bootpart}...; for prefix in ${boot_prefixes}; do run scan_dev_for_extlinux; run scan_dev_for_scripts; done;
+scan_dev_for_boot_part=if env exists distro_bootpart; then setenv devplist ${distro_bootpart}; else part list ${devtype} ${devnum} -bootable devplist; env exists devplist || setenv devplist 1; fi; for distro_bootpart in ${devplist}; do if fstype ${devtype} ${devnum}:${distro_bootpart} bootfstype; then part uuid ${devtype} ${devnum}:${distro_bootpart} distro_bootpart_uuid ; run scan_dev_for_boot; fi; done; setenv devplist
+bootcmd_fel=if test -n ${fel_booted} && test -n ${fel_scriptaddr}; then echo '(FEL boot)'; source ${fel_scriptaddr}; fi
+bootcmd_mmc0=devnum=0; run mmc_boot
+bootcmd_mmc1=devnum=1; run mmc_boot
+bootcmd_mmc_auto=if test ${mmc_bootdev} -eq 1; then run bootcmd_mmc1; run bootcmd_mmc0; elif test ${mmc_bootdev} -eq 0; then run bootcmd_mmc0; run bootcmd_mmc1; fi
+distro_bootcmd=for target in ${boot_targets}; do run bootcmd_${target}; done

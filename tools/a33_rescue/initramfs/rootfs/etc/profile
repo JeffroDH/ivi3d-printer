@@ -1,0 +1,3 @@
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PS1='ivi-rescue# '
+[ -f /tmp/ivi-banner.txt ] && cat /tmp/ivi-banner.txt

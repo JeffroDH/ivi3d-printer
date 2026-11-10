@@ -1,0 +1,7 @@
+# Reference values for the IVI3D A33 eMMC backup "IVI A33 Live Backup 20261107".
+# Format: name size_bytes md5
+# The full user-area image is the restore source; boot0/boot1 are the eMMC
+# hardware boot areas (verify-only in this toolkit, never written).
+mmcblk0.img      3959422976  400889383907f6a864e65bbea4e27c57
+mmcblk0boot0.img 2097152     50446d3316c714e8203433f714253ef8
+mmcblk0boot1.img 2097152     b2d1236c286a3c0704224fe4105eca49

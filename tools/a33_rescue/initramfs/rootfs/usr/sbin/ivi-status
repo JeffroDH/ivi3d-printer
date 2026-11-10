@@ -1,0 +1,44 @@
+#!/bin/sh
+# [R0 READ] Show what the rescue system sees. Reads only.
+. /usr/lib/ivi/common.sh
+ivi_find_devices
+echo "kernel     : $(uname -r)"
+echo "cmdline    : $(cat /proc/cmdline)"
+echo "memory     : $(awk '/MemTotal/{print $2" kB"}' /proc/meminfo)"
+echo
+if [ -n "$EMMC" ]; then
+	b=$(ivi_bytes $EMMC)
+	echo "eMMC       : /dev/$EMMC  $b bytes  ro=$(ivi_ro_state $EMMC)  name=$(cat /sys/block/$EMMC/device/name 2>/dev/null)"
+	[ "$b" = "$EMMC_EXPECT_BYTES" ] && echo "             size matches the backup image ($EMMC_EXPECT_BYTES)" \
+	                                || echo "             WARNING: size differs from backup image ($EMMC_EXPECT_BYTES)"
+	for p in $(ivi_parts $EMMC); do
+		printf "  %-12s start=%-9s sectors=%-9s ro=%s\n" "$p" "$(ivi_start $p)" "$(cat /sys/class/block/$p/size)" "$(ivi_ro_state $p)"
+	done
+	for bp in ${EMMC}boot0 ${EMMC}boot1; do
+		[ -e /dev/$bp ] && printf "  %-12s bytes=%-9s ro=%s force_ro=%s\n" "$bp" "$(ivi_bytes $bp)" "$(ivi_ro_state $bp)" "$(cat /sys/block/$bp/force_ro 2>/dev/null)"
+	done
+	# EXT_CSD via debugfs (CMD8 SEND_EXT_CSD is a read).
+	mountpoint -q /sys/kernel/debug || mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null
+	h=${EMMC#mmcblk}; f=$(ls /sys/kernel/debug/mmc$h/mmc$h:*/ext_csd 2>/dev/null | head -1)
+	if [ -n "$f" ]; then
+		x=$(cat "$f")
+		byte() { echo "$x" | cut -c$(( $1*2+1 ))-$(( $1*2+2 )); }
+		pc=$(byte 179); bbw=$(byte 177); bwp=$(byte 173); rev=$(byte 192)
+		echo "  EXT_CSD    : PARTITION_CONFIG[179]=0x$pc  BOOT_BUS_CONDITIONS[177]=0x$bbw  BOOT_WP[173]=0x$bwp  EXT_CSD_REV[192]=0x$rev"
+		en=$(( (0x$pc >> 3) & 7 ))
+		case $en in 0) d="boot disabled";; 1) d="boot from boot0";; 2) d="boot from boot1";; 7) d="boot from user area";; *) d="reserved";; esac
+		echo "               BOOT_PARTITION_ENABLE=$en ($d)   (record this; it was unknown)"
+	else
+		echo "  EXT_CSD    : not available (debugfs missing)"
+	fi
+	ivi_mounted $EMMC && echo "  WARNING: something from the eMMC is mounted:" && grep "^/dev/$EMMC" /proc/mounts
+else
+	echo "eMMC       : NOT FOUND"
+fi
+echo
+if [ -n "$SDCARD" ]; then
+	echo "microSD    : /dev/$SDCARD  $(ivi_bytes $SDCARD) bytes"
+	mountpoint -q $SD_MNT && df -h $SD_MNT | tail -1
+else
+	echo "microSD    : none"
+fi

@@ -65,6 +65,15 @@ Uninstall: `Uninstall IVI Bridge.bat` (add `-Purge` from a prompt to delete sett
 | **Upload and Print** | Streamed from the Mac over **USB serial** (`M110 N0`, then `N<n> <cmd>*<checksum>` per `ok`, resend handled; `strip_commands` applied if set) | The bridge, starting now | Live status + progress bar, Pause/Resume/Cancel on the Device page. **The Mac must stay awake (caffeinate runs) and the USB cable must stay connected until it finishes.** |
 | **Upload** | Stored on the printer over **Wi-Fi** | You, from the **touch screen** (the job runs from the printer's own storage, so the Mac can sleep) | **USB controls are turned off for that print**: opening the USB port during a stored-file print stalls it (cable plugged in alone is fine). The Device page shows a banner; press **Printer idle, re-enable USB** when the print is done or cancelled. Pause/cancel on the touch screen. |
 
+**Wi-Fi file names.** The printer only accepts `NAME.gcode`, `NAME.nc` or `NAME.cnc` with a single dot and a
+lower-case extension (it checks the text after the *first* dot), so a slicer name like `Cube_0.2mm_PLA.gcode` used to
+fail with HTTP 412 "File type error". The bridge now renames Wi-Fi uploads: extra dots and anything outside
+`A–Z a–z 0–9 _ -` become `-` (`Cube_0-2mm_PLA.gcode`), the extension is kept (`.GCODE`/`.g` → `.gcode`), and names are
+capped at 100 bytes. The touch screen shows the new name; the log, the upload message and History show both. Because the
+printer silently overwrites a file of the same name, the bridge remembers which original each name came from
+(`wifi_names.json` next to `history.json`) and adds `-2`, `-3`, … if two different originals would collide. Re-sending
+the same file replaces its earlier upload, as before. Files put on the printer by other tools aren't tracked.
+
 `"mode": "wifi"` sends both buttons over Wi-Fi; `"mode": "serial"` streams both over USB (Upload then only spools).
 
 **USB status + controls** (`"serial_monitor": true`, default): when the USB port is plugged in and free, the bridge holds it and polls `M105` + `M2007` every `monitor_interval_s` (and asks for `M2155 S<report_interval_s>` auto-reports). Orca's Device tab then shows live temps (`/api/printer`) and job state (`/api/job`; M2007 status 5 = paused). If the port is missing or owned by IVI 3licer, the bridge keeps retrying and the status page shows "USB: not connected (…)"; uploads are unaffected. Set `"serial_monitor": false` to leave the port free for IVI 3licer.

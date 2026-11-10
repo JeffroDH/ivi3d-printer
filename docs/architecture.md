@@ -55,7 +55,7 @@ A PC job on the USB-C port uses the same `M2411` codes on that port. The screen 
 
 ## Fans, in one line
 
-`M106 S0` with no `P` turns **both head fans on**. Use `M107` or `M106 P0 S0`. Full behaviour is in [stm32.md](stm32.md#fans).
+`M106 S0` with no `P` turns **both head fans on**. Use `M107` or `M106 P0 S0` on an FDM head. The auto heatsink-fan rule is on from boot, and with a laser head it forces P1 on every second. Full behaviour is in [stm32.md](stm32.md#fans).
 
 ## Hard limits
 

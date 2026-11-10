@@ -28,6 +28,7 @@ class Base(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(); t = self.tmp
         self.cfg = dict(B.DEFAULT_CONFIG, api_key="KEY", spool_dir=os.path.join(t, "jobs"), listen_port=0, notify=False,
                         history_file=os.path.join(t, "h.json"), macros_file=os.path.join(t, "m.json"),
+                        wifi_names_file=os.path.join(t, "n.json"),
                         backup_dir=os.path.join(t, "backups"), timelapse_dir=os.path.join(t, "tl"))
         os.makedirs(self.cfg["spool_dir"])
         self.ms = MonitorSerial(); self.ser = FakeSerial(); self.port = self.ms

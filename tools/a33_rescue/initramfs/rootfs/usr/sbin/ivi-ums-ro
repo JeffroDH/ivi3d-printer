@@ -1,0 +1,29 @@
+#!/bin/sh
+# [R1 USB-RO] Export the eMMC user area to a USB host over the OTG port as a
+# write-protected disk (configfs mass storage, ro=1). The block device stays ro too.
+. /usr/lib/ivi/common.sh
+G=/sys/kernel/config/usb_gadget/ivi
+case "$1" in
+start)
+	ivi_find_devices; [ -n "$EMMC" ] || die "eMMC not found"
+	ivi_lock_emmc
+	udc=$(ls /sys/class/udc 2>/dev/null | head -1); [ -n "$udc" ] || die "no USB device controller (OTG) found"
+	mkdir -p $G && cd $G || die "configfs not mounted"
+	echo 0x1d6b > idVendor; echo 0x0104 > idProduct
+	mkdir -p strings/0x409; echo "IVI3D rescue" > strings/0x409/manufacturer; echo "eMMC read-only" > strings/0x409/product
+	mkdir -p functions/mass_storage.0 configs/c.1
+	echo 1 > functions/mass_storage.0/lun.0/ro
+	echo 0 > functions/mass_storage.0/lun.0/removable
+	echo /dev/$EMMC > functions/mass_storage.0/lun.0/file
+	[ "$(cat functions/mass_storage.0/lun.0/ro)" = 1 ] || die "LUN did not go read-only; stopping"
+	ln -sf $G/functions/mass_storage.0 configs/c.1/
+	echo "$udc" > UDC
+	risk "R1 eMMC visible to the USB host as WRITE-PROTECTED (lun ro=1, blockdev ro=$(ivi_ro_state $EMMC))."
+	echo "On the Mac: diskutil list ; then image with: sudo dd if=/dev/rdiskN of=... bs=1m";;
+stop)
+	[ -d $G ] || exit 0
+	echo "" > $G/UDC 2>/dev/null; rm -f $G/configs/c.1/mass_storage.0
+	rmdir $G/configs/c.1 $G/functions/mass_storage.0 $G/strings/0x409 $G 2>/dev/null
+	echo "USB export stopped";;
+*) echo "usage: ivi-ums-ro start|stop";;
+esac

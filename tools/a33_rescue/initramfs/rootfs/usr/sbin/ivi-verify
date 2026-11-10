@@ -1,0 +1,23 @@
+#!/bin/sh
+# [R0 READ] MD5 the eMMC and compare with the known backup. Reads only.
+. /usr/lib/ivi/common.sh
+ivi_find_devices; [ -n "$EMMC" ] || die "eMMC not found"
+risk "R0 read-only. Reads the whole eMMC (about 4 GB, several minutes)."
+ivi_lock_emmc
+for bp in boot0 boot1; do
+	d=/dev/${EMMC}$bp; [ -b $d ] || continue
+	m=$(md5_of $d); k=$(known_md5 mmcblk0$bp.img)
+	[ "$m" = "$k" ] && say "$bp : $m  MATCH backup" || say "$bp : $m  DIFFERS from backup ($k)"
+done
+b=$(ivi_bytes $EMMC)
+say "user area: hashing $b bytes ..."
+m=$(md5_of /dev/$EMMC $b); k=$(known_md5 mmcblk0.img)
+if [ "$m" = "$k" ]; then say "user area: $m  MATCH backup (eMMC is byte-identical to the 2026-11-07 image)"
+else say "user area: $m  DIFFERS from backup $k (expected: the live system writes p1/p7 in normal use)"; fi
+if [ "$1" = "--parts" ]; then
+	for p in $(ivi_parts $EMMC); do
+		[ "$(cat /sys/class/block/$p/size)" -gt 2 ] || continue
+		say "  $p : $(md5_of /dev/$p $(ivi_bytes $p))"
+	done
+	echo "Compare these with: ivi-image-check IMG --parts"
+fi

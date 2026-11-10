@@ -12,7 +12,7 @@ Nothing in the stock app starts a print from the network. UDP 20050 only answers
 
 ## Upload names
 
-kore accepts a filename with **exactly one dot** and an extension of `gcode`, `cnc`, or `nc`. `cube.gcode` is stored. `benchy_0.2mm.gcode` returns **412** `File type error`. The bridge forwards the slicer's name unchanged, so a normal Orca name is rejected on Wi-Fi upload. The bridge code is intentionally unchanged; renaming before upload (the navigator's `safe_name()` replaces extra dots) is a follow-up. Full rules: [a33.md](a33.md#kore-upload-api).
+kore keeps the first two non-empty pieces of a filename split on `.`. The second piece must be exactly `gcode`, `cnc`, or `nc`, or the reply is **412** `File type error`. `cube.gcode` is stored. `benchy_0.2mm.gcode` is rejected. The bridge rewrites Wi-Fi uploads before sending them: extra dots become `-` (`Cube_0.2mm_PLA.gcode` → `Cube_0-2mm_PLA.gcode`), and a collision between two originals gets `-2`, `-3`, and so on. USB streaming keeps the original name. The navigator's `safe_name()` is the same shape of rename for its own uploads. Full rules: [a33.md](a33.md#kore-upload-api), [bridge/README.md](../bridge/README.md).
 
 ## Touch injection
 

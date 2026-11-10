@@ -41,7 +41,7 @@ How the firmware uses the header (bounds check, progress, time display) is unkno
 G90
 G21
 ; G-code START <<<
-M106 P0            ; fan / air assist on (NOT the laser)
+M106 P0            ; IVI 3licer emits this. On a laser head the firmware sends nothing
 G0 F1500           ; jog speed
 G1 F500            ; work speed
 G0 X6.00 Y-50.88   ; travel, laser off
@@ -54,15 +54,16 @@ G1 X0.25 Y-50.63
 M5
 ...
 G0 X0.00 Y0.00
-M107 P0            ; fan off
+M107 P0            ; IVI 3licer emits this. On a laser head P1 restarts within about 1 s
 ; G-code END <<<
 ```
 
 Command forms in the sample: `G0 X Y`, `G1 X Y`, `G0 F`, `G1 F`, `M3 S`, bare `M3`, `M5`, `M106 P0`, `M107 P0`.
 No arcs, no Z, no `G4`. 32,443 moves / 32,441 M-codes for a 100 × 101 mm image.
 
-Caveats: `S` appears to be **percent (0–100)**, not 0–255 or 0–1000 — inferred from `power(%): 100` → `S100`;
-not tested at other powers. Marlin normally shares one modal feed rate between G0 and G1, so whether
+`M106 P0` in these files is the slicer's fan line. The firmware has no air-assist output, and on a laser head that command sends no CAN frame. The heatsink fan is P1. The auto-fan rule is on from boot and forces P1 on every second. Detail: [stm32.md](stm32.md#fans) and [stm32.md](stm32.md#laser).
+
+Caveats: `S` is **percent (0–100)** and indexes a 101-byte table in the firmware (S1 sends `B1` 50, S100 sends 255). **S above 100 reads past that table.** What the head does with the byte is unmeasured. Marlin normally shares one modal feed rate between G0 and G1, so whether
 `G0 F1500` / `G1 F500` really give separate jog/work speeds on this firmware is unverified.
 
 ## Laser — point (dot) mode — slicer bug
@@ -172,23 +173,24 @@ commands; recovery is a power-cycle/reset [I: standard Marlin; `M999` only clear
   Even a 5 mm sideways move at the top needs +2.1 mm carriage travel.
 
 ### Laser / CNC power
-- `M3` [C, FUN_08021FB0]: head type 1 (laser [I]): `M3 S<n>` sets power n (byte, not clamped by the mainboard), bare `M3`
-  re-uses the last value; ignored for 3 s after a pause. Head type 2 (CNC [I]): `M3 S<n>` clamped to 100, enables the
-  head (CAN `B8 1`) and **ramps in 10 % steps every 300 ms**; bare `M3` re-uses the stored value. **P is never read** [C]
-  → `M3 P100` = bare `M3`. Power goes to the head as CAN `B1 <percent>` [C].
-  So S is **percent 0–100** [C for CNC clamp; I for laser, which passes the byte through].
-- `M5` [C, FUN_08022030]: laser power 0; CNC power 0 + `B8 2` (head off).
+- `M3` [C, FUN_08021FB0]: **P is never read**, so `M3 P100` is a bare `M3`.
+  Laser (class 1): `M3 S<n>` waits for queued moves, indexes the 101-byte power table, and sends CAN `B1` with that byte. S is percent 0–100. **S above 100 is clamped only to 255 and reads past the table.** Bare `M3` re-sends the last S. `M4` is the same handler. Ignored for 3 s after a pause starts. Table and the arm-at-boot `B2 01`: [stm32.md](stm32.md#laser).
+  CNC (class 2): `M3 S<n>` is clamped to 100, enables the head (CAN `B8 1`) and **ramps in 10 % steps every 300 ms**; bare `M3` re-uses the stored value.
+- `M5` [C, FUN_08022030]: laser `B1 00` (last S kept, so a later bare `M3` restores it); CNC power 0 + `B8 2` (head off).
 - `G4 P<ms> L<n>` [C, FUN_080246D0]: Marlin dwell (P ms, S s); `L` is honoured only with the laser head: `L<n>` fires at
-  power n for the dwell, bare `L` re-uses the last power. So the bogus `P896745231` really would dwell ~10 days per dot.
+  `table[n]` for the dwell, then `B1 00`. Bare `L` re-uses the last S. So the bogus `P896745231` really would dwell ~10 days per dot.
   The `G4 P45 L100` seen today is a sane 45 ms dot.
-- `M106` / `M107` [V, FUN_080256A4]: head fans are on/off over CAN, not PWM. **`M106` with no `P` turns both fans on and ignores `S`**, so `M106 S0` turns them **on**. `M107` turns both off and ignores `P`. `P0` is sent only for an FDM head (CAN `B3`); `P1` is sent for every head class (CAN `B4`). On a laser or CNC head, `M106 P0` therefore sends nothing. Use `M107` or `M106 P0 S0` to force a fan off. Detail: [stm32.md](stm32.md#fans).
+- `M106` / `M107` [V, FUN_080256A4]: head fans are on/off over CAN, not PWM. There is no air assist. **`M106` with no `P` turns both fans on and ignores `S`**, so `M106 S0` turns them **on**. `M107` turns both off and ignores `P`. `P0` is sent only for an FDM head (CAN `B3`); `P1` is sent for every head class (CAN `B4`). On a laser or CNC head, `M106 P0` sends nothing. The auto heatsink-fan rule is **on from boot**. With a laser head the 1 s tick forces P1 on, so `M107` holds for at most about 1 s unless `M2006 S0` was sent first. Detail: [stm32.md](stm32.md#fans).
 - IVI 3licer's UI parser shows `M3 P` as % and `M3 S` as S/255 % (Snapmaker convention) [C] — display only.
 
 ## Open questions (need a hardware test, low power / scrap / safety glasses)
-1. Laser `M3 S` scale (decoded as percent passed to the head; confirm) and minimum S that fires.
+1. Laser `M3 S`: the firmware sends a table byte (S1 → 50, S100 → 255), and the head's reading of that byte is unmeasured. Lowest S that marks is unmeasured. **Do not send S above 100.**
 2. Do `G0 F` and `G1 F` keep separate feeds?
 3. Does the firmware reject files whose header bounds or line counts don't match?
 4. Point mode dwell units; does `L` without `G4` do anything?
 5. CNC: confirm `M3 S<percent>` spins (decoded: S read, P ignored, 10 %/300 ms ramp — so ~3 s to full before plunging).
+6. Laser-head fan: installed at power-on, `M107` should drop P1 and the 1 s tick should bring it back; `M2006 S0` then `M107` should leave it off.
+7. Door-open prints `warning:Door opened` and leaves `B1` unchanged. Whether the touchscreen pauses is unmeasured. The bridge does not watch the warning.
+8. After a touchscreen stop (`M104 S0` → `B2 00`), whether a following laser job still fires.
 
-Fusion post processors that follow these formats: [../fusion/README.md](../fusion/README.md).
+Fusion post processors that follow these formats: [../fusion/README.md](../fusion/README.md). Proposed post changes (clamp S to 0–100, `M106 P1`, keep the auto-fan rule, drop the air-assist property) are pending a hardware test and are not in this tree.

@@ -1,0 +1,19 @@
+#!/bin/sh
+cat <<'T'
+IVI3D rescue commands (risk labels match RESCUE.md)
+
+  [R0 READ]   ivi-status                 devices, sizes, RO flags, partitions, EXT_CSD boot bytes
+  [R0 READ]   ivi-verify [--parts]       MD5 of eMMC user area + boot0/boot1 vs the known backup
+  [R0 READ]   ivi-image-check IMG        size + MD5 of a backup image, layout vs eMMC, p7 journal state
+  [R1 USB-RO] ivi-ums-ro start|stop      export eMMC to a USB host as a WRITE-PROTECTED disk
+  [W1 SD]     ivi-backup [DIR]           copy eMMC user area + boot0/boot1 to the microSD, verify MD5
+  [W1 SD]     ivi-prep-p7 IMG [DIR]      extract p7 from IMG to the SD and replay its journal (e2fsck)
+  [W3 eMMC]   ivi-restore-part p6|p7 SRC write ONE partition (typed confirmation, MD5 checked first)
+  [W3 eMMC]   ivi-fsck-p7                e2fsck -fy on the eMMC rootfs (journal replay / repair)
+  [W4 eMMC]   ivi-restore-full IMG       write the whole eMMC user area (typed confirmation, MD5 first)
+              ivi-off                    sync, unmount SD, power off
+
+Every eMMC write re-checks the image MD5, asks for a typed phrase, enables writes on
+only the target, and sets everything read-only again when it exits.
+Logs: /mnt/sd/ivi-rescue-logs/session.log (or /tmp/ivi-rescue-logs if no SD).
+T

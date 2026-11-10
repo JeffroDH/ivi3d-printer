@@ -9,3 +9,7 @@ backups/
 m503-*.txt
 history.json
 macros.json
+
+# 64 MiB rescue card image. Its sha256 stays in tools/a33_rescue/out/SHA256SUMS.
+# Rebuild with tools/a33_rescue/sdcard/make-sdcard-image.sh (see BUILD.md).
+tools/a33_rescue/out/ivi-rescue-sd-64M.img

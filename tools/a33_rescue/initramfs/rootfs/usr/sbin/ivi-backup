@@ -1,0 +1,42 @@
+#!/bin/sh
+# [W1 SD] Back up the eMMC to the microSD. Reads the eMMC; writes ONLY the SD.
+. /usr/lib/ivi/common.sh
+ivi_find_devices; [ -n "$EMMC" ] || die "eMMC not found"
+mountpoint -q $SD_MNT || ivi_mount_sd || die "no microSD data partition mounted at $SD_MNT"
+ivi_lock_emmc
+n=1; while [ -e "$SD_MNT/ivi-backup-$n" ]; do n=$((n+1)); done
+dest="${1:-$SD_MNT/ivi-backup-$n}"
+case "$dest" in $SD_MNT/*) ;; *) die "destination must be on the microSD ($SD_MNT/...)";; esac
+need=$(( $(ivi_bytes $EMMC) + 8*1048576 ))
+free=$(( $(df -k $SD_MNT | awk 'NR==2{print $4}') * 1024 ))
+[ $free -gt $need ] || die "not enough space on SD: need $need bytes, have $free"
+risk "W1 writes the microSD only. eMMC stays read-only (ro=$(ivi_ro_state $EMMC))."
+echo "Destination: $dest"
+printf "Proceed? [y/N] "; read -r a; [ "$a" = y ] || [ "$a" = Y ] || { echo aborted; exit 3; }
+mkdir -p "$dest" || die "mkdir failed"
+b=$(ivi_bytes $EMMC)
+for bp in boot0 boot1; do
+	[ -b /dev/${EMMC}$bp ] || continue
+	say "copy ${EMMC}$bp ..."
+	dd if=/dev/${EMMC}$bp of="$dest/mmcblk0$bp.img" bs=64k conv=fsync 2>>"$dest/dd.log" || die "dd $bp failed"
+done
+say "copy user area ($b bytes) ..."
+dd if=/dev/$EMMC of="$dest/mmcblk0.img" bs=1M conv=fsync 2>>"$dest/dd.log" || die "dd user area failed"
+sync
+say "verify: hashing device and copies ..."
+: > "$dest/images.md5"; : > "$dest/source.md5"
+for f in mmcblk0boot0 mmcblk0boot1; do
+	[ -f "$dest/$f.img" ] || continue
+	s=$(md5_of /dev/${EMMC}${f#mmcblk0}); c=$(md5_of "$dest/$f.img")
+	echo "$c  $f.img" >> "$dest/images.md5"; echo "$s  /dev/${EMMC}${f#mmcblk0}" >> "$dest/source.md5"
+	[ "$s" = "$c" ] && say "  $f : $c OK" || die "  $f : copy $c != device $s"
+done
+s=$(md5_of /dev/$EMMC $b); c=$(md5_of "$dest/mmcblk0.img")
+echo "$c  mmcblk0.img" >> "$dest/images.md5"; echo "$s  /dev/$EMMC" >> "$dest/source.md5"
+echo "$c  mmcblk0.img" > "$dest/mmcblk0.img.md5"
+[ "$s" = "$c" ] || die "user area: copy $c != device $s"
+say "  mmcblk0.img : $c OK"
+for p in $(ivi_parts $EMMC); do printf "%s start=%s sectors=%s\n" $p $(ivi_start $p) $(cat /sys/class/block/$p/size); done > "$dest/layout.txt"
+sync
+say "Backup complete and verified: $dest"
+echo "This backup can contain credentials (password hash, Wi-Fi config). Keep it off the repo."
