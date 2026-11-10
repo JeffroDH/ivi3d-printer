@@ -1,0 +1,4 @@
+{"n": 1, "t": 1794279968.021657, "kind": "safety", "msg": "bridge job_active=False (static False)", "png": null}
+{"n": 2, "t": 1794279968.0216973, "kind": "safety", "msg": "app print-file fds: {'/userdata/WifiFile/cube.gcode': 2} -> streaming", "png": null, "probe": {"counts": {"/userdata/WifiFile/cube.gcode": 2}, "verdict": "streaming", "streaming": ["/userdata/WifiFile/cube.gcode"], "loaded": []}}
+{"n": 3, "t": 1794279968.0217223, "kind": "abort", "msg": "refusing goto-print: the printer app is streaming /userdata/WifiFile/cube.gcode (2 open fds) - a print is running", "png": null}
+{"n": 4, "t": 1794279968.021732, "kind": "summary", "msg": "1 SSH commands, 0 taps injected: []", "png": null}

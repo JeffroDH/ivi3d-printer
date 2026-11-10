@@ -1,0 +1,22 @@
+03:06:07 #001 safety   bridge job_active=False (static False)
+03:06:07 #002 safety   app print-file fds: none -> idle
+03:06:07 #003 list     /userdata/WifiFile: 11 entries, 11 shown by the app
+03:06:07 #004 identify <home score=0.0 ref match (next 97.1)>  [004_identify.png]
+03:06:07 #005 tap      DRY wake @ (400,472) on home  [005_tap.png]
+03:06:08 #006 tap      DRY home.files @ (122,209) on home -> expect files  [006_tap.png]
+03:06:08 #007 plan     assume next screen = files
+03:06:08 #008 tap      DRY files.wifi @ (400,225) on files -> expect wifi_list
+03:06:08 #009 plan     assume next screen = wifi_list
+03:06:08 #010 tap      DRY wifi.drag @ (250,400) drag->(250,100) on wifi_list -> expect wifi_list
+03:06:08 #011 tap      DRY wifi.drag @ (250,400) drag->(250,100) on wifi_list -> expect wifi_list
+03:06:08 #012 tap      DRY wifi.drag @ (250,400) drag->(250,100) on wifi_list -> expect wifi_list
+03:06:08 #013 select   file 'benchy_0.2mm.gcode' = row 8 of 11, Make at (552,256), contentY=900
+03:06:08 #014 tap      DRY wifi.make @ (552,256) on wifi_list -> expect dialog_print
+03:06:08 #015 plan     assume next screen = dialog_print
+03:06:08 #016 tap      DRY dialog.right @ (585,345) on dialog_print -> expect dialog_plate
+03:06:08 #017 plan     assume next screen = dialog_plate
+03:06:08 #018 tap      DRY dialog.one @ (400,345) on dialog_plate -> expect status_ready
+03:06:08 #019 plan     assume next screen = status_ready
+03:06:08 #020 arrive   Start button ready for 'benchy_0.2mm.gcode' (stop-before-Start; use --start)
+03:06:08 #021 result   OK <status_ready planned>; planned: wake @ (400,472) on home | home.files @ (122,209) on home | files.wifi @ (400,225) on files | wifi.drag @ (250,400) drag->(250,100) on wifi_list | wifi.drag @ (250,400) drag->(250,100) on wifi_list | wifi.drag @ (250,400) drag->(250,100) on wifi_list | wifi.make @ (552,256) on wifi_list | dialog.right @ (585,345) on dialog_print | dialog.one @ (400,345) on dialog_plate
+03:06:08 #022 summary  3 SSH commands, 0 taps injected: []

@@ -1,0 +1,14 @@
+03:06:08 #001 safety   bridge job_active=False (static False)
+03:06:08 #002 safety   app print-file fds: none -> idle
+03:06:08 #003 list     /userdata/WifiFile: 5 entries, 4 shown by the app
+03:06:08 #004 identify <unknown score=177.0 best ref home: no ref <= 8.0>  [004_identify.png]
+03:06:08 #005 recover  unrecognised screen -> no tap, re-grab in 1.5 s  [005_recover.png]
+03:06:08 #006 identify <unknown score=177.0 best ref home: no ref <= 8.0>  [006_identify.png]
+03:06:08 #007 recover  unrecognised screen -> no tap, re-grab in 1.5 s  [007_recover.png]
+03:06:08 #008 identify <unknown score=177.0 best ref home: no ref <= 8.0>  [008_identify.png]
+03:06:08 #009 recover  unrecognised screen -> no tap, re-grab in 1.5 s  [009_recover.png]
+03:06:08 #010 identify <unknown score=177.0 best ref home: no ref <= 8.0>  [010_identify.png]
+03:06:08 #011 recover  unrecognised screen -> no tap, re-grab in 1.5 s  [011_recover.png]
+03:06:08 #012 identify <unknown score=177.0 best ref home: no ref <= 8.0>  [012_identify.png]
+03:06:08 #013 abort    screen not recognised 5 times in a row (last <unknown score=177.0 best ref home: no ref <= 8.0>); aborting
+03:06:08 #014 summary  7 SSH commands, 0 taps injected: []

@@ -181,8 +181,7 @@ commands; recovery is a power-cycle/reset [I: standard Marlin; `M999` only clear
 - `G4 P<ms> L<n>` [C, FUN_080246D0]: Marlin dwell (P ms, S s); `L` is honoured only with the laser head: `L<n>` fires at
   power n for the dwell, bare `L` re-uses the last power. So the bogus `P896745231` really would dwell ~10 days per dot.
   The `G4 P45 L100` seen today is a sane 45 ms dot.
-- `M106 P<i> [S<0-255>]` [C, FUN_080256A4]: fan index 0/1 (P > 1 ignored), default S 255; `M106` without P turns both
-  fans on; `M107` both off. In laser jobs `M106 P0` = fan/air-assist on, not the laser [C].
+- `M106` / `M107` [V, FUN_080256A4]: head fans are on/off over CAN, not PWM. **`M106` with no `P` turns both fans on and ignores `S`**, so `M106 S0` turns them **on**. `M107` turns both off and ignores `P`. `P0` is sent only for an FDM head (CAN `B3`); `P1` is sent for every head class (CAN `B4`). On a laser or CNC head, `M106 P0` therefore sends nothing. Use `M107` or `M106 P0 S0` to force a fan off. Detail: [stm32.md](stm32.md#fans).
 - IVI 3licer's UI parser shows `M3 P` as % and `M3 S` as S/255 % (Snapmaker convention) [C] — display only.
 
 ## Open questions (need a hardware test, low power / scrap / safety glasses)

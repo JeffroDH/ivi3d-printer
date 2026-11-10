@@ -1,0 +1,1303 @@
+00014454	main	0001446c	qtvirtualkeyboard
+00014454	main	00014488	QT_IM_MODULE
+00014454	main	000144e8	default
+00014454	main	0001456c	iviVersion
+00014454	main	000145c0	$portName
+00014454	main	000145f8	$wifiModel
+00014454	main	00014630	$dmModel
+00014454	main	0001466c	$globalFunction
+00014454	main	0001469c	/userapp/app/config.ini
+00014454	main	000146d0	Device
+00014454	main	000146f0	Guide
+00014454	main	00014760	default
+00014454	main	0001478c	showGuide:
+00014454	main	000147b4	NeedCalibration
+00014454	main	00014828	default
+00014454	main	00014854	NeedCalibration:
+00014454	main	000148a4	default
+00014454	main	000148d0	ver: 
+00014454	main	000148f4	version
+00014454	main	00014940	default
+00014454	main	0001496c	boardtype
+00014cb0	_GLOBAL__sub_I_FileSystemWatcher.cpp	00014ccc	/Local/
+00014d04	_GLOBAL__sub_I_qrc_qml.cpp	00014d18	H
+00014f44	QDebug::operator<<	00014f5c	true
+00014f44	QDebug::operator<<	00014f88	false
+00015754	DataModel::GetleftTimeByFileName	0001584c	No such data!
+00015754	DataModel::GetleftTimeByFileName	0001586c	No Data!
+00015a80	DataModel::roleNames	00015b54	dmFileImg
+00015a80	DataModel::roleNames	00015c10	dmName
+00015a80	DataModel::roleNames	00015ccc	dmFileSize
+00015a80	DataModel::roleNames	00015d88	dmFileModifiedTime
+00015a80	DataModel::roleNames	00015e44	dmFileCreatedTime
+00015a80	DataModel::roleNames	00015f00	dmPrintNeedTime
+00015a80	DataModel::roleNames	00015fbc	dmFileDownloadAdress
+00016a50	DataModel::append	00016a84	yyyy-MM-dd
+00016e08	DataModel::append	00016e40	yyyy-MM-dd
+000186f4	WiFiModel::roleNames	000187c8	wifimbssid
+000186f4	WiFiModel::roleNames	00018884	wifimfreq
+000186f4	WiFiModel::roleNames	00018940	wifimsignalLv
+000186f4	WiFiModel::roleNames	000189fc	wifimflags
+000186f4	WiFiModel::roleNames	00018ab8	wifimssid
+0001ae2c	FileSystemWatcher::fileUpdated	0001ae70	default
+0001ae2c	FileSystemWatcher::fileUpdated	0001ae9c	The file %1 at path %2 is updated
+0001b188	FileSystemWatcher::addWatchPath	0001b1a4	default
+0001b188	FileSystemWatcher::addWatchPath	0001b1d8	Add to watch: %1
+0001b188	FileSystemWatcher::addWatchPath	0001b318	/userdata/WifiFile/
+0001b5bc	FileSystemWatcher::deleteWatchPath	0001b5d8	default
+0001b5bc	FileSystemWatcher::deleteWatchPath	0001b60c	Delete to watch: %1
+0001b8ac	FileSystemWatcher::myProcess	0001b90c	default
+0001b8ac	FileSystemWatcher::myProcess	0001b93c	myProcess() commond exe start failed!
+0001b8ac	FileSystemWatcher::myProcess	0001b9e8	default
+0001b8ac	FileSystemWatcher::myProcess	0001ba1c	myProcess() commond exe stop failed!\n
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001bd08	blkid
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001bd30	-c
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001bd64	/dev/null
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001be3c	default
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001bea4	/dev/sd[a-z](.*)\n
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001bf0c	default
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001bf80	/dev/sd[a-z][1-9]
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001bf84	/dev/sd[a-z]
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001bf88	default
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001bfa4	%s
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001bfa8	LABEL=".*"
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001bfac	default
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001c218	%s
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001c27c	UUID=".*"
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001c358	default
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001c3c0	%s
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001c424	TYPE=".*"
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001c500	default
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001c564	%s
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001c9cc	default
+0001bcac	FileSystemWatcher::refreshUSBdeviceList	0001c9f8	Didn't find any udisk device!
+0001cc10	FileSystemWatcher::directoryUpdated	0001cc24	/Local/
+0001cc10	FileSystemWatcher::directoryUpdated	0001cc44	default
+0001cc10	FileSystemWatcher::directoryUpdated	0001cc78	Directory updated: %1
+0001cc10	FileSystemWatcher::directoryUpdated	0001cd50	/dev/
+0001cc10	FileSystemWatcher::directoryUpdated	0001cda4	default
+0001cc10	FileSystemWatcher::directoryUpdated	0001cdd0	"/Local" is not exists.
+0001cc10	FileSystemWatcher::directoryUpdated	0001cf78	default
+0001cc10	FileSystemWatcher::directoryUpdated	0001cfa4	Directory updated: %1
+0001cc10	FileSystemWatcher::directoryUpdated	0001d008	Mount: 
+0001d4a8	FileSystemWatcher::mountUsb	0001d4c8	default
+0001d4a8	FileSystemWatcher::mountUsb	0001d4d0	DeviceManager::mountUsb\n
+0001d4a8	FileSystemWatcher::mountUsb	0001d520	ntfs
+0001d4a8	FileSystemWatcher::mountUsb	0001d580	/bin/mount
+0001d4a8	FileSystemWatcher::mountUsb	0001d62c	default
+0001d4a8	FileSystemWatcher::mountUsb	0001d658	mount usb failed!
+0001d4a8	FileSystemWatcher::mountUsb	0001d6c4	/bin/mkdir
+0001d4a8	FileSystemWatcher::mountUsb	0001d7a0	default
+0001d4a8	FileSystemWatcher::mountUsb	0001d7a4	DeviceManager::mountUsb success! m_usbDevListMounted.size = %d\n
+0001d4a8	FileSystemWatcher::mountUsb	0001d82c	/Local
+0001d4a8	FileSystemWatcher::mountUsb	0001d8e4	vfat
+0001d9e0	FileSystemWatcher::umountUsb	0001d9fc	default
+0001d9e0	FileSystemWatcher::umountUsb	0001da04	DeviceManager::umountUsb\n
+0001d9e0	FileSystemWatcher::umountUsb	0001da44	/Local/
+0001d9e0	FileSystemWatcher::umountUsb	0001dab4	default
+0001d9e0	FileSystemWatcher::umountUsb	0001db10	derectory didn't not exist!
+0001d9e0	FileSystemWatcher::umountUsb	0001dbdc	/bin/umount
+0001d9e0	FileSystemWatcher::umountUsb	0001dc88	default
+0001d9e0	FileSystemWatcher::umountUsb	0001dcb8	umount usb failed!
+0001d9e0	FileSystemWatcher::umountUsb	0001dd78	rmdir
+0001d9e0	FileSystemWatcher::umountUsb	0001de10	default
+0001d9e0	FileSystemWatcher::umountUsb	0001de3c	rmdir usb derectory failed!
+0001d9e0	FileSystemWatcher::umountUsb	0001df50	default
+0001d9e0	FileSystemWatcher::umountUsb	0001df54	DeviceManager::umountUsb success! m_usbDevListMounted.size = %d\n
+0001f410	Sender::openPort	0001f49c	default
+0001f410	Sender::openPort	0001f4d0	RTS
+0001f410	Sender::openPort	0001f540	true
+0001f410	Sender::openPort	0001f568	default
+0001f410	Sender::openPort	0001f598	DTR
+0001f410	Sender::openPort	0001f608	true
+0001f410	Sender::openPort	0001f654	Connected!
+0001f410	Sender::openPort	0001f6a0	1receivedError(QSerialPort::SerialPortError)
+0001f410	Sender::openPort	0001f6a8	2error(QSerialPort::SerialPortError)
+0001f410	Sender::openPort	0001f798	false
+0001f410	Sender::openPort	0001f7a4	false
+0001f410	Sender::openPort	0001f7c8	2error(QSerialPort::SerialPortError)
+0001f410	Sender::openPort	0001f7d0	1receivedError(QSerialPort::SerialPortError)
+0001f410	Sender::openPort	0001f828	UnConnected!
+0001f958	Sender::closePort	0001f994	2error(QSerialPort::SerialPortError)
+0001f958	Sender::closePort	0001f99c	1receivedError(QSerialPort::SerialPortError)
+0001f958	Sender::closePort	0001f9f4	UnConnected!
+0001fa80	Sender::startPrinting	0001fa9c	default
+0001fa80	Sender::startPrinting	0001faa4	Sender::startPrinting\n
+0001fc70	Sender::handleWarningData	0001fc84	Drive
+0001fc70	Sender::handleWarningData	0001fcbc	locked
+0001fc70	Sender::handleWarningData	0001fd98	Tube Abnormal
+0001fc70	Sender::handleWarningData	0001fe28	Door
+0001fc70	Sender::handleWarningData	0001fe88	open
+0001fc70	Sender::handleWarningData	0001ff30	close
+0001fffc	Sender::receivedError	00020024	default
+0001fffc	Sender::receivedError	00020058	SerialPortError!->:
+0001fffc	Sender::receivedError	000200d4	SerialPortError
+00020178	Sender::okDataHandle	000201a4	ok
+00020230	Sender::sendXYZValues	00020244	 
+00020230	Sender::sendXYZValues	000202e4	Y:
+00020230	Sender::sendXYZValues	000202f4	Z:
+00020230	Sender::sendXYZValues	00020300	X:
+00020230	Sender::sendXYZValues	00020304	 
+00020230	Sender::sendXYZValues	00020310	 
+00020230	Sender::sendXYZValues	00020314	:
+00020230	Sender::sendXYZValues	000203ec	:
+00020230	Sender::sendXYZValues	00020990	 
+00020230	Sender::sendXYZValues	000209c0	:
+00020bf0	Sender::handleFirmwareMessage	00020c30	\n
+00020bf0	Sender::handleFirmwareMessage	00020cac	Tool Head
+00020bf0	Sender::handleFirmwareMessage	00020cb8	Firmware Version
+00020bf0	Sender::handleFirmwareMessage	00020cbc	SN:
+00020bf0	Sender::handleFirmwareMessage	00020ccc	SN:
+00020bf0	Sender::handleFirmwareMessage	00020cd8	V
+00021828	Sender::dataHandleBySender	00021874	NO
+00021828	Sender::dataHandleBySender	00021adc	YES
+00021828	Sender::dataHandleBySender	00021b70	true
+00021c20	Sender::handleInfoData	00021c48	info:
+00021c20	Sender::handleInfoData	00021cb4	\n
+00021c20	Sender::handleInfoData	00021d50	ok
+00021c20	Sender::handleInfoData	00021df8	default
+00021c20	Sender::handleInfoData	00021e28	---
+00021c20	Sender::handleInfoData	00021eb0	+++
+00021c20	Sender::handleInfoData	00021f14	Laser
+00021c20	Sender::handleInfoData	00021f78	Head Laser
+00021c20	Sender::handleInfoData	000220ac	CNC
+00021c20	Sender::handleInfoData	0002210c	Head CNC
+00021c20	Sender::handleInfoData	0002218c	3DP
+00021c20	Sender::handleInfoData	000221ec	 
+00021c20	Sender::handleInfoData	00022260	info:Head
+00021c20	Sender::handleInfoData	000224b8	Head 
+00022620	Sender::headDataHandle	00022634	error:No Print Head
+00022620	Sender::headDataHandle	000226c0	info:Head
+00022cf8	Sender::ChangeToUpdateMode	00022d18	M997
+00022d8c	Sender::sendNext	00023080	default
+00022d8c	Sender::sendNext	000230b0	SendNext:
+00022d8c	Sender::sendNext	00023504	\n
+00022d8c	Sender::sendNext	000238a4	default
+00022d8c	Sender::sendNext	000238d8	print gcode file finish
+00022d8c	Sender::sendNext	00023a28	default
+00022d8c	Sender::sendNext	00023a5c	print gcode file finish
+00022d8c	Sender::sendNext	00023c7c	default
+00022d8c	Sender::sendNext	00023cb0	gcodecmds.isEmpty()
+00023ef8	Sender::injectCommand	00023f0c	\n
+0002401c	Sender::rxDataHandle	0002403c	CMD buffer
+0002401c	Sender::rxDataHandle	00024040	default
+0002401c	Sender::rxDataHandle	0002405c	-- 
+0002401c	Sender::rxDataHandle	00024060	pause: ok
+0002401c	Sender::rxDataHandle	00024068	ok
+0002401c	Sender::rxDataHandle	0002406c	work: ok
+0002401c	Sender::rxDataHandle	00024404	CMD buffer
+0002401c	Sender::rxDataHandle	00024464	CMD buffer: 5
+0002401c	Sender::rxDataHandle	000244cc	Error:Printer halted
+0002401c	Sender::rxDataHandle	00024534	default
+0002401c	Sender::rxDataHandle	00024564	====>>>> 
+0002401c	Sender::rxDataHandle	000245f8	ok
+0002401c	Sender::rxDataHandle	0002492c	pause: ok
+0002401c	Sender::rxDataHandle	00024a10	T:
+0002401c	Sender::rxDataHandle	00024a40	B:
+0002401c	Sender::rxDataHandle	00024a70	@:
+0002401c	Sender::rxDataHandle	00024aa4	B@:
+0002401c	Sender::rxDataHandle	00024c20	X:
+0002401c	Sender::rxDataHandle	00024cb8	stop: ok
+0002401c	Sender::rxDataHandle	00024d40	Homed:
+0002401c	Sender::rxDataHandle	00024df0	Y:
+0002401c	Sender::rxDataHandle	00024e20	Z:
+0002401c	Sender::rxDataHandle	00024e54	E:
+0002401c	Sender::rxDataHandle	00024f30	Working Status:
+0002401c	Sender::rxDataHandle	00025130	warning:
+0002401c	Sender::rxDataHandle	00025224	error:
+0002401c	Sender::rxDataHandle	000252c4	info:Head
+0002401c	Sender::rxDataHandle	000252fc	M665
+0002401c	Sender::rxDataHandle	00025374	Firmware Version:
+0002401c	Sender::rxDataHandle	000253d4	SN:
+0002401c	Sender::rxDataHandle	00025420	Bilinear Leveling Grid:
+0002401c	Sender::rxDataHandle	00025458	true
+0002401c	Sender::rxDataHandle	00025494	Calibration OK
+0002401c	Sender::rxDataHandle	000254e0	Probing Failed
+0002401c	Sender::rxDataHandle	0002551c	false
+0002401c	Sender::rxDataHandle	00025580	z_min:
+0002401c	Sender::rxDataHandle	000255e4	Resume complete
+0002572c	Sender::receivedData	00025778	CMD buffer
+0002572c	Sender::receivedData	00025804	T:
+0002572c	Sender::receivedData	000258a4	trigger resume
+0002572c	Sender::receivedData	000258c0	Resume complete
+0002572c	Sender::receivedData	00025914	\n
+00025e48	Sender::Sender	00026014	core/senderinterval
+00025e48	Sender::Sender	000260ac	/userapp/app/config.ini
+00025e48	Sender::Sender	00026100	Device
+00026458	GlobalFuntions::noPrintHeadFoundx	0002646c	default
+00026458	GlobalFuntions::noPrintHeadFoundx	0002647c	No print head warning.
+00026520	GlobalFuntions::getBoundaryCoordinate	00026544	default
+00026520	GlobalFuntions::getBoundaryCoordinate	0002658c	[(%f, %f)]
+000266c8	GlobalFuntions::checkWiFiStatus	000266dc	wpa_cli -i wlan0 scan\n
+000267c0	GlobalFuntions::reportDebug	000267d4	\n
+000267c0	GlobalFuntions::reportDebug	00026854	\n
+000268dc	GlobalFuntions::ResumePrinting	000268fc	default
+000268dc	GlobalFuntions::ResumePrinting	00026930	ResumePrinting
+00026a04	GlobalFuntions::setUsbInsert	00026a2c	default
+00026a04	GlobalFuntions::setUsbInsert	00026a6c	setUsbInsert:
+00026ba4	GlobalFuntions::setControllerStatus	00026bb8	Status: 
+00026ba4	GlobalFuntions::setControllerStatus	00026bec	\n
+00026ba4	GlobalFuntions::setControllerStatus	00026c40	IDLE
+00026ba4	GlobalFuntions::setControllerStatus	00026c7c	IDLE
+00026ba4	GlobalFuntions::setControllerStatus	00026cdc	WORKING_PC
+00026ba4	GlobalFuntions::setControllerStatus	00026d14	WORKING_PC
+00026ba4	GlobalFuntions::setControllerStatus	00026e28	WORKING_SCREEN
+00026ba4	GlobalFuntions::setControllerStatus	00026e60	WORKING_SCREEN
+00026f00	GlobalFuntions::getProcessFromThread	00026f10	default
+00026f00	GlobalFuntions::getProcessFromThread	00026f4c	getProcessFromThread
+00026f00	GlobalFuntions::getProcessFromThread	00026fa4	,
+00027080	GlobalFuntions::ZOffsetGet	000270b4	default
+00027080	GlobalFuntions::ZOffsetGet	000270e8	M114:
+00027080	GlobalFuntions::ZOffsetGet	00027154	Z:
+000271f8	GlobalFuntions::updateHomedStatus	0002721c	default
+000271f8	GlobalFuntions::updateHomedStatus	00027250	Homed:
+000271f8	GlobalFuntions::updateHomedStatus	00027290	true
+000271f8	GlobalFuntions::updateHomedStatus	000272b8	->
+000271f8	GlobalFuntions::updateHomedStatus	000272f0	true
+000271f8	GlobalFuntions::updateHomedStatus	00027344	false
+000271f8	GlobalFuntions::updateHomedStatus	00027350	false
+00027404	GlobalFuntions::handleOkSignal	0002744c	default
+00027404	GlobalFuntions::handleOkSignal	00027478	isMotorNormal:
+00027404	GlobalFuntions::handleOkSignal	00027490	true
+00027518	GlobalFuntions::checkIsWiFiConnected	00027554	default
+00027518	GlobalFuntions::checkIsWiFiConnected	00027578	checkIsWiFiConnected:
+00027518	GlobalFuntions::checkIsWiFiConnected	000275b0	wpa_cli -i wlan0 status\n
+000276ac	GlobalFuntions::setFirmwareMeeage	00027874	default
+000276ac	GlobalFuntions::setFirmwareMeeage	000278a0	SN:
+0002790c	GlobalFuntions::getShowGuide	00027920	default
+0002790c	GlobalFuntions::getShowGuide	00027958	showGuide
+0002790c	GlobalFuntions::getShowGuide	00027998	true
+00027a10	GlobalFuntions::getNeedCalibration	00027a24	default
+00027a10	GlobalFuntions::getNeedCalibration	00027a5c	NeedCalibration
+00027a10	GlobalFuntions::getNeedCalibration	00027a9c	true
+00027be8	GlobalFuntions::setIsXYZCalibrating	00027c00	default
+00027be8	GlobalFuntions::setIsXYZCalibrating	00027c38	Set xyzCalibrating:
+00027be8	GlobalFuntions::setIsXYZCalibrating	00027c78	true
+00027cf8	GlobalFuntions::setWizardStart	00027d10	default
+00027cf8	GlobalFuntions::setWizardStart	00027d48	Set wizard start:
+00027cf8	GlobalFuntions::setWizardStart	00027d88	true
+00027e08	GlobalFuntions::setIsAutoLeveling	00027e20	default
+00027e08	GlobalFuntions::setIsAutoLeveling	00027e58	Set autoLeveling:
+00027e08	GlobalFuntions::setIsAutoLeveling	00027e98	true
+00027f18	GlobalFuntions::setIsZOffset	00027f30	default
+00027f18	GlobalFuntions::setIsZOffset	00027f68	Set zOffsetting:
+00027f18	GlobalFuntions::setIsZOffset	00027fa8	true
+00028028	GlobalFuntions::setIsHoming	00028040	default
+00028028	GlobalFuntions::setIsHoming	00028080	Set Homing:
+00028028	GlobalFuntions::setIsHoming	000280c0	true
+00028140	GlobalFuntions::setHeatingStatus	0002815c	default
+00028140	GlobalFuntions::setHeatingStatus	00028198	Set blockHeating:
+00028140	GlobalFuntions::setHeatingStatus	000281d8	true
+00028140	GlobalFuntions::setHeatingStatus	00028238	default
+00028140	GlobalFuntions::setHeatingStatus	00028260	Set blockHeatingCool:
+00028140	GlobalFuntions::setHeatingStatus	00028278	true
+00028140	GlobalFuntions::setHeatingStatus	000282bc	false
+00028314	GlobalFuntions::setIsFLayerCalibrating	0002832c	default
+00028314	GlobalFuntions::setIsFLayerCalibrating	00028364	Set layerCalibrating:
+00028314	GlobalFuntions::setIsFLayerCalibrating	000283a4	true
+00028424	GlobalFuntions::updateTouchScreenProcess	00028438	/userapp/script/CpIVI-Main-Controller.sh\n
+00028518	GlobalFuntions::clearFirmwareDir	00028528	/userapp/tmp/
+00028518	GlobalFuntions::clearFirmwareDir	00028568	default
+00028518	GlobalFuntions::clearFirmwareDir	0002859c	is temp
+000286e0	GlobalFuntions::removeWifiFile	000286e8	/userdata/WifiFile/
+000286e0	GlobalFuntions::removeWifiFile	00028734	default
+000286e0	GlobalFuntions::removeWifiFile	00028788	is temp
+00028814	GlobalFuntions::upgradeFirmwareProcess	00028834	default
+00028814	GlobalFuntions::upgradeFirmwareProcess	00028838	upgradeFirmwareProcess()
+00028a04	GlobalFuntions::setAllLeftTime	00028a28	default
+00028a04	GlobalFuntions::setAllLeftTime	00028a54	setAllLeftTime
+00028a04	GlobalFuntions::setAllLeftTime	00028c38	h
+00028a04	GlobalFuntions::setAllLeftTime	00028c4c	:
+00028a04	GlobalFuntions::setAllLeftTime	00028c7c	m
+00028a04	GlobalFuntions::setAllLeftTime	00028c90	'
+00028a04	GlobalFuntions::setAllLeftTime	00028cbc	s
+00028a04	GlobalFuntions::setAllLeftTime	00028cd0	''
+00028e08	GlobalFuntions::setAllLeftTimeBySecond	00028e24	default
+00028e08	GlobalFuntions::setAllLeftTimeBySecond	00028e58	setAllLeftTimeBySecond
+00028e08	GlobalFuntions::setAllLeftTimeBySecond	00028eec	default
+00028e08	GlobalFuntions::setAllLeftTimeBySecond	00028f44	:
+00028e08	GlobalFuntions::setAllLeftTimeBySecond	00028f94	'
+00028e08	GlobalFuntions::setAllLeftTimeBySecond	00028fd8	''
+00028e08	GlobalFuntions::setAllLeftTimeBySecond	0002906c	:
+00028e08	GlobalFuntions::setAllLeftTimeBySecond	000290a8	'
+00028e08	GlobalFuntions::setAllLeftTimeBySecond	000290e8	default
+00028e08	GlobalFuntions::setAllLeftTimeBySecond	00029114	000000000000000000 
+000292c4	GlobalFuntions::setSelectedFileName	000292d8	default
+000292c4	GlobalFuntions::setSelectedFileName	00029314	setSelectedFileName
+00029498	GlobalFuntions::setPrinterHeadInfo	000294ac	\n
+00029498	GlobalFuntions::setPrinterHeadInfo	000294f0	\n
+00029498	GlobalFuntions::setPrinterHeadInfo	00029534	ok
+00029498	GlobalFuntions::setPrinterHeadInfo	000295a0	default
+00029498	GlobalFuntions::setPrinterHeadInfo	000295cc	PrinterHeadInfo
+00029498	GlobalFuntions::setPrinterHeadInfo	0002960c	3DP
+00029498	GlobalFuntions::setPrinterHeadInfo	0002964c	default
+00029498	GlobalFuntions::setPrinterHeadInfo	00029678	3DP
+00029498	GlobalFuntions::setPrinterHeadInfo	000296b8	FDM
+00029498	GlobalFuntions::setPrinterHeadInfo	000296e4	,
+00029498	GlobalFuntions::setPrinterHeadInfo	00029754	default
+00029498	GlobalFuntions::setPrinterHeadInfo	0002989c	Laser
+00029498	GlobalFuntions::setPrinterHeadInfo	000298d8	default
+00029498	GlobalFuntions::setPrinterHeadInfo	00029904	Laser
+00029498	GlobalFuntions::setPrinterHeadInfo	0002991c	Laser
+00029498	GlobalFuntions::setPrinterHeadInfo	0002994c	ok
+00029498	GlobalFuntions::setPrinterHeadInfo	00029990	CNC
+00029498	GlobalFuntions::setPrinterHeadInfo	000299cc	default
+00029498	GlobalFuntions::setPrinterHeadInfo	000299f8	CNC
+00029498	GlobalFuntions::setPrinterHeadInfo	00029a10	CNC
+00029c30	GlobalFuntions::gcodeClean	00029c4c	Operational
+00029c8c	GlobalFuntions::sendCheckFirmwareVersionCMD	00029ca0	M2005
+00029cdc	GlobalFuntions::sendCheckPrinterHeadMessagesCMD	00029cf0	M2051
+00029d2c	GlobalFuntions::sendGetPosCMD	00029d44	default
+00029d2c	GlobalFuntions::sendGetPosCMD	00029d7c	sendGetPosCMD
+00029d2c	GlobalFuntions::sendGetPosCMD	00029dc0	M114
+00029e24	GlobalFuntions::sendGetOffsetCMD	00029e3c	default
+00029e24	GlobalFuntions::sendGetOffsetCMD	00029e74	sendGetPosCMD
+00029e24	GlobalFuntions::sendGetOffsetCMD	00029eb8	M503
+00029f1c	GlobalFuntions::sendDeleteTuningDataCMD	00029f34	default
+00029f1c	GlobalFuntions::sendDeleteTuningDataCMD	00029f6c	sendDeleteTuningDataCMD
+00029f1c	GlobalFuntions::sendDeleteTuningDataCMD	00029fb0	M502
+00029f1c	GlobalFuntions::sendDeleteTuningDataCMD	00029fd8	M500
+0002a044	GlobalFuntions::sendCNCMoveOnCMD	0002a05c	default
+0002a044	GlobalFuntions::sendCNCMoveOnCMD	0002a094	sendCNCMoveOnCMD
+0002a044	GlobalFuntions::sendCNCMoveOnCMD	0002a0d8	M3 S70
+0002a14c	GlobalFuntions::sendLaserLightOnCMD	0002a164	default
+0002a14c	GlobalFuntions::sendLaserLightOnCMD	0002a19c	sendLaserLightOnCMD
+0002a14c	GlobalFuntions::sendLaserLightOnCMD	0002a1e0	M3 S5
+0002a254	GlobalFuntions::sendLaserOrCNCOffCMD	0002a26c	default
+0002a254	GlobalFuntions::sendLaserOrCNCOffCMD	0002a2a4	sendLaserOrCNCOffCMD
+0002a254	GlobalFuntions::sendLaserOrCNCOffCMD	0002a2e8	M5
+0002a35c	GlobalFuntions::setCNCorLaserStrength	0002a380	M3 S
+0002a35c	GlobalFuntions::setCNCorLaserStrength	0002a3a8	setCNCorLaserStrength:
+0002a46c	GlobalFuntions::backupFromFactoryData	0002a480	M502
+0002a46c	GlobalFuntions::backupFromFactoryData	0002a4ac	M500
+0002a4ec	GlobalFuntions::disconnectToPC	0002a500	M108
+0002a4ec	GlobalFuntions::disconnectToPC	0002a52c	M2001 S1
+0002a56c	GlobalFuntions::sendPrintPauseCMD	0002a580	M2410
+0002a5bc	GlobalFuntions::sendPrintResumeCMD	0002a5d0	M2411 S1
+0002a60c	GlobalFuntions::sendPrintStartCMD	0002a620	M2001 S1
+0002a60c	GlobalFuntions::sendPrintStartCMD	0002a64c	M2411 S2
+0002a68c	GlobalFuntions::sendPrintStopCMD	0002a6a0	M2411 S3
+0002a6dc	returnSizeStr	0002a754	B
+0002a6dc	returnSizeStr	0002a7ac	KB
+0002a6dc	returnSizeStr	0002a828	GB
+0002a6dc	returnSizeStr	0002a880	MB
+0002a8d0	GlobalFuntions::getDiskUsageInfo	0002a8e4	/userdata/WifiFile
+0002aa28	GlobalFuntions::wifiFileUpdate	0002aa3c	default
+0002aa28	GlobalFuntions::wifiFileUpdate	0002aa78	new file: 
+0002ab2c	GlobalFuntions::setNeedFinishSelfTest	0002ab44	default
+0002ab2c	GlobalFuntions::setNeedFinishSelfTest	0002ab7c	firstStartCheckUnfinished:
+0002ab2c	GlobalFuntions::setNeedFinishSelfTest	0002abbc	true
+0002ada4	GlobalFuntions::getPortStatus	0002adb8	default
+0002ada4	GlobalFuntions::getPortStatus	0002adf4	getPortStatus
+0002aec0	GlobalFuntions::setCurrentPort	0002aee0	default
+0002aec0	GlobalFuntions::setCurrentPort	0002af14	setCurrentPort
+0002afc0	GlobalFuntions::setPortStatus	0002afe4	default
+0002afc0	GlobalFuntions::setPortStatus	0002b018	setPortStatus
+0002afc0	GlobalFuntions::setPortStatus	0002b098	Connected!
+0002afc0	GlobalFuntions::setPortStatus	0002b0b4	Error
+0002afc0	GlobalFuntions::setPortStatus	0002b12c	Operational
+0002b1c4	GlobalFuntions::getCurrentPort	0002b1d8	default
+0002b1c4	GlobalFuntions::getCurrentPort	0002b214	getCurrentPort
+0002b318	GlobalFuntions::setStepLength	0002b360	default
+0002b318	GlobalFuntions::setStepLength	0002b38c	setStepLength
+0002b470	GlobalFuntions::setMaterialStepLength	0002b4b8	default
+0002b470	GlobalFuntions::setMaterialStepLength	0002b4e4	setMaterialStepLength
+0002b780	GlobalFuntions::wiFiStartScan	0002b794	WiFiStart
+0002b780	GlobalFuntions::wiFiStartScan	0002b7e4	wpa_cli -i wlan0 scan\n
+0002b780	GlobalFuntions::wiFiStartScan	0002b958	bash
+0002b9d4	GlobalFuntions::wiFiListRefresh	0002b9fc	WiFiFinished
+0002b9d4	GlobalFuntions::wiFiListRefresh	0002ba30	wpa_cli -i wlan0 scan\n
+0002b9d4	GlobalFuntions::wiFiListRefresh	0002bba8	bash
+0002bc24	GlobalFuntions::wiFiSelectBack	0002bc38	WiFiSelectBack
+0002bc74	GlobalFuntions::startBashForMessages	0002bd48	bash
+0002bc74	GlobalFuntions::startBashForMessages	0002bd90	default
+0002bc74	GlobalFuntions::startBashForMessages	0002bdb4	Message Bash start
+0002be14	GlobalFuntions::openScreen	0002be2c	/userapp/script/openScreen.sh\n
+0002bf0c	GlobalFuntions::closeScreen	0002bf24	/userapp/script/closeScreen.sh\n
+0002c004	GlobalFuntions::todoAfterSleepingTimeOut	0002c018	default
+0002c004	GlobalFuntions::todoAfterSleepingTimeOut	0002c050	todoAfterSleepingTimeOut
+0002c0e4	GlobalFuntions::deleteWifiRecord	0002c0fc	/userapp/script/CpWifiConfig.sh\n
+0002c1dc	GlobalFuntions::reboot	0002c1f4	reboot\n
+0002c2d4	GlobalFuntions::getWiFiMessages	0002c2ec	ifconfig wlan0\n
+0002c3cc	GlobalFuntions::wiFiConnectFinished	0002c3ec	default
+0002c3cc	GlobalFuntions::wiFiConnectFinished	0002c420	WiFiConnectFinished
+0002c3cc	GlobalFuntions::wiFiConnectFinished	0002c4d0	WiFiFinished
+0002c59c	GlobalFuntions::closeBashAfterGetMessages	0002c5bc	default
+0002c59c	GlobalFuntions::closeBashAfterGetMessages	0002c5f0	closeBashAfterGetMessages
+0002c59c	GlobalFuntions::closeBashAfterGetMessages	0002c6ac	default
+0002c59c	GlobalFuntions::closeBashAfterGetMessages	0002c6d4	Message Bash Close
+0002c8bc	GlobalFuntions::leftTimeFormatChanged	0002c928	default
+0002c8bc	GlobalFuntions::leftTimeFormatChanged	0002c954	TimeStr:
+0002c8bc	GlobalFuntions::leftTimeFormatChanged	0002c98c	TimeStr.toFloat():
+0002c8bc	GlobalFuntions::leftTimeFormatChanged	0002c9e4	DAY
+0002c8bc	GlobalFuntions::leftTimeFormatChanged	0002ca78	:
+0002c8bc	GlobalFuntions::leftTimeFormatChanged	0002cac8	'
+0002c8bc	GlobalFuntions::leftTimeFormatChanged	0002cb0c	''
+0002c8bc	GlobalFuntions::leftTimeFormatChanged	0002cb70	default
+0002c8bc	GlobalFuntions::leftTimeFormatChanged	0002cb9c	leftTimeFormatStr:
+0002c8bc	GlobalFuntions::leftTimeFormatChanged	0002cc0c	HOU
+0002c8bc	GlobalFuntions::leftTimeFormatChanged	0002cc98	MIN
+0002c8bc	GlobalFuntions::leftTimeFormatChanged	0002ccb4	SEC
+0002ce24	GlobalFuntions::setCurrentStatus	0002ce3c	default
+0002ce24	GlobalFuntions::setCurrentStatus	0002ce78	setCurrentStatus: 
+0002ce24	GlobalFuntions::setCurrentStatus	0002cefc	Stop
+0002ce24	GlobalFuntions::setCurrentStatus	0002cf4c	Operational
+0002ce24	GlobalFuntions::setCurrentStatus	0002cf60	Printing
+0002ce24	GlobalFuntions::setCurrentStatus	0002cf74	Paused
+0002ce24	GlobalFuntions::setCurrentStatus	0002cf88	Complete
+0002ce24	GlobalFuntions::setCurrentStatus	0002cf9c	Ready
+0002d0f8	GlobalFuntions::getCurrentWiFiSignalLv	0002d2c8	default
+0002d0f8	GlobalFuntions::getCurrentWiFiSignalLv	0002d2f4	currentWifiSignalLv:
+0002d0f8	GlobalFuntions::getCurrentWiFiSignalLv	0002d358	0
+0002d414	GlobalFuntions::setCurrentWiFiSSID	0002d42c	default
+0002d414	GlobalFuntions::setCurrentWiFiSSID	0002d468	setCurrentWiFiSSID
+0002d500	GlobalFuntions::CompareNetListScanData	0002d5e8	[CURRENT]
+0002d500	GlobalFuntions::CompareNetListScanData	0002d674	default
+0002d500	GlobalFuntions::CompareNetListScanData	0002d6a0	netListData.at(
+0002d500	GlobalFuntions::CompareNetListScanData	0002d6b4	).ssid
+0002d500	GlobalFuntions::CompareNetListScanData	0002d84c	EmptyOrNoMatchSSID
+0002d500	GlobalFuntions::CompareNetListScanData	0002d9a0	default
+0002d500	GlobalFuntions::CompareNetListScanData	0002d9cc	-=-=-=-=-=-=-=-=- 
+0002d500	GlobalFuntions::CompareNetListScanData	0002d9f0	wpa_cli -i wlan0 reconnect\n
+0002d500	GlobalFuntions::CompareNetListScanData	0002da78	wpa_cli -i wlan0 select_network 
+0002d500	GlobalFuntions::CompareNetListScanData	0002da94	\n
+0002d500	GlobalFuntions::CompareNetListScanData	0002dafc	EmptyOrNoMatchSSID
+0002dbe4	GlobalFuntions::wiFiSelect	0002dc30	WiFiSelect
+0002dbe4	GlobalFuntions::wiFiSelect	0002dd10	default
+0002dbe4	GlobalFuntions::wiFiSelect	0002dd3c	netListData
+0002dbe4	GlobalFuntions::wiFiSelect	0002dd94	default
+0002dbe4	GlobalFuntions::wiFiSelect	0002ddc0	wpa_cli
+0002dbe4	GlobalFuntions::wiFiSelect	0002dddc	wpa_cli -i wlan0 select_network 
+0002dbe4	GlobalFuntions::wiFiSelect	0002de08	\n
+0002dbe4	GlobalFuntions::wiFiSelect	0002de98	WiFiConnect
+0002dbe4	GlobalFuntions::wiFiSelect	0002df80	bash
+0002e054	GlobalFuntions::wiFiConnect	0002e0f0	default
+0002e054	GlobalFuntions::wiFiConnect	0002e118	wpa_cli
+0002e054	GlobalFuntions::wiFiConnect	0002e138	wpa_cli -i wlan0 add_network\n
+0002e054	GlobalFuntions::wiFiConnect	0002e1f0	bash
+0002e280	GlobalFuntions::wiFiPasswordForget	0002e344	default
+0002e280	GlobalFuntions::wiFiPasswordForget	0002e370	netListData
+0002e280	GlobalFuntions::wiFiPasswordForget	0002e3e8	wpa_cli -i wlan0 remove_network 
+0002e280	GlobalFuntions::wiFiPasswordForget	0002e414	\n
+0002e280	GlobalFuntions::wiFiPasswordForget	0002e518	wpa_cli -i wlan0 disconnect\n
+0002e280	GlobalFuntions::wiFiPasswordForget	0002e638	bash
+0002e710	GlobalFuntions::checkHeadIsSameToPausedAtContinue	0002e758	FDM
+0002e710	GlobalFuntions::checkHeadIsSameToPausedAtContinue	0002e780	Laser
+0002e710	GlobalFuntions::checkHeadIsSameToPausedAtContinue	0002e7cc	CNC
+0002e7f4	GlobalFuntions::isPause	0002e8c8	Printing
+0002e7f4	GlobalFuntions::isPause	0002e91c	Paused
+0002e970	GlobalFuntions::handleAbnormal	0002e98c	default
+0002e970	GlobalFuntions::handleAbnormal	0002e9c8	handleAbnormal:::
+0002e970	GlobalFuntions::handleAbnormal	0002eab8	FDM
+0002e970	GlobalFuntions::handleAbnormal	0002eaf4	default
+0002e970	GlobalFuntions::handleAbnormal	0002eb20	materialAbnormalNotice trigged.
+0002e970	GlobalFuntions::handleAbnormal	0002eb80	default
+0002e970	GlobalFuntions::handleAbnormal	0002eba8	doorAbnormalNotice trigged.
+0002ec20	GlobalFuntions::setTempReport	0002ec54	M155 S2
+0002ec20	GlobalFuntions::setTempReport	0002eccc	M155 S0
+0002ed1c	GlobalFuntions::setMessageReport	0002ed30	M2155 S5
+0002ed9c	GlobalFuntions::closeTempReport	0002edb0	M2155 S0
+0002ed9c	GlobalFuntions::closeTempReport	0002edfc	M144
+0002ee88	GlobalFuntions::switchOnEndStop	0002ee9c	M210 S1
+0002ef08	GlobalFuntions::switchOffEndStop	0002ef1c	M210 S0
+0002ef88	GlobalFuntions::xplus	0002ef9c	G91\nG1 X
+0002ef88	GlobalFuntions::xplus	0002efe8	 F
+0002ef88	GlobalFuntions::xplus	0002f074	\nG90\nM114
+0002f160	GlobalFuntions::xminus	0002f174	G91\nG1 X-
+0002f160	GlobalFuntions::xminus	0002f1c0	 F
+0002f160	GlobalFuntions::xminus	0002f24c	\nG90\nM114
+0002f338	GlobalFuntions::yplus	0002f34c	G91\nG1 Y
+0002f338	GlobalFuntions::yplus	0002f398	 F
+0002f338	GlobalFuntions::yplus	0002f424	\nG90\nM114
+0002f510	GlobalFuntions::yminus	0002f524	G91\nG1 Y-
+0002f510	GlobalFuntions::yminus	0002f570	 F
+0002f510	GlobalFuntions::yminus	0002f5fc	\nG90\nM114
+0002f6e8	GlobalFuntions::zplus	0002f6fc	G91\nG1 Z
+0002f6e8	GlobalFuntions::zplus	0002f748	 F
+0002f6e8	GlobalFuntions::zplus	0002f7d4	\nG90\nM114
+0002f8c0	GlobalFuntions::zminus	0002f8d4	G91\nG1 Z-
+0002f8c0	GlobalFuntions::zminus	0002f920	 F
+0002f8c0	GlobalFuntions::zminus	0002f9ac	\nG90\nM114
+0002fa98	GlobalFuntions::zfinetunePlus	0002faac	M290 Z
+0002fafc	GlobalFuntions::zfinetuneMinus	0002fb10	M290 Z-
+0002fb60	GlobalFuntions::goXYzeroPos	0002fb74	G90\nG0 X0 Y0\nM114
+0002fbe0	GlobalFuntions::goZzeroPos	0002fbf4	G90\nG0 Z0\nM114
+0002fc60	GlobalFuntions::eplus	0002fc74	G91\nG1 E
+0002fc60	GlobalFuntions::eplus	0002fcc0	 F
+0002fc60	GlobalFuntions::eplus	0002fd4c	\nG90\nM114
+0002fe38	GlobalFuntions::eminus	0002fe4c	G91\nG1 E-
+0002fe38	GlobalFuntions::eminus	0002fe98	 F
+0002fe38	GlobalFuntions::eminus	0002ff24	\nG90\nM114
+00030010	GlobalFuntions::xAnyPlus	00030054	G91\nG1 X
+00030010	GlobalFuntions::xAnyPlus	0003009c	 F
+00030010	GlobalFuntions::xAnyPlus	00030108	\nG90\nM114
+000301dc	GlobalFuntions::xAnyMinus	00030220	G91\nG1 X-
+000301dc	GlobalFuntions::xAnyMinus	00030248	 F
+000301dc	GlobalFuntions::xAnyMinus	000302b8	\nG90\nM114
+000303b0	GlobalFuntions::yAnyPlus	000303f4	G91\nG1 Y
+000303b0	GlobalFuntions::yAnyPlus	0003041c	 F
+000303b0	GlobalFuntions::yAnyPlus	0003048c	\nG90\nM114
+00030584	GlobalFuntions::yAnyMinus	000305c8	G91\nG1 Y-
+00030584	GlobalFuntions::yAnyMinus	00030610	 F
+00030584	GlobalFuntions::yAnyMinus	0003067c	\nG90\nM114
+00030750	GlobalFuntions::zAnyPlus	00030794	G91\nG1 Z
+00030750	GlobalFuntions::zAnyPlus	000307dc	 F
+00030750	GlobalFuntions::zAnyPlus	00030868	\nG90\nM114
+00030970	GlobalFuntions::zAnyMinus	000309b4	G91\nG1 Z-
+00030970	GlobalFuntions::zAnyMinus	000309dc	 F
+00030970	GlobalFuntions::zAnyMinus	00030a4c	\nG90\nM114
+00030b44	GlobalFuntions::zPrintingPlus	00030b88	M290 Z
+00030c20	GlobalFuntions::zPrintingMinus	00030c64	M290 Z-
+00030cfc	GlobalFuntions::eAny	00030d24	G91\nG1 E
+00030cfc	GlobalFuntions::eAny	00030d6c	 F
+00030cfc	GlobalFuntions::eAny	00030df8	\nG90\nM114
+00030f08	GlobalFuntions::eAnySpeedOrLength	00030f34	-
+00030f08	GlobalFuntions::eAnySpeedOrLength	00030fb4	G91\nG1 E
+00030f08	GlobalFuntions::eAnySpeedOrLength	00030fd8	 F
+00030f08	GlobalFuntions::eAnySpeedOrLength	00031024	\nG90\nM114
+00031118	GlobalFuntions::goAbsoluteZ	0003112c	G1 Z
+00031118	GlobalFuntions::goAbsoluteZ	00031180	 F
+00031118	GlobalFuntions::goAbsoluteZ	00031208	\nM114
+000312f4	GlobalFuntions::setWorkOriginPoint	00031308	G92 X0 Y0 Z0
+000312f4	GlobalFuntions::setWorkOriginPoint	0003133c	M500
+0003137c	GlobalFuntions::goWorkOriginPoint	00031390	G54
+0003137c	GlobalFuntions::goWorkOriginPoint	000313bc	G0 X0 Y0 Z0 F1000
+0003137c	GlobalFuntions::goWorkOriginPoint	000313e4	M114
+0003142c	GlobalFuntions::goXYZ	00031444	G1 X
+0003142c	GlobalFuntions::goXYZ	0003147c	 Y
+0003142c	GlobalFuntions::goXYZ	000314c8	 Z
+0003142c	GlobalFuntions::goXYZ	00031514	 F
+0003142c	GlobalFuntions::goXYZ	00031560	\nM114
+00031668	GlobalFuntions::goOrigin	0003167c	G53\n
+00031668	GlobalFuntions::goOrigin	000316a8	G28\n
+00031668	GlobalFuntions::goOrigin	00031704	CNC
+00031668	GlobalFuntions::goOrigin	00031720	G54
+00031668	GlobalFuntions::goOrigin	0003176c	Laser
+000317cc	GlobalFuntions::setWorkCoordinate	000317e0	G54
+0003184c	GlobalFuntions::checkLevelingSensorInstalled	00031860	M119
+000318cc	GlobalFuntions::goLeveling	000318e0	G29
+0003194c	GlobalFuntions::goCalibrate	00031960	G33
+000319cc	GlobalFuntions::saveChanged	000319e0	M500
+00031a4c	GlobalFuntions::calibrateResHandle	00031a64	default
+00031a4c	GlobalFuntions::calibrateResHandle	00031a98	xyz: 
+00031a4c	GlobalFuntions::calibrateResHandle	00031ab0	true
+00031a4c	GlobalFuntions::calibrateResHandle	00031adc	; 
+00031a4c	GlobalFuntions::calibrateResHandle	00031ae8	auto: 
+00031a4c	GlobalFuntions::calibrateResHandle	00031b00	true
+00031a4c	GlobalFuntions::calibrateResHandle	00031b3c	default
+00031a4c	GlobalFuntions::calibrateResHandle	00031b64	result: 
+00031a4c	GlobalFuntions::calibrateResHandle	00031b78	false
+00031cb8	GlobalFuntions::waitHeadHeat	00031ce0	M109 S
+00031d88	GlobalFuntions::setFeedrate	00031d98	M220 S
+00031e1c	GlobalFuntions::setWorkSpeed	00031e30	%1
+00031e1c	GlobalFuntions::setWorkSpeed	00031e80	M220 S
+00031f30	GlobalFuntions::setFlowrate	00031f40	M221 S
+00031fc4	GlobalFuntions::sendSetTargetTemperatureCMD	00031fe8	M104 S
+00032088	GlobalFuntions::setTargetTemperature	000320a0	default
+00032088	GlobalFuntions::setTargetTemperature	000320d8	targetTemperature
+00032184	GlobalFuntions::coolDown	00032198	M104 S0
+00032224	GlobalFuntions::sendSetBedTargetTemperatureCMD	00032248	M140 S
+000322e8	GlobalFuntions::setBedTargetTemperature	00032300	default
+000322e8	GlobalFuntions::setBedTargetTemperature	00032338	bedTargetTemperature
+000323e4	GlobalFuntions::printComlpetedSet	000323fc	Operational
+000323e4	GlobalFuntions::printComlpetedSet	00032434	N/A
+000323e4	GlobalFuntions::printComlpetedSet	000324cc	FDM
+000323e4	GlobalFuntions::printComlpetedSet	000324e8	M114
+00032554	GlobalFuntions::bedCoolDown	00032568	M140 S0
+000325f4	GlobalFuntions::sendSetFanOnCMD	00032614	M106
+00032680	GlobalFuntions::checkTempForWizard	00032694	default
+00032680	GlobalFuntions::checkTempForWizard	000326d0	T: 
+00032680	GlobalFuntions::checkTempForWizard	00032728	 B: 
+00032860	GlobalFuntions::sendSetFanOffCMD	00032880	M107
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032910	default
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032918	%s(): %d \n
+000328ec	GlobalFuntions::runBoundaryAbsolutely	0003291c	runBoundaryAbsolutely
+000328ec	GlobalFuntions::runBoundaryAbsolutely	0003295c	 F
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032af4	CNC
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032b24	M3 S70
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032b74	G90\nG1 X
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032bb0	 Y
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032c44	Laser
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032c6c	M3 S5
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032cb4	G1 Y
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032cf8	G1 X
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032d38	G1 Y
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032d6c	G1 X
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032da0	M5
+000328ec	GlobalFuntions::runBoundaryAbsolutely	00032dd8	G1 X0 Y0
+00032f88	GlobalFuntions::runBlockBoundary	00032f9c	G0 X0 Y0 F500
+00032f88	GlobalFuntions::runBlockBoundary	00032fc8	G1 F1000
+00032f88	GlobalFuntions::runBlockBoundary	00032ff0	M3 S5
+00032f88	GlobalFuntions::runBlockBoundary	00033018	G1 Y4
+00032f88	GlobalFuntions::runBlockBoundary	00033040	G1 X34
+00032f88	GlobalFuntions::runBlockBoundary	00033068	G1 Y-6
+00032f88	GlobalFuntions::runBlockBoundary	00033090	G1 X0
+00032f88	GlobalFuntions::runBlockBoundary	000330b8	G1 X0 Y-6 F1000
+00032f88	GlobalFuntions::runBlockBoundary	000330e0	M5
+00032f88	GlobalFuntions::runBlockBoundary	00033108	G0 X0 Y0 F500
+00033188	GlobalFuntions::laserBlockSetWorkOrign	000331e4	G0 Z
+00033188	GlobalFuntions::laserBlockSetWorkOrign	0003320c	 F
+00033188	GlobalFuntions::laserBlockSetWorkOrign	000332ac	G92 X0 Y0 Z0
+00033188	GlobalFuntions::laserBlockSetWorkOrign	000332dc	M500
+00033374	GlobalFuntions::setTemperatureInfo	0003338c	 
+00033374	GlobalFuntions::setTemperatureInfo	000333e8	B:
+00033374	GlobalFuntions::setTemperatureInfo	000333ec	T:
+00033374	GlobalFuntions::setTemperatureInfo	00033658	W:0
+00033374	GlobalFuntions::setTemperatureInfo	00033844	default
+00033374	GlobalFuntions::setTemperatureInfo	00033870	blockHeating from high temprature:
+00033374	GlobalFuntions::setTemperatureInfo	00033888	,
+0003394c	GlobalFuntions::setEndstopStatus	00033960	\n
+0003394c	GlobalFuntions::setEndstopStatus	000339a8	z_min:
+0003394c	GlobalFuntions::setEndstopStatus	00033a38	no exist
+0003394c	GlobalFuntions::setEndstopStatus	00033aa4	open
+00033b2c	GlobalFuntions::on_checkReadOutput	00033bdc	OK
+00033b2c	GlobalFuntions::on_checkReadOutput	00033c24	wpa_cli -i wlan0 status\n
+00033b2c	GlobalFuntions::on_checkReadOutput	00033d04	wpa_state
+00033b2c	GlobalFuntions::on_checkReadOutput	00033d40	\n
+00033b2c	GlobalFuntions::on_checkReadOutput	00033d9c	ssid
+00033b2c	GlobalFuntions::on_checkReadOutput	00033da8	wpa_state
+00033b2c	GlobalFuntions::on_checkReadOutput	00033dac	=
+00033b2c	GlobalFuntions::on_checkReadOutput	00033dc0	COMPLETED
+00033b2c	GlobalFuntions::on_checkReadOutput	00033dc4	default
+00033b2c	GlobalFuntions::on_checkReadOutput	00033ddc	ip_address
+00033b2c	GlobalFuntions::on_checkReadOutput	00033e2c	=
+00033b2c	GlobalFuntions::on_checkReadOutput	00033f78	=
+00033b2c	GlobalFuntions::on_checkReadOutput	00034138	wpa_state:
+00033b2c	GlobalFuntions::on_checkReadOutput	000341b8	default
+00033b2c	GlobalFuntions::on_checkReadOutput	000341e4	ip:
+00033b2c	GlobalFuntions::on_checkReadOutput	000341f8	->
+00033b2c	GlobalFuntions::on_checkReadOutput	000342d0	default
+00033b2c	GlobalFuntions::on_checkReadOutput	000342fc	ssid:
+000344f0	cmpControllerVersion	0003450c	default
+000344f0	cmpControllerVersion	00034544	VersionStr
+000344f0	cmpControllerVersion	0003455c	CompareVersion
+000344f0	cmpControllerVersion	00034588	.
+000344f0	cmpControllerVersion	000345c8	.
+0003479c	GlobalFuntions::printerAbnormalOrder	000347bc	default
+0003479c	GlobalFuntions::printerAbnormalOrder	000347ec	printerAbnormalOrder
+0003479c	GlobalFuntions::printerAbnormalOrder	00034824	G91
+0003479c	GlobalFuntions::printerAbnormalOrder	00034848	G1 Z20
+0003479c	GlobalFuntions::printerAbnormalOrder	0003486c	G90
+0003496c	GlobalFuntions::printerHeadAbnormalOrder	0003498c	default
+0003496c	GlobalFuntions::printerHeadAbnormalOrder	000349bc	printerHeadAbnormalOrder
+0003496c	GlobalFuntions::printerHeadAbnormalOrder	000349f4	G28
+0003496c	GlobalFuntions::printerHeadAbnormalOrder	00034a18	G1 Z150 F3000
+0003496c	GlobalFuntions::printerHeadAbnormalOrder	00034a3c	G1 Y-80 F1500
+00034b3c	GlobalFuntions::goZOffsetPos	00034b74	G28
+00034b3c	GlobalFuntions::goZOffsetPos	00034b9c	G90\nG1 X0 Y0 Z50 F1000
+00034b3c	GlobalFuntions::goZOffsetPos	00034bc4	G90\nG1 X0 Y0 Z40 F500
+00034b3c	GlobalFuntions::goZOffsetPos	00034bec	M211 S0
+00034cd8	GlobalFuntions::goLaserFinetunePos	00034d10	G28
+00034cd8	GlobalFuntions::goLaserFinetunePos	00034d38	G90\nG1 X0 Y0 Z100 F1000
+00034e14	GlobalFuntions::goInstallLevelSensorPos	00034e4c	G90\nG0 X0 Y0 Z100 F1000
+00034f18	GlobalFuntions::preHeat	00034f6c	M140 S
+00034f18	GlobalFuntions::preHeat	00034fc0	M104 S
+000350ec	GlobalFuntions::SetZOffset	00035128	 
+000350ec	GlobalFuntions::SetZOffset	000351a4	default
+000350ec	GlobalFuntions::SetZOffset	000351d0	M665:
+000350ec	GlobalFuntions::SetZOffset	00035220	H
+000350ec	GlobalFuntions::SetZOffset	000352fc	%1
+000350ec	GlobalFuntions::SetZOffset	0003539c	M665 H
+000350ec	GlobalFuntions::SetZOffset	000353c8	default
+000350ec	GlobalFuntions::SetZOffset	000353f8	SetZOffset:
+000350ec	GlobalFuntions::SetZOffset	0003544c	M500
+000350ec	GlobalFuntions::SetZOffset	00035470	M211 S1
+00035584	GlobalFuntions::tempCopyFile	000355ac	default
+00035584	GlobalFuntions::tempCopyFile	000355d4	tempCopyFile
+00035584	GlobalFuntions::tempCopyFile	0003560c	/PresetFile/
+00035584	GlobalFuntions::tempCopyFile	0003564c	/Local/
+00035584	GlobalFuntions::tempCopyFile	000356a4	FDM/3DBenchy_0.4mm.gcode
+00035584	GlobalFuntions::tempCopyFile	000356b8	FDM/3DBenchy_0.3mm.gcode
+00035584	GlobalFuntions::tempCopyFile	000356d0	CNC/owl.cnc
+00035584	GlobalFuntions::tempCopyFile	000356ec	Laser/tigger_head.nc
+00035584	GlobalFuntions::tempCopyFile	00035758	3DBenchy_0.4mm
+00035584	GlobalFuntions::tempCopyFile	0003575c	3DBenchy_0.3mm
+00035584	GlobalFuntions::tempCopyFile	00035760	tigger_head.nc
+00035584	GlobalFuntions::tempCopyFile	00035780	owl.cnc
+00035584	GlobalFuntions::tempCopyFile	00035784	CNC/
+00035584	GlobalFuntions::tempCopyFile	00035788	default
+00035584	GlobalFuntions::tempCopyFile	000357c0	FDM/
+00035584	GlobalFuntions::tempCopyFile	00035868	default
+00035584	GlobalFuntions::tempCopyFile	00035890	copyStatus1:
+00035584	GlobalFuntions::tempCopyFile	000358a4	true
+00035584	GlobalFuntions::tempCopyFile	0003599c	FDM/
+00035584	GlobalFuntions::tempCopyFile	00035a44	default
+00035584	GlobalFuntions::tempCopyFile	00035a6c	copyStatus2:
+00035584	GlobalFuntions::tempCopyFile	00035ab0	Laser/
+00035584	GlobalFuntions::tempCopyFile	00035b5c	default
+00035584	GlobalFuntions::tempCopyFile	00035b84	copyStatus3:
+00035584	GlobalFuntions::tempCopyFile	00035c9c	copyStatus4:
+00035ef4	GlobalFuntions::checkIsHasFirmware	00035f54	/Local/
+00035ef4	GlobalFuntions::checkIsHasFirmware	00035f68	/userapp/tmp/
+00035ef4	GlobalFuntions::checkIsHasFirmware	00035fcc	zip
+00035ef4	GlobalFuntions::checkIsHasFirmware	00035fdc	IVI3DPrinterFirmware
+00035ef4	GlobalFuntions::checkIsHasFirmware	000361d8	/userapp/script/unzipFirmware.sh 
+00035ef4	GlobalFuntions::checkIsHasFirmware	000361f4	\n
+00035ef4	GlobalFuntions::checkIsHasFirmware	00036228	default
+00035ef4	GlobalFuntions::checkIsHasFirmware	00036254	Bash:>>>
+00035ef4	GlobalFuntions::checkIsHasFirmware	000362b8	TouchScreen
+00035ef4	GlobalFuntions::checkIsHasFirmware	000362ec	Controller
+000363f0	GlobalFuntions::checkIsHasFirmware	0003644c	/Local/
+000363f0	GlobalFuntions::checkIsHasFirmware	00036460	/userapp/tmp/
+000363f0	GlobalFuntions::checkIsHasFirmware	000364c4	zip
+000363f0	GlobalFuntions::checkIsHasFirmware	000364d4	IVI3DPrinterFirmwarePack
+000363f0	GlobalFuntions::checkIsHasFirmware	000366b8	/userapp/script/unzipFirmware.sh 
+000363f0	GlobalFuntions::checkIsHasFirmware	000366d4	\n
+000363f0	GlobalFuntions::checkIsHasFirmware	00036708	default
+000363f0	GlobalFuntions::checkIsHasFirmware	00036734	Bash:>>>
+00036860	GlobalFuntions::setWifiData	0003687c	default
+00036860	GlobalFuntions::setWifiData	000368b4	setWifiData
+00036860	GlobalFuntions::setWifiData	000368f4	\n
+00036860	GlobalFuntions::setWifiData	00036930	\n
+00036860	GlobalFuntions::setWifiData	000369e4	\t
+00036860	GlobalFuntions::setWifiData	000369fc	default
+00036860	GlobalFuntions::setWifiData	00036a00	list data error
+00036860	GlobalFuntions::setWifiData	00036a0c	\t
+00036860	GlobalFuntions::setWifiData	00036d4c	default
+00036860	GlobalFuntions::setWifiData	00036d78	wifi data error
+00037008	GlobalFuntions::initOpenPort	00037018	Error
+0003719c	GlobalFuntions::getStatusFromThread	000371cc	M2155 S5
+0003719c	GlobalFuntions::getStatusFromThread	0003720c	default
+0003719c	GlobalFuntions::getStatusFromThread	00037230	getStatusFromThread failed.
+0003719c	GlobalFuntions::getStatusFromThread	0003726c	default
+0003719c	GlobalFuntions::getStatusFromThread	00037290	getStatusFromThread succeed.
+00037308	GlobalFuntions::setNetList	00037338	\n
+00037308	GlobalFuntions::setNetList	00037384	\n
+00037308	GlobalFuntions::setNetList	0003743c	default
+00037308	GlobalFuntions::setNetList	000374f4	, 
+00037308	GlobalFuntions::setNetList	00037650	default
+00037308	GlobalFuntions::setNetList	00037660	list data error
+00037308	GlobalFuntions::setNetList	0003766c	\t
+00037308	GlobalFuntions::setNetList	00037670	\t
+00037308	GlobalFuntions::setNetList	00037834	default
+00037308	GlobalFuntions::setNetList	00037860	setNetList
+00037308	GlobalFuntions::setNetList	00037940	default
+00037308	GlobalFuntions::setNetList	00037974	wifi data error
+00037e00	GlobalFuntions::getHostName	00037e14	/userapp/app/config.ini
+00037e00	GlobalFuntions::getHostName	00037e4c	Device
+00037e00	GlobalFuntions::getHostName	00037e70	hostname
+00037e00	GlobalFuntions::getHostName	00037f18	sinlinx
+00037e00	GlobalFuntions::getHostName	00037f64	rk312x
+00037fd8	GlobalFuntions::GlobalFuntions	0003800c	IVI3D
+00037fd8	GlobalFuntions::GlobalFuntions	00038028	IVI 3D Printer
+00037fd8	GlobalFuntions::GlobalFuntions	0003803c	A33
+00037fd8	GlobalFuntions::GlobalFuntions	00038050	RK3128
+00037fd8	GlobalFuntions::GlobalFuntions	00038140	USB Driver Files
+00037fd8	GlobalFuntions::GlobalFuntions	00038288	IDLE
+00037fd8	GlobalFuntions::GlobalFuntions	000382cc	N/A
+00037fd8	GlobalFuntions::GlobalFuntions	000382e8	N/A
+00037fd8	GlobalFuntions::GlobalFuntions	000382fc	N/A
+00037fd8	GlobalFuntions::GlobalFuntions	00038314	null
+00037fd8	GlobalFuntions::GlobalFuntions	00038340	null
+00037fd8	GlobalFuntions::GlobalFuntions	0003835c	null
+00037fd8	GlobalFuntions::GlobalFuntions	00038370	N/A
+00037fd8	GlobalFuntions::GlobalFuntions	0003841c	0
+00037fd8	GlobalFuntions::GlobalFuntions	00038430	0
+00037fd8	GlobalFuntions::GlobalFuntions	00038448	200
+00037fd8	GlobalFuntions::GlobalFuntions	00038460	1500
+00037fd8	GlobalFuntions::GlobalFuntions	00038474	100
+00037fd8	GlobalFuntions::GlobalFuntions	00038490	10
+00037fd8	GlobalFuntions::GlobalFuntions	000384a4	10
+00037fd8	GlobalFuntions::GlobalFuntions	00038520	/Default/CircleCode.gcode
+00037fd8	GlobalFuntions::GlobalFuntions	0003855c	ttyUSB0
+00037fd8	GlobalFuntions::GlobalFuntions	000385bc	/Local
+00037fd8	GlobalFuntions::GlobalFuntions	000385d0	/PresetFile
+00037fd8	GlobalFuntions::GlobalFuntions	00038668	No*wifi
+00037fd8	GlobalFuntions::GlobalFuntions	00038818	MachineStatus
+00037fd8	GlobalFuntions::GlobalFuntions	00038860	Operational
+00037fd8	GlobalFuntions::GlobalFuntions	00038870	N/A
+00037fd8	GlobalFuntions::GlobalFuntions	00038880	N/A
+00037fd8	GlobalFuntions::GlobalFuntions	00038a1c	bash
+00037fd8	GlobalFuntions::GlobalFuntions	00038a74	/dev/
+00037fd8	GlobalFuntions::GlobalFuntions	00038aa0	/userdata/WifiFile/
+00037fd8	GlobalFuntions::GlobalFuntions	00038bf4	/dev/
+00037fd8	GlobalFuntions::GlobalFuntions	00038d04	default
+00037fd8	GlobalFuntions::GlobalFuntions	00038d2c	Touchscreen version:
+0003a2c4	GlobalFuntions::setINIFileBool	0003a2d8	/userapp/app/config.ini
+0003a2c4	GlobalFuntions::setINIFileBool	0003a318	Device
+0003a2c4	GlobalFuntions::setINIFileBool	0003a374	sync\n
+0003a49c	GlobalFuntions::setShowGuideAndChangeINIFile	0003a4b4	Guide
+0003a49c	GlobalFuntions::setShowGuideAndChangeINIFile	0003a4ec	default
+0003a49c	GlobalFuntions::setShowGuideAndChangeINIFile	0003a51c	setShowGuideAndChangeINIFile
+0003a49c	GlobalFuntions::setShowGuideAndChangeINIFile	0003a55c	true
+0003a5ec	GlobalFuntions::setCalibrationINIFile	0003a604	NeedCalibration
+0003a5ec	GlobalFuntions::setCalibrationINIFile	0003a640	default
+0003a5ec	GlobalFuntions::setCalibrationINIFile	0003a670	setNeedCalibrationINIFile
+0003a5ec	GlobalFuntions::setCalibrationINIFile	0003a6b0	true
+0003a740	GlobalFuntions::on_ReadOutput	0003a7fc	scan_result
+0003a740	GlobalFuntions::on_ReadOutput	0003a8b8	scan_result
+0003a740	GlobalFuntions::on_ReadOutput	0003a8f4	Copy Wpa finish
+0003a740	GlobalFuntions::on_ReadOutput	0003a92c	/userapp/app/config.ini
+0003a740	GlobalFuntions::on_ReadOutput	0003a960	Device
+0003a740	GlobalFuntions::on_ReadOutput	0003a980	Guide
+0003a740	GlobalFuntions::on_ReadOutput	0003a9c8	sync\n
+0003a740	GlobalFuntions::on_ReadOutput	0003aabc	unzip finish
+0003a740	GlobalFuntions::on_ReadOutput	0003aafc	Copy IVI-Main-Controller Finish
+0003a740	GlobalFuntions::on_ReadOutput	0003ab40	default
+0003a740	GlobalFuntions::on_ReadOutput	0003ab68	Copy IVI-Main-Controller Finish
+0003a740	GlobalFuntions::on_ReadOutput	0003aba4	rm -rf /userapp/tmp/*\n
+0003a740	GlobalFuntions::on_ReadOutput	0003abe8	OK
+0003a740	GlobalFuntions::on_ReadOutput	0003ac20	wpa_cli -i wlan0 scan\n
+0003a740	GlobalFuntions::on_ReadOutput	0003ac38	wpa_cli -i wlan0 scan_result\n
+0003a740	GlobalFuntions::on_ReadOutput	0003ac7c	wpa_cli -i wlan0 reconnect\n
+0003a740	GlobalFuntions::on_ReadOutput	0003ac94	udhcpc -i wlan0 -n -t10 -A 1\n
+0003a740	GlobalFuntions::on_ReadOutput	0003acdc	wpa_cli -i wlan0 set_network 
+0003a740	GlobalFuntions::on_ReadOutput	0003ad08	ssid
+0003a740	GlobalFuntions::on_ReadOutput	0003ad4c	wpa_cli -i wlan0 set_network 
+0003a740	GlobalFuntions::on_ReadOutput	0003ad68	 psk '"
+0003a740	GlobalFuntions::on_ReadOutput	0003ad8c	"'\n
+0003a740	GlobalFuntions::on_ReadOutput	0003adfc	wpa_cli -i wlan0 set_network 
+0003a740	GlobalFuntions::on_ReadOutput	0003ae28	psk
+0003a740	GlobalFuntions::on_ReadOutput	0003ae68	wpa_cli -i wlan0 select_network 
+0003a740	GlobalFuntions::on_ReadOutput	0003ae80	\n
+0003a740	GlobalFuntions::on_ReadOutput	0003aee0	wpa_cli -i wlan0 save_config\n
+0003a740	GlobalFuntions::on_ReadOutput	0003aef8	sync\n
+0003a740	GlobalFuntions::on_ReadOutput	0003af3c	wpa_cli -i wlan0 select_network 
+0003a740	GlobalFuntions::on_ReadOutput	0003af88	WiFiConnect
+0003a740	GlobalFuntions::on_ReadOutput	0003afa4	wpa_cli -i wlan0 status\n
+0003a740	GlobalFuntions::on_ReadOutput	0003afe8	wpa_cli -i wlan0 remove_network 
+0003a740	GlobalFuntions::on_ReadOutput	0003b020	wpa_cli -i wlan0 disconnect\n
+0003a740	GlobalFuntions::on_ReadOutput	0003b064	wpa_cli -i wlan0 disconnect\n
+0003a740	GlobalFuntions::on_ReadOutput	0003b07c	WiFiDisconnected
+0003a740	GlobalFuntions::on_ReadOutput	0003b094	wpa_cli -i wlan0 save_config\n
+0003a740	GlobalFuntions::on_ReadOutput	0003b164	No lease, failing
+0003a740	GlobalFuntions::on_ReadOutput	0003b19c	udhcpc -i wlan0 -n -t10 -A 1\n
+0003a740	GlobalFuntions::on_ReadOutput	0003b1e4	wpa_cli -i wlan0 remove_network 
+0003a740	GlobalFuntions::on_ReadOutput	0003b1f8	\n
+0003a740	GlobalFuntions::on_ReadOutput	0003b25c	default
+0003a740	GlobalFuntions::on_ReadOutput	0003b288	=========>>>>>> 
+0003a740	GlobalFuntions::on_ReadOutput	0003b2b0	WiFiWrongPassword
+0003a740	GlobalFuntions::on_ReadOutput	0003b2e8	wpa_cli -i wlan0 scan\n
+0003a740	GlobalFuntions::on_ReadOutput	0003b3a4	udhcpc -i wlan0 -n -t10 -A 1\n
+0003a740	GlobalFuntions::on_ReadOutput	0003b3e4	wpa_state
+0003a740	GlobalFuntions::on_ReadOutput	0003b41c	\n
+0003a740	GlobalFuntions::on_ReadOutput	0003b460	wpa_state
+0003a740	GlobalFuntions::on_ReadOutput	0003b514	=
+0003a740	GlobalFuntions::on_ReadOutput	0003b550	4WAY_HANDSHAKE
+0003a740	GlobalFuntions::on_ReadOutput	0003b584	default
+0003a740	GlobalFuntions::on_ReadOutput	0003b5b0	~~~~
+0003a740	GlobalFuntions::on_ReadOutput	0003b5c4	:
+0003a740	GlobalFuntions::on_ReadOutput	0003b6ac	default
+0003a740	GlobalFuntions::on_ReadOutput	0003b6d4	WiFiPro
+0003a740	GlobalFuntions::on_ReadOutput	0003b6ec	<-->
+0003a740	GlobalFuntions::on_ReadOutput	0003b908	default
+0003a740	GlobalFuntions::on_ReadOutput	0003b934	WiFiPro
+0003a740	GlobalFuntions::on_ReadOutput	0003b948	<-->
+0003a740	GlobalFuntions::on_ReadOutput	0003b970	=
+0003a740	GlobalFuntions::on_ReadOutput	0003b9ac	SCANNING
+0003a740	GlobalFuntions::on_ReadOutput	0003b9e8	default
+0003a740	GlobalFuntions::on_ReadOutput	0003ba14	~~~~
+0003a740	GlobalFuntions::on_ReadOutput	0003ba28	:
+0003a740	GlobalFuntions::on_ReadOutput	0003ba80	wpa_cli -i wlan0 remove_network 
+0003a740	GlobalFuntions::on_ReadOutput	0003baa0	\n
+0003a740	GlobalFuntions::on_ReadOutput	0003bb04	WiFiWrongPassword
+0003a740	GlobalFuntions::on_ReadOutput	0003bb80	wpa_cli -i wlan0 remove_network 
+0003a740	GlobalFuntions::on_ReadOutput	0003bba0	\n
+0003a740	GlobalFuntions::on_ReadOutput	0003bc04	WiFiWrongPassword
+0003a740	GlobalFuntions::on_ReadOutput	0003bc80	=
+0003a740	GlobalFuntions::on_ReadOutput	0003bcbc	DISCONNECTED
+0003a740	GlobalFuntions::on_ReadOutput	0003bcec	wpa_cli -i wlan0 remove_network 
+0003a740	GlobalFuntions::on_ReadOutput	0003bd0c	\n
+0003a740	GlobalFuntions::on_ReadOutput	0003bd70	WiFiWrongPassword
+0003a740	GlobalFuntions::on_ReadOutput	0003be04	default
+0003a740	GlobalFuntions::on_ReadOutput	0003be30	checkIsWiFiConnected-------++++++++
+0003a740	GlobalFuntions::on_ReadOutput	0003bee4	bssid
+0003a740	GlobalFuntions::on_ReadOutput	0003bf38	wpa_cli -i wlan0 list_network\n
+0003a740	GlobalFuntions::on_ReadOutput	0003bf7c	network id
+0003a740	GlobalFuntions::on_ReadOutput	0003bfd4	WiFiStart
+0003a740	GlobalFuntions::on_ReadOutput	0003bfec	WiFiDisconnected
+0003a740	GlobalFuntions::on_ReadOutput	0003c010	/userapp/script/checkNetAndDate.sh\n
+0003a740	GlobalFuntions::on_ReadOutput	0003c058	\d\n
+0003a740	GlobalFuntions::on_ReadOutput	0003c0b4	OK
+0003a740	GlobalFuntions::on_ReadOutput	0003c12c	wpa_cli -i wlan0 set_network 
+0003a740	GlobalFuntions::on_ReadOutput	0003c148	 ssid '"
+0003a740	GlobalFuntions::on_ReadOutput	0003c170	"'\n
+0003a740	GlobalFuntions::on_ReadOutput	0003c1b0	default
+0003a740	GlobalFuntions::on_ReadOutput	0003c1dc	CurrentWifiCmdStr
+0003a740	GlobalFuntions::on_ReadOutput	0003c230	=
+0003a740	GlobalFuntions::on_ReadOutput	0003c270	COMPLETED
+0003a740	GlobalFuntions::on_ReadOutput	0003c2a0	udhcpc -i wlan0 -n -t10 -A 1\n
+0003a740	GlobalFuntions::on_ReadOutput	0003c368	ip_address
+0003a740	GlobalFuntions::on_ReadOutput	0003c36c	=
+0003a740	GlobalFuntions::on_ReadOutput	0003c380	default
+0003a740	GlobalFuntions::on_ReadOutput	0003c384	ip:
+0003a740	GlobalFuntions::on_ReadOutput	0003c398	ssid
+0003a740	GlobalFuntions::on_ReadOutput	0003c3a0	=
+0003a740	GlobalFuntions::on_ReadOutput	0003c5e4	default
+0003a740	GlobalFuntions::on_ReadOutput	0003c610	ip:
+0003a740	GlobalFuntions::on_ReadOutput	0003c660	adding dns
+0003a740	GlobalFuntions::on_ReadOutput	0003c6ec	WiFiConnect
+0003a740	GlobalFuntions::on_ReadOutput	0003c704	wpa_cli -i wlan0 save_config\n
+0003a740	GlobalFuntions::on_ReadOutput	0003c774	default
+0003a740	GlobalFuntions::on_ReadOutput	0003c7a4	checkIsWiFiConnected-------++++++++
+0003a740	GlobalFuntions::on_ReadOutput	0003c870	/userapp/script/checkNetAndDate.sh\n
+0003a740	GlobalFuntions::on_ReadOutput	0003c8c0	timesh end
+0003a740	GlobalFuntions::on_ReadOutput	0003c90c	Check Version Finished
+0003a740	GlobalFuntions::on_ReadOutput	0003c944	pre-shared key may be incorrect
+0003a740	GlobalFuntions::on_ReadOutput	0003c980	wpa_cli -i wlan0 remove_network 
+0003a740	GlobalFuntions::on_ReadOutput	0003c994	\n
+0003a740	GlobalFuntions::on_ReadOutput	0003c9f8	WiFiWrongPassword
+0003a740	GlobalFuntions::on_ReadOutput	0003ca70	HWaddr
+0003a740	GlobalFuntions::on_ReadOutput	0003ca9c	wpa_state
+0003a740	GlobalFuntions::on_ReadOutput	0003cadc	\n
+0003a740	GlobalFuntions::on_ReadOutput	0003cb34	HWaddr
+0003a740	GlobalFuntions::on_ReadOutput	0003cbb0	:
+0003a740	GlobalFuntions::on_ReadOutput	0003cbc4	-
+0003a740	GlobalFuntions::on_ReadOutput	0003cc10	inet addr:
+0003a740	GlobalFuntions::on_ReadOutput	0003ccc8	  
+0003a740	GlobalFuntions::on_ReadOutput	0003cd4c	inet addr:
+0003a740	GlobalFuntions::on_ReadOutput	0003cdcc	  Bcast:
+0003a740	GlobalFuntions::on_ReadOutput	0003ce48	  Mask:
+0003a740	GlobalFuntions::on_ReadOutput	0003ceac	default
+0003a740	GlobalFuntions::on_ReadOutput	0003d000	wpa_cli -i wlan0 status\n
+0003a740	GlobalFuntions::on_ReadOutput	0003d11c	bash
+0003a740	GlobalFuntions::on_ReadOutput	0003d158	default
+0003a740	GlobalFuntions::on_ReadOutput	0003d184	Message Bash start---+++
+0003d604	GlobalFuntions::isLatestVersion	0003d62c	default
+0003d604	GlobalFuntions::isLatestVersion	0003d65c	isLatestVersion
+0003d604	GlobalFuntions::isLatestVersion	0003d6c0	/userapp/tmp
+0003d604	GlobalFuntions::isLatestVersion	0003d734	default
+0003d604	GlobalFuntions::isLatestVersion	0003d764	filenum_tmp:
+0003d604	GlobalFuntions::isLatestVersion	0003d7a8	zip
+0003d604	GlobalFuntions::isLatestVersion	0003d7ac	Firmware
+0003d604	GlobalFuntions::isLatestVersion	0003d948	++==++
+0003d604	GlobalFuntions::isLatestVersion	0003d94c	config2.ini
+0003d604	GlobalFuntions::isLatestVersion	0003d96c	default
+0003d604	GlobalFuntions::isLatestVersion	0003d970	<isLatestVersion>
+0003d604	GlobalFuntions::isLatestVersion	0003d974	version
+0003d604	GlobalFuntions::isLatestVersion	0003d97c	default
+0003d604	GlobalFuntions::isLatestVersion	0003d9b0	firmware
+0003d604	GlobalFuntions::isLatestVersion	0003daf0	config.ini
+0003d604	GlobalFuntions::isLatestVersion	0003db68	version
+0003d604	GlobalFuntions::isLatestVersion	0003dbe0	default
+0003d604	GlobalFuntions::isLatestVersion	0003dc08	<isLatestVersion>
+0003d604	GlobalFuntions::isLatestVersion	0003dc38	, 
+0003d604	GlobalFuntions::isLatestVersion	0003ddd8	, 
+0003d604	GlobalFuntions::isLatestVersion	0003de20	version
+0003e16c	GlobalFuntions::isLatestVersion	0003e190	default
+0003e16c	GlobalFuntions::isLatestVersion	0003e1c0	isLatestVersion
+0003e16c	GlobalFuntions::isLatestVersion	0003e22c	/userapp/tmp
+0003e16c	GlobalFuntions::isLatestVersion	0003e2a0	default
+0003e16c	GlobalFuntions::isLatestVersion	0003e2d0	filenum_tmp:
+0003e16c	GlobalFuntions::isLatestVersion	0003e314	zip
+0003e16c	GlobalFuntions::isLatestVersion	0003e318	Firmware
+0003e16c	GlobalFuntions::isLatestVersion	0003e4bc	default
+0003e16c	GlobalFuntions::isLatestVersion	0003e4c0	++==++
+0003e16c	GlobalFuntions::isLatestVersion	0003e4c4	config2.ini
+0003e16c	GlobalFuntions::isLatestVersion	0003e4e4	default
+0003e16c	GlobalFuntions::isLatestVersion	0003e4e8	<isLatestVersion>
+0003e16c	GlobalFuntions::isLatestVersion	0003e4ec	version
+0003e16c	GlobalFuntions::isLatestVersion	0003e50c	supx
+0003e16c	GlobalFuntions::isLatestVersion	0003e658	config.ini
+0003e16c	GlobalFuntions::isLatestVersion	0003e6d8	version
+0003e16c	GlobalFuntions::isLatestVersion	0003e790	default
+0003e16c	GlobalFuntions::isLatestVersion	0003e7b8	<isLatestVersion>
+0003e16c	GlobalFuntions::isLatestVersion	0003e7cc	, 
+0003e16c	GlobalFuntions::isLatestVersion	0003e820	firmware
+0003e16c	GlobalFuntions::isLatestVersion	0003e984	, 
+0003e16c	GlobalFuntions::isLatestVersion	0003e9c8	version
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003ed60	Gcode null
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003ed80	Gcode null
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003ed9c	Gcode null
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003ee04	default
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003ee30	~~bool:
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003ee48	true
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003eeb8	default
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003eee0	file open
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003ef0c	;max_x(mm):
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003ef10	;max_y(mm):
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003ef28	;min_x(mm):
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003ef34	;min_y(mm):
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003ef38	:
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003ef40	;Generated by IVI 3licer
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003ef68	:
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f0b0	:
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f158	:
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f1d0	default
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f1f8	Generated by IVI 3licer
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f238	;header_type:
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f23c	:
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f240	3dp
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f25c	laser
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f260	cnc
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f264	Gcode null
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f290	,
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f2c0	mm
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f314	,
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f374	FDM
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f3b4	FDM
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f3d4	;material_type:
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f410	:
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f4a4	;estimated_time(s):
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f4e4	:
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f56c	.
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f5a8	.
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f76c	Laser
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f7c4	CNC
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f818	Gcode null
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f8d4	.gcode
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f8f8	FDM
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f914	Gcode null
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f924	Gcode null
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f934	Gcode null
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f958	.nc
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f97c	Laser
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f99c	.cnc
+0003ed10	GlobalFuntions::checkGcodePrinterHeadType	0003f9c0	CNC
+0003fb8c	GlobalFuntions::checkFileMD5	0003fbb8	default
+0003fb8c	GlobalFuntions::checkFileMD5	0003fbe4	checkFileMD5:
+0003fb8c	GlobalFuntions::checkFileMD5	0003fd1c	default
+0003fb8c	GlobalFuntions::checkFileMD5	0003fd48	hashResult
+0003fb8c	GlobalFuntions::checkFileMD5	0003fd80	MD5
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	0003ff60	/userapp/tmp
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	0003ffd4	default
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	00040004	filenum_tmp:
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	00040048	zip
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	0004004c	Firmware
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	0004021c	firmware.supx
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	00040220	config2.ini
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	00040234	default
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	00040238	MD5
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	0004024c	default
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	00040254	file MD5:
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	000402e0	firmware
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	00040574	config.ini
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	0004059c	default
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	00040644	MD5
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	000406d4	default
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	00040700	file MD5:
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	00040760	default
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	00040790	fname:
+0003fee4	GlobalFuntions::checkIsFirmwareCanUse	000407ac	; md5:
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00040b40	/userapp/tmp
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00040bb4	default
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00040be4	filenum_tmp:
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00040c28	Firmware
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00040c2c	zip
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00040e10	config2.ini
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00040e14	firmware
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00040e2c	config.ini
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00040e30	default
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00040e40	MD5
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00040e4c	firmware.supx
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00040f84	default
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00041024	MD5
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	000410b0	default
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	000410dc	file MD5:
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	000412d8	default
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00041304	file MD5:
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00041358	default
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00041388	fname:
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	0004139c	; md5:
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	000413e4	default
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	0004140c	fname:
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00041420	; md5:
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00041528	default
+00040ac4	GlobalFuntions::checkIsFirmwareCanUse	00041550	checkIsFirmwareCanUse->tf:
+00041900	GlobalFuntions::getOneLineFromFile	00041948	open error!
+00041900	GlobalFuntions::getOneLineFromFile	000419e0	;
+00041900	GlobalFuntions::getOneLineFromFile	00041a80	;
+00041900	GlobalFuntions::getOneLineFromFile	00041b58	M107
+00041900	GlobalFuntions::getOneLineFromFile	00041bb4	\n
+00041900	GlobalFuntions::getOneLineFromFile	00041c00	FDM
+00041900	GlobalFuntions::getOneLineFromFile	00041d28	end of here:----
+00041900	GlobalFuntions::getOneLineFromFile	00041d70	Laser
+00041900	GlobalFuntions::getOneLineFromFile	00041d88	M5
+00041900	GlobalFuntions::getOneLineFromFile	00041dc0	Operational
+00041900	GlobalFuntions::getOneLineFromFile	00041eb0	(-
+00041900	GlobalFuntions::getOneLineFromFile	00041ecc	 , 
+00041900	GlobalFuntions::getOneLineFromFile	00041f10	-)
+00041900	GlobalFuntions::getOneLineFromFile	00041f84	Laser
+00041900	GlobalFuntions::getOneLineFromFile	00041fa0	M5
+00041900	GlobalFuntions::getOneLineFromFile	00041fe8	Compelete
+00041900	GlobalFuntions::getOneLineFromFile	00041ff8	M2411 S3
+00041900	GlobalFuntions::getOneLineFromFile	000420e0	CNC
+00041900	GlobalFuntions::getOneLineFromFile	00042100	Compelete
+00041900	GlobalFuntions::getOneLineFromFile	00042114	M2411 S3
+00041900	GlobalFuntions::getOneLineFromFile	00042150	Operational
+00041900	GlobalFuntions::getOneLineFromFile	0004218c	CNC
+00041900	GlobalFuntions::getOneLineFromFile	000421ac	M106
+00042330	GlobalFuntions::PrintgcodefileFinish	00042344	end of here:----
+00042330	GlobalFuntions::PrintgcodefileFinish	000423a8	Laser
+00042330	GlobalFuntions::PrintgcodefileFinish	000423c4	M5
+00042330	GlobalFuntions::PrintgcodefileFinish	00042400	Operational
+00042330	GlobalFuntions::PrintgcodefileFinish	00042524	Compelete
+00042330	GlobalFuntions::PrintgcodefileFinish	00042558	M2411 S3
+00042330	GlobalFuntions::PrintgcodefileFinish	00042590	CNC
+00042600	GlobalFuntions::stopPrinting	000426ec	FDM
+00042600	GlobalFuntions::stopPrinting	00042748	Stop
+00042600	GlobalFuntions::stopPrinting	0004278c	N/A
+00042600	GlobalFuntions::stopPrinting	000427ec	M108
+00042600	GlobalFuntions::stopPrinting	00042818	M104 S0
+00042600	GlobalFuntions::stopPrinting	00042840	M140 S0
+000428b0	GlobalFuntions::cachegcodeFromFile	000428f4	;
+000428b0	GlobalFuntions::cachegcodeFromFile	00042908	M107
+000428b0	GlobalFuntions::cachegcodeFromFile	0004290c	M106
+000428b0	GlobalFuntions::cachegcodeFromFile	00042910	FDM
+000428b0	GlobalFuntions::cachegcodeFromFile	00042bdc	Laser
+000428b0	GlobalFuntions::cachegcodeFromFile	00042bf8	M5
+000428b0	GlobalFuntions::cachegcodeFromFile	00042c38	M2411 S3
+000428b0	GlobalFuntions::cachegcodeFromFile	00042cb0	open error!
+000428b0	GlobalFuntions::cachegcodeFromFile	00042ce4	CNC
+00042d5c	GlobalFuntions::startPrinting	00042fac	Printing
+00042d5c	GlobalFuntions::startPrinting	00043004	Laser
+00042d5c	GlobalFuntions::startPrinting	00043048	CNC
+000430b0	GlobalFuntions::printTriggerHandle	000430c8	\n
+000430b0	GlobalFuntions::printTriggerHandle	00043128	trigged
+000430b0	GlobalFuntions::printTriggerHandle	00043458	Printing
+000430b0	GlobalFuntions::printTriggerHandle	0004348c	Laser
+000430b0	GlobalFuntions::printTriggerHandle	000434f0	work
+000430b0	GlobalFuntions::printTriggerHandle	00043548	pause
+000430b0	GlobalFuntions::printTriggerHandle	000435a0	resume
+000430b0	GlobalFuntions::printTriggerHandle	000435f8	stop
+000430b0	GlobalFuntions::printTriggerHandle	00043638	CNC
+000436d4	GlobalFuntions::runBlockGcode	000436e8	/Default/block.gcode
+000436d4	GlobalFuntions::runBlockGcode	00043738	default
+000436d4	GlobalFuntions::runBlockGcode	0004373c	Start Printing block gcode...
+0004393c	GlobalFuntions::runFinetuneBlock	00043950	G90
+0004393c	GlobalFuntions::runFinetuneBlock	00043984	G0 X0 Y0 F500
+0004393c	GlobalFuntions::runFinetuneBlock	000439bc	M3 S
+0004393c	GlobalFuntions::runFinetuneBlock	000439f8	M5
+0004393c	GlobalFuntions::runFinetuneBlock	00043a30	G1 F
+0004393c	GlobalFuntions::runFinetuneBlock	00043a7c	G0 F
+00043b28	GlobalFuntions::readyPrintint	00043b58	default
+00043b28	GlobalFuntions::readyPrintint	00043b80	Ready Printing...
+00043b28	GlobalFuntions::readyPrintint	00043c5c	default
+00043b28	GlobalFuntions::readyPrintint	00043c80	[(%f, %f)]
+00043de8	GlobalFuntions::reStartPrinting	00043e54	default
+00043de8	GlobalFuntions::reStartPrinting	00043e80	>>>>>>>>>>>>>>>>>>>>>>>>
+00043de8	GlobalFuntions::reStartPrinting	00043f14	default
+00043de8	GlobalFuntions::reStartPrinting	00043f38	Gfile pos:
+00043de8	GlobalFuntions::reStartPrinting	00043fb8	default
+00043de8	GlobalFuntions::reStartPrinting	00043fe4	file open
+00045d3c	Work::injectDebug	00045d4c	default
+00045dd8	Work::exitThread	00045e38	default
+00045dd8	Work::exitThread	00045e6c	work thread serialport is null.
+00045f10	Work::on_ReadOutput	00045fe8	default
+00045f10	Work::on_ReadOutput	00046018	WiFiPro
+00045f10	Work::on_ReadOutput	000460a0	<-->
+0004625c	Work::jumpToApp	00046338	default
+0004625c	Work::jumpToApp	00046364	jumpToApp();
+00046420	Work::parser_res	00046468	default
+00046420	Work::parser_res	00046478	---->%02x %02x %02x %02x %02x
+00046420	Work::parser_res	00046588	default
+00046420	Work::parser_res	0004658c	check update crc error\n
+00046420	Work::parser_res	000465c8	default
+00046420	Work::parser_res	000465d0	(temp[0] & 0xf0) != 0xC0 %02x
+00046420	Work::parser_res	00046618	default
+00046420	Work::parser_res	0004661c	data error\n
+00046420	Work::parser_res	00046658	default
+00046420	Work::parser_res	0004665c	command crc error\n
+00046420	Work::parser_res	00046678	default
+00046420	Work::parser_res	0004667c	flash write flash error\n
+00046420	Work::parser_res	00046698	default
+00046420	Work::parser_res	0004669c	flash erase error\n
+00046420	Work::parser_res	000466b8	default
+00046420	Work::parser_res	000466bc	command unknow\n
+00046420	Work::parser_res	000466d8	default
+00046420	Work::parser_res	000466e4	system update complete...\n
+00046758	Work::ReadData	00046808	default
+00046758	Work::ReadData	00046810	port recv size: %d
+00046758	Work::ReadData	00046874	default
+00046758	Work::ReadData	0004687c	port recv size: %d
+00046aec	Work::jumpToBootloader	00046af4	M997\n
+00046aec	Work::jumpToBootloader	00046c08	default
+00046aec	Work::jumpToBootloader	00046c38	now in bootloader
+00046d20	Work::Work	00046d94	ttyUSB0
+00046e68	Work::startWorkFile	00046e8c	default
+00046e68	Work::startWorkFile	00046ec0	---111---id:
+00046e68	Work::startWorkFile	00046ff0	X
+00046e68	Work::startWorkFile	00046ff4	Y
+00046e68	Work::startWorkFile	0004700c	 
+00046e68	Work::startWorkFile	00047010	X
+00046e68	Work::startWorkFile	00047014	Y
+00047614	Work::startUpgradeFirmware	00047650	default
+00047614	Work::startUpgradeFirmware	0004774c	open file name:%s %s
+00047614	Work::startUpgradeFirmware	00047844	default
+00047614	Work::startUpgradeFirmware	00047850	%s %d \n
+00047614	Work::startUpgradeFirmware	00047854	startUpgradeFirmware
+00047614	Work::startUpgradeFirmware	0004787c	default
+00047614	Work::startUpgradeFirmware	000478a8	bin file size: %lld
+00047614	Work::startUpgradeFirmware	0004792c	default
+00047614	Work::startUpgradeFirmware	00047940	%s %d \n
+00047614	Work::startUpgradeFirmware	00047944	startUpgradeFirmware
+00047614	Work::startUpgradeFirmware	00047970	default
+00047614	Work::startUpgradeFirmware	000479c8	%02x %02x %02x %02x %02x %02x %02x %02x\n
+00047614	Work::startUpgradeFirmware	00047a18	default
+00047614	Work::startUpgradeFirmware	00047a1c	file size error\n
+00047614	Work::startUpgradeFirmware	00047b28	default
+00047614	Work::startUpgradeFirmware	00047b3c	%s %d \n
+00047614	Work::startUpgradeFirmware	00047b40	startUpgradeFirmware
+00047614	Work::startUpgradeFirmware	00047b70	default
+00047614	Work::startUpgradeFirmware	00047b74	file type error\n
+00047614	Work::startUpgradeFirmware	00047ba0	default
+00047614	Work::startUpgradeFirmware	00047bac	%s %d \n
+00047614	Work::startUpgradeFirmware	00047bb0	startUpgradeFirmware
+00047614	Work::startUpgradeFirmware	00047c40	default
+00047614	Work::startUpgradeFirmware	00047c44	file crc error %04x %04x\n
+00047614	Work::startUpgradeFirmware	00047c70	default
+00047614	Work::startUpgradeFirmware	00047c78	open file error
+00047614	Work::startUpgradeFirmware	00047cdc	default
+00047614	Work::startUpgradeFirmware	00047ce0	flash erase error
+00047614	Work::startUpgradeFirmware	00047d08	update start, erase flash...... 
+00047614	Work::startUpgradeFirmware	00047d1c	 ok ......
+00047614	Work::startUpgradeFirmware	00047dc0	flash write 
+00047614	Work::startUpgradeFirmware	00047dc4	 ok ......
+00047614	Work::startUpgradeFirmware	00047dc8	default
+00047614	Work::startUpgradeFirmware	0004801c	default
+00047614	Work::startUpgradeFirmware	00048024	%s %d \n
+00047614	Work::startUpgradeFirmware	00048028	startUpgradeFirmware
+00047614	Work::startUpgradeFirmware	0004805c	default
+00047614	Work::startUpgradeFirmware	00048060	flash write error
+00047614	Work::startUpgradeFirmware	000480ac	default
+00047614	Work::startUpgradeFirmware	000480b0	file size error %d %d
+00047614	Work::startUpgradeFirmware	000480e0	flash write 
+00047614	Work::startUpgradeFirmware	00048118	 ok ......
+00047614	Work::startUpgradeFirmware	00048144	default
+00047614	Work::startUpgradeFirmware	000481dc	default
+00047614	Work::startUpgradeFirmware	000481e0	flash verify data error 
+00047614	Work::startUpgradeFirmware	00048230	default
+00047614	Work::startUpgradeFirmware	00048234	flash write error
+00047614	Work::startUpgradeFirmware	00048248	default
+00047614	Work::startUpgradeFirmware	0004824c	verify flash complete...... \n
+00048538	Work::startUpdateFile	00048554	default
+00048538	Work::startUpdateFile	00048598	---222---id:
+00048538	Work::startUpdateFile	0004863c	default
+00048538	Work::startUpdateFile	0004866c	Controller firmware file:
+00048538	Work::startUpdateFile	0004876c	default
+00048538	Work::startUpdateFile	0004879c	Work::run >>>> updateTask
+00048538	Work::startUpdateFile	000487fc	true
+00048538	Work::startUpdateFile	00048a00	default
+00048538	Work::startUpdateFile	00048a30	RTS
+00048538	Work::startUpdateFile	00048ab0	true
+00048538	Work::startUpdateFile	00048ae0	default
+00048538	Work::startUpdateFile	00048b10	DTR
+00048538	Work::startUpdateFile	00048b90	true
+00048538	Work::startUpdateFile	00048bf8	default
+00048538	Work::startUpdateFile	00048c24	jump to bootloader:
+00048538	Work::startUpdateFile	00048c80	false
+00048538	Work::startUpdateFile	00048d48	false
+00048538	Work::startUpdateFile	00048d54	false
+00048538	Work::startUpdateFile	00048dbc	default
+00048538	Work::startUpdateFile	00048de8	start Upgrade Firmware:
+00048538	Work::startUpdateFile	00048f04	default
+00048538	Work::startUpdateFile	00048f0c	new QSerialPort fail...
+00049208	networkManager::readPendingDatagrams	00049344	default
+00049208	networkManager::readPendingDatagrams	00049374	receive:
+00049208	networkManager::readPendingDatagrams	00049424	,ip:
+00049208	networkManager::readPendingDatagrams	000494a8	, port:
+00049208	networkManager::readPendingDatagrams	0004956c	discover
+00049208	networkManager::readPendingDatagrams	0004961c	@
+00049208	networkManager::readPendingDatagrams	000496d4	|Model:
+00049208	networkManager::readPendingDatagrams	00049788	|status:
+00049208	networkManager::readPendingDatagrams	00049834	\n
+0004a054	networkManager::networkManager	0004a0b0	IVI3D-Zoom-Mammoth
+0004a054	networkManager::networkManager	0004a0ec	IDLE
+0004f130	Sender::qt_static_metacall	000503e4	QVector
+0004f130	Sender::qt_static_metacall	00050854	QtMetaTypePrivate::QSequentialIterableImpl
+00050e6c	QMetaTypeId<QtMetaTypePrivate::QSequentialIterableImpl>::qt_metatype_id	00050eac	QtMetaTypePrivate::QSequentialIterableImpl
+00050f60	QMetaTypeId<QVector<QString>>::qt_metatype_id	00050ff0	QVector
+00050f60	QMetaTypeId<QVector<QString>>::qt_metatype_id	00051164	QtMetaTypePrivate::QSequentialIterableImpl
+00051284	QtPrivate::ConverterFunctor<QVector<QString>,QtMetaTypePrivate::QSequentialIterableImpl,QtMetaTypePrivate::QSequentialIterableConvertFunctor<QVector<QString>>>::~ConverterFunctor	00051344	QVector
+00051284	QtPrivate::ConverterFunctor<QVector<QString>,QtMetaTypePrivate::QSequentialIterableImpl,QtMetaTypePrivate::QSequentialIterableConvertFunctor<QVector<QString>>>::~ConverterFunctor	00051454	QtMetaTypePrivate::QSequentialIterableImpl
+00051284	QtPrivate::ConverterFunctor<QVector<QString>,QtMetaTypePrivate::QSequentialIterableImpl,QtMetaTypePrivate::QSequentialIterableConvertFunctor<QVector<QString>>>::~ConverterFunctor	00051548	QtMetaTypePrivate::QSequentialIterableImpl

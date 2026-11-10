@@ -1,0 +1,22 @@
+{"n": 1, "t": 1794279967.7762928, "kind": "safety", "msg": "bridge job_active=False (static False)", "png": null}
+{"n": 2, "t": 1794279967.776335, "kind": "safety", "msg": "app print-file fds: none -> idle", "png": null, "probe": {"counts": {}, "verdict": "idle", "streaming": [], "loaded": []}}
+{"n": 3, "t": 1794279967.7764108, "kind": "list", "msg": "/userdata/WifiFile: 11 entries, 11 shown by the app", "png": null, "order": ["part00.gcode", "part01.gcode", "part02.gcode", "part03.gcode", "part04.gcode", "part05.gcode", "part06.gcode", "part07.gcode", "benchy_0.2mm.gcode", "zz_same_time.gcode", "part08.gcode"]}
+{"n": 4, "t": 1794279967.921671, "kind": "identify", "msg": "<home score=0.0 ref match (next 97.1)>", "png": "004_identify.png", "label": "home", "score": 0.0, "provisional": false}
+{"n": 5, "t": 1794279967.9707046, "kind": "tap", "msg": "DRY wake @ (400,472) on home", "png": "005_tap.png", "target": "wake", "x": 400, "y": 472}
+{"n": 6, "t": 1794279968.0201256, "kind": "tap", "msg": "DRY home.files @ (122,209) on home -> expect files", "png": "006_tap.png", "target": "home.files", "x": 122, "y": 209}
+{"n": 7, "t": 1794279968.020176, "kind": "plan", "msg": "assume next screen = files", "png": null}
+{"n": 8, "t": 1794279968.0202012, "kind": "tap", "msg": "DRY files.wifi @ (400,225) on files -> expect wifi_list", "png": null, "target": "files.wifi", "x": 400, "y": 225}
+{"n": 9, "t": 1794279968.020216, "kind": "plan", "msg": "assume next screen = wifi_list", "png": null}
+{"n": 10, "t": 1794279968.020247, "kind": "tap", "msg": "DRY wifi.drag @ (250,400) drag->(250,100) on wifi_list -> expect wifi_list", "png": null, "target": "wifi.drag", "x": 250, "y": 400}
+{"n": 11, "t": 1794279968.0202641, "kind": "tap", "msg": "DRY wifi.drag @ (250,400) drag->(250,100) on wifi_list -> expect wifi_list", "png": null, "target": "wifi.drag", "x": 250, "y": 400}
+{"n": 12, "t": 1794279968.020277, "kind": "tap", "msg": "DRY wifi.drag @ (250,400) drag->(250,100) on wifi_list -> expect wifi_list", "png": null, "target": "wifi.drag", "x": 250, "y": 400}
+{"n": 13, "t": 1794279968.0202904, "kind": "select", "msg": "file 'benchy_0.2mm.gcode' = row 8 of 11, Make at (552,256), contentY=900", "png": null}
+{"n": 14, "t": 1794279968.0203006, "kind": "tap", "msg": "DRY wifi.make @ (552,256) on wifi_list -> expect dialog_print", "png": null, "target": "wifi.make", "x": 552, "y": 256}
+{"n": 15, "t": 1794279968.020309, "kind": "plan", "msg": "assume next screen = dialog_print", "png": null}
+{"n": 16, "t": 1794279968.0203223, "kind": "tap", "msg": "DRY dialog.right @ (585,345) on dialog_print -> expect dialog_plate", "png": null, "target": "dialog.right", "x": 585, "y": 345}
+{"n": 17, "t": 1794279968.020332, "kind": "plan", "msg": "assume next screen = dialog_plate", "png": null}
+{"n": 18, "t": 1794279968.0203424, "kind": "tap", "msg": "DRY dialog.one @ (400,345) on dialog_plate -> expect status_ready", "png": null, "target": "dialog.one", "x": 400, "y": 345}
+{"n": 19, "t": 1794279968.0203497, "kind": "plan", "msg": "assume next screen = status_ready", "png": null}
+{"n": 20, "t": 1794279968.0203574, "kind": "arrive", "msg": "Start button ready for 'benchy_0.2mm.gcode' (stop-before-Start; use --start)", "png": null}
+{"n": 21, "t": 1794279968.0203755, "kind": "result", "msg": "OK <status_ready planned>; planned: wake @ (400,472) on home | home.files @ (122,209) on home | files.wifi @ (400,225) on files | wifi.drag @ (250,400) drag->(250,100) on wifi_list | wifi.drag @ (250,400) drag->(250,100) on wifi_list | wifi.drag @ (250,400) drag->(250,100) on wifi_list | wifi.make @ (552,256) on wifi_list | dialog.right @ (585,345) on dialog_print | dialog.one @ (400,345) on dialog_plate", "png": null}
+{"n": 22, "t": 1794279968.0203905, "kind": "summary", "msg": "3 SSH commands, 0 taps injected: []", "png": null}

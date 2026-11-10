@@ -1,6 +1,8 @@
 # IVI 3D Printer — Interface / Protocol Spec
 
-> **Update (later findings):** the printer is a **delta** (M665 L357.50 R160.31 H233.22), not a Cartesian/A150-style machine. The "closed loop" is implemented inside the smart stepper drivers, which the STM32 firmware talks to over UART (see `supx_decompile_report.md` §3a). The STM32 speaks plain line G-code only; `AA 55` framing is the slicer↔UI-board protocol.
+> Current map of the whole machine: [architecture.md](architecture.md), [a33.md](a33.md), [stm32.md](stm32.md). This file is the UI-ELF protocol note.
+>
+> The printer is a **delta** (M665 L357.50 R160.31 H233.22). The closed loop lives in the smart stepper drivers. The STM32 speaks plain line G-code; `AA 55` framing is the slicer↔UI path. `M2005` is the firmware/serial query and `M2051` is the head-type query. `M106` with no `P` turns both head fans on.
 
 **Target:** `/workspace/ivi/firmware.bin` (ELF32 ARM Qt5 touchscreen/controller UI)  
 **Also used:** IVI 3licer 1.6.2 macOS app (from DMG), `firmware.supx`, `config.ini` / `config2.ini`  
@@ -183,7 +185,8 @@ From `Sender::Sender` @ `0x25e48` and `Sender::openPort` @ `0x1f410`:
 | `M2410` | Pause |
 | `M2411 S1` | Resume |
 | `M2411 S3` | Stop |
-| `M2005`, `M2051` | Present as literals (tool/head related; exact semantics not fully decompiled) |
+| `M2005` | Controller firmware string, tool-head firmware/hardware, head serial from EEPROM |
+| `M2051` | Head type (`info:Head 3DP,…` / Laser / CNC). Codes in [stm32.md](stm32.md) |
 | `M210 S0/S1`, `M2155 S0/S5` | `M2155 S<n>` = motion-board auto status report interval (see laser_cnc_gcode.md) |
 
 `GlobalFuntions::sendPrintStartCMD` @ `0x2a60c`:
@@ -204,14 +207,15 @@ Controller ack strings: `work: ok`, `pause: ok`, `stop: ok`, `Error:Printer halt
 
 ## 3. Print-job transfer flow
 
-### 3.1 Over the network (what Orca should use)
+### 3.1 Over the network
 
-1. Discover via UDP 20050.  
-2. HTTP connect on **8080**, obtain token.  
-3. Upload `.gcode` (`/upload` or `/prepare_print` with `type=3DP`). Large files: MD5 + `/sliceUpload` chunks.  
-4. `/start_print` → printer runs the file; UI may show “printing via IVI 3licer”.  
-5. Status via `/status` (`currentLine`, `totalLines`, `estimatedTime`, temps, positions).  
-6. `/pause_print` / `/resume_print` / `/stop_print`.
+The slicer issues the Luban sequence below. On this firmware the print-control routes return **404**. What actually works is discovery, connect, `execute_code` (one line), and upload. Start the job on the touchscreen or over USB-C. See [network.md](network.md) and [wifi_touch.md](wifi_touch.md).
+
+1. Discover via UDP 20050.
+2. HTTP connect on **8080**, obtain token.
+3. Upload `.gcode` to `/upload`. The name must contain exactly one dot and end in `gcode`, `cnc`, or `nc`, or kore returns 412. Large files: `/sliceUpload` with an MD5.
+4. `/prepare_print`, `/start_print`, `/pause_print`, `/resume_print`, `/stop_print` are **404** on this unit.
+5. `/status` returns only `{"status":"IDLE"}`.
 
 ### 3.2 Inside the Qt UI (local / USB path)
 
@@ -236,7 +240,7 @@ Extensions recognized: `.gcode`, `.nc`, `.cnc`.
 
 ### 3.3 Firmware update path (serial bootloader — not for print jobs)
 
-Strings / handlers around `command crc error`, `flash erase`, `M997`, `jumpToApp`, `firmware.supx`, `checkFileMD5` — binary CRC’d update protocol over the same serial port when jumping to bootloader. Separate from normal G-code printing.
+Settings → Update Firmware sends `M997`, then the `.supx` body as CRC-16 frames on `ttyUSB0`. Frame table and flash map: [stm32.md](stm32.md#update-protocol). Package rules: [a33.md](a33.md#update-package).
 
 ---
 
@@ -269,11 +273,11 @@ Update packaging names in UI: `IVI3DPrinterFirmware`, `IVI3DPrinterFirmwarePack`
 > Hardware cross-reference: [hardware_research.md](hardware_research.md) covers the board architecture (combined `A33_407MB` main board with Allwinner A33 + STM32F407, driver boards, power and switch PCBs; see [mainboard.md](mainboard.md)), the per-motor magnetic encoders and driver boards, the toolhead ID chip, and the 8-pad head connector (pin roles guessed).
 
 
-1. **HTTP server binary** is not this Qt ELF and has not been recovered. A full TCP port scan (2026-10-31) shows **only TCP 8080 open** (kore; see [network.md](network.md)); SSH/Telnet/FTP do not answer on any port. The HTTP server binary can't be pulled over the network. Recover it via the `UGUART` console or by imaging the A33 storage.  
-2. Exact mapping of every `setUdpInfo` field → discovery `NAME` vs `Model:` under all firmware builds (ctor default is `IVI3D-Zoom-Mammoth`; live capture shows `IVI3D` / `IVI 3D Printer`). Wire format is solid; field provenance can vary by version.  
-3. Full semantics of `M2005` / `M2051` / `M210` / `M2155` not fully traced.  
-4. Whether `/prepare_print` vs `/upload` + `/start_print` differs for FDM-only Orca jobs — both exist; Luban-style clients typically `prepare_print` then `start_print`.  
-5. Slicer DMG also supports **direct serial** from the PC (`serialport:open` events). Note: the printer's external **USB-C port connects directly to the STM32 motion controller** (Marlin, 115200, line G-code), not to this Linux UI board.
+1. kore is `printer_http_api.so`, not this Qt ELF. On stock boot only TCP 8080 and UDP 20050 answer. `sshd` is on disk and is not started. The console is ttyS2 on `DEBUGUART`. See [a33.md](a33.md) and [network.md](network.md).
+2. Exact mapping of every `setUdpInfo` field → discovery `NAME` vs `Model:` under all firmware builds (ctor default is `IVI3D-Zoom-Mammoth`; live capture shows `IVI3D` / `IVI 3D Printer`). Wire format is solid; field provenance can vary by version.
+3. `M2005` / `M2051` / `M210` / `M2155` are traced in [stm32.md](stm32.md) and [data/stm32_app_commands.csv](data/stm32_app_commands.csv).
+4. `/prepare_print` and `/start_print` return 404 here. Upload plus a touchscreen start, or the USB-C bridge, are the working paths.
+5. The slicer can also open the printer's USB-C port directly. That port is the STM32 CDC interface, not this Linux board.
 
 ---
 

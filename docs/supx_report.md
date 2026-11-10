@@ -7,7 +7,7 @@
 - Then 652 records of 256 B: `A2 40 | u32 flash addr | 248 B data | u16 CRC-16/XMODEM`, addresses contiguous from 0x08010000 to 0x080377A0.
 - Trailer: one record type 0x0BA2 with "ASCII" + padding, then `a9a9 a302 0aba 0000 de3a` (end marker/checksums).
 - **No encryption, no compression.** Data is plaintext Thumb-2; all CRCs are CRC-16/XMODEM (see decompile report).
-- Raw image: `supx_raw.bin` (161,696 B), base **0x08010000**. Bootloader therefore occupies 0x08000000–0x0800FFFF (64 KB) — not included.
+- Raw image: 161,696 bytes, base **0x08010000**. Sectors 0–1 (`0x08000000`–`0x08007FFF`, 32 KiB) are the bootloader; sectors 2–3 are settings. Neither is in the file. See [stm32.md](stm32.md).
 
 ## Vector table
 SP=0x20020000 (128 KB SRAM top), Reset=0x08016E2D, default handler 0x08016E7D. Load in Ghidra: ARM:LE:32:Cortex, base 0x08010000.
@@ -26,7 +26,7 @@ SP=0x20020000 (128 KB SRAM top), Reset=0x08016E2D, default handler 0x08016E7D. L
 - UUID cede2a2f-41a2-4748-9b12-c55c62f367ff in M115.
 
 ## Reflash / replacement notes
-- App at 0x08010000 behind 64 KB bootloader; UI pushes .supx over serial (M997 → bootloader, record CRC'd). Bootloader can't be read from .supx; needs SWD (check RDP level with ST-Link; if RDP0 full dump possible).
+- App at 0x08010000. The UI pushes `.supx` over serial (`M997`, then the record stream). The bootloader and the settings sectors are absent from the file. An SWD read of all 512 KiB is allowed only at readout-protection level 0, and only as its own authorized test: no reset, halt, erase, program, or option-byte write, and never clear readout protection. See [stm32.md](stm32.md) and [tools.md](tools.md).
 - A stock Marlin/Klipper board swap would need replacements for the smart-driver bus and tool-head bus.
 
 ## Limitations

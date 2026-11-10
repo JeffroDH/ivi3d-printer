@@ -33,6 +33,6 @@ Webcam (IP MJPEG/snapshot, or a USB camera via ffmpeg) with per-layer timelapse 
 ## Blockers
 1. ~~Bridge code~~ done (`bridge/`); needs a real-hardware test.
 1. ~~Port 8080 API~~ tested 2026-11-01: upload only; start/pause/stop 404 → use USB serial. Laser/CNC header and power scale still unverified.
-2. Linux shell via UGUART console pads (CP2102 adapter).
+2. Linux shell on the DEBUGUART / front 3-pin console (ttyS2, 115200, CP2102 with VCC unconnected). See [a33.md](a33.md).
 3. Toolhead CAN command map (CANable PRO capture).
 4. Full flash backup via SWD (ST-Link V2) before anything risky.

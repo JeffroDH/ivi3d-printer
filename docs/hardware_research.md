@@ -67,8 +67,8 @@ Photos answered the big architecture questions. Still open (detail in [mainboard
 - STM32 pin map for driver UARTs, bed/`FAN24V` switching (`supx_decompile_report.md` §8)
 - Whether bed heat switches on this board or a power PCB
 - Head connector pinout/pitch; full CAN set
-- STM32 RDP status (**inspect only** - never unlock/disable); confirm whether `DEBUGUART_*` is a Linux console **after measuring voltage**
-- UART voltage / CPU owner on DEBUGUART (3-pin continuity done); CH340C 5-pin vs that path
+- STM32 readout protection is still unread. Inspect only, and only when authorized: no reset, halt, erase, program, or option-byte write, and never clear protection
+- `DEBUGUART_*` / the front 3-pin is the A33 ttyS2 console at 115200 8N1. The CH340C 5-pin pinout is still open; the CH340 chip is the A33↔STM32 link (`ttyUSB0`)
 - Why each axis has both `LIMITSW_` and `LIMIT_`
 - SOIC-8 near SWD; GD32 ↔ lower-SWD **chip-pin** continuity
 - Amass connector series/pitch; GL850G port mapping; black-wire identity; PPTC orderables; fan switched vs always-on
