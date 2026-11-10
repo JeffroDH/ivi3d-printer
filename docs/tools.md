@@ -2,11 +2,13 @@
 
 These are the tools for going beyond Wi-Fi (port 8080) and the USB-C Marlin serial link. Pad locations are in [mainboard.md](mainboard.md).
 
-> **Serial port caution (2026-11):** the board has **more than one** serial-looking connector.
-> Rear silk: **`DEBUGUART_RX` / `DEBUGUART_TX` / `GND`**. Front **3-pin** by micro-USB is the same nets by **owner continuity [O]** (facing connector L→R: **TX, RX, GND**). **Measure voltage first** (do not assume 3.3 V); which CPU owns the UART **[U]**.
-> The front **bottom-left 5-pin** beside **CH340C** is a **third** path (USB-UART bridge) — not the DEBUGUART breakout. Trace to CH340C pins and measure before connecting. Details: [mainboard.md](mainboard.md) §6.
+> **Hard limits.** The STM32 on this board is irreplaceable, and the GD32 is held to the same rule until a separate decision says otherwise. Over SWD: no reset, no halt, no erase, no program, no option-byte writes. Never clear readout protection (unprotecting mass-erases the chip). Every hardware test is individually authorized.
 >
-> **Two SWD-style 5-pin headers:** **central** → STM32 **[O]**; **lower** near SD top→bottom **1 DIO, 2 3V3, 3 CLK, 4 GND, 5 RST [O]** (pin2 ≠ GND), continuous with rear pads by the **GD32E230F4** **[O]/[P]**. Chip↔header pin continuity **not measured [U]**.
+> **Serial ports.** Rear silk **`DEBUGUART_RX` / `DEBUGUART_TX` / `GND`** and the front **3-pin** (facing the connector, left→right **TX, RX, GND**) are the same nets **[O]** and are the A33 console **ttyS2 at 115200 8N1** **[V]**. Use a 3.3 V USB-TTL with **VCC unconnected**, and open the terminal before power-on. The front **bottom-left 5-pin** beside **CH340C** is a different connector; its pinout is **[U]**. The CH340 itself sits on the A33 USB hub and is `/dev/ttyUSB0` to the STM32. Details: [mainboard.md](mainboard.md), [a33.md](a33.md).
+>
+> **Two SWD-style 5-pin headers:** **central** → STM32 **[O]**; **lower** near SD, top→bottom **1 DIO, 2 3V3, 3 CLK, 4 GND, 5 RST [O]** (pin 2 is not GND), continuous with the rear pads by the **GD32E230F4** **[O]/[P]**. Chip-to-header continuity is **[U]**. The GD32 firmware is a soft-power sequencer: [gd32.md](gd32.md).
+>
+> A printable contact block for the three DEBUGUART pads is [../hardware/uart-pogo-holder/README.md](../hardware/uart-pogo-holder/README.md). Photo pitch is approximate; print the bore coupon and check with calipers.
 
 
 > **Affiliate disclosure:** the Amazon links below are affiliate links. As an Amazon Associate I earn from qualifying purchases, at no extra cost to you. Any equivalent part works.
@@ -41,14 +43,16 @@ There are **two** SWD-style headers — pick the target deliberately:
 
 - Vendor / ST software is **STM32-centric**; GD32 often needs **OpenOCD `gd32e23x`** (or vendor ISP) rather than assuming ST utilities.
 - Clone fidelity varies; treat as a cheap SWD adapter, not a guaranteed ST authentic probe.
-- **Readout protection / RDP:** inspect status only. **Never unlock or mass-erase** to force a firmware dump on either MCU.
+- **Readout protection:** inspect status only when that test is authorized. **Never unlock, and never mass-erase**, on either MCU. No reset, halt, program, or option-byte write.
 
-Software for macOS: `brew install stlink` / OpenOCD. Read-only probe first; write nothing until a full backup is saved when RDP allows.
+Software for macOS: `brew install stlink` / OpenOCD. A dump of the STM32, if it is ever authorized, is only meaningful at readout-protection level 0 and must cover all 512 KiB (bootloader and settings are not in `firmware.supx`). See [stm32.md](stm32.md) and [backups.md](backups.md).
 
-## USB-TTL listen on debug UART (only after measuring)
+## USB-TTL on the debug UART
 
-1. Measure `DEBUGUART_TX` (and/or the front 3-pin TX candidate) against GND with the printer powered and idle.
-2. Only if the levels match your adapter, prepare a listen-first hookup:
+On this unit the link is 3.3 V, 115200 8N1, ttyS2. For a different board, measure `DEBUGUART_TX` against GND before trusting that.
+
+1. Set the adapter to 3.3 V if it has a jumper. Leave VCC unconnected.
+2. Hookup:
 
 | Adapter | Board pad |
 |---|---|
@@ -57,7 +61,7 @@ Software for macOS: `brew install stlink` / OpenOCD. Read-only probe first; writ
 | TXD | **leave disconnected for first listen** |
 | 3.3V / 5V | **leave unconnected** |
 
-3. Open a serial terminal (e.g. 115200 8N1 as a starting guess **after** levels are known), power on, and capture boot text. Do not use TX/RX swapping or baud thrashing as a substitute for measuring levels. Add adapter TX only once you understand the link.
+3. Open the terminal **before** power-on, 115200 8N1, no flow control. On this unit the boot log ends in a `#` root prompt; the return path (adapter TX to board RX) is required to type. A printable pogo block for the three pads is in [../hardware/uart-pogo-holder/README.md](../hardware/uart-pogo-holder/README.md).
 
 ## Oscilloscope vs CANable
 

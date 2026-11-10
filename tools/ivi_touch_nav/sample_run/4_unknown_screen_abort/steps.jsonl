@@ -1,0 +1,14 @@
+{"n": 1, "t": 1794279968.023101, "kind": "safety", "msg": "bridge job_active=False (static False)", "png": null}
+{"n": 2, "t": 1794279968.0231261, "kind": "safety", "msg": "app print-file fds: none -> idle", "png": null, "probe": {"counts": {}, "verdict": "idle", "streaming": [], "loaded": []}}
+{"n": 3, "t": 1794279968.0234067, "kind": "list", "msg": "/userdata/WifiFile: 5 entries, 4 shown by the app", "png": null, "order": ["cube.gcode", "benchy_0.2mm.gcode", "old.gcode", "laser.nc"]}
+{"n": 4, "t": 1794279968.1660874, "kind": "identify", "msg": "<unknown score=177.0 best ref home: no ref <= 8.0>", "png": "004_identify.png", "label": "unknown", "score": 176.9857142857143, "provisional": false}
+{"n": 5, "t": 1794279968.214763, "kind": "recover", "msg": "unrecognised screen -> no tap, re-grab in 1.5 s", "png": "005_recover.png"}
+{"n": 6, "t": 1794279968.355339, "kind": "identify", "msg": "<unknown score=177.0 best ref home: no ref <= 8.0>", "png": "006_identify.png", "label": "unknown", "score": 176.9857142857143, "provisional": false}
+{"n": 7, "t": 1794279968.4041445, "kind": "recover", "msg": "unrecognised screen -> no tap, re-grab in 1.5 s", "png": "007_recover.png"}
+{"n": 8, "t": 1794279968.543907, "kind": "identify", "msg": "<unknown score=177.0 best ref home: no ref <= 8.0>", "png": "008_identify.png", "label": "unknown", "score": 176.9857142857143, "provisional": false}
+{"n": 9, "t": 1794279968.593531, "kind": "recover", "msg": "unrecognised screen -> no tap, re-grab in 1.5 s", "png": "009_recover.png"}
+{"n": 10, "t": 1794279968.7373734, "kind": "identify", "msg": "<unknown score=177.0 best ref home: no ref <= 8.0>", "png": "010_identify.png", "label": "unknown", "score": 176.9857142857143, "provisional": false}
+{"n": 11, "t": 1794279968.7872145, "kind": "recover", "msg": "unrecognised screen -> no tap, re-grab in 1.5 s", "png": "011_recover.png"}
+{"n": 12, "t": 1794279968.93121, "kind": "identify", "msg": "<unknown score=177.0 best ref home: no ref <= 8.0>", "png": "012_identify.png", "label": "unknown", "score": 176.9857142857143, "provisional": false}
+{"n": 13, "t": 1794279968.9312823, "kind": "abort", "msg": "screen not recognised 5 times in a row (last <unknown score=177.0 best ref home: no ref <= 8.0>); aborting", "png": null}
+{"n": 14, "t": 1794279968.9314582, "kind": "summary", "msg": "7 SSH commands, 0 taps injected: []", "png": null}

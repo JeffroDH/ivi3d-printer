@@ -1,6 +1,6 @@
 # Network access
 
-Verified on an owner unit at `192.168.50.85` (home Wi-Fi), 2026-10-31.
+Verified on an owner unit (home Wi-Fi), 2026-10-31, and extended by the 2026-11-07 rootfs and UART work. Addresses stay off this page; use the printer's DHCP address.
 
 ## What answers on the LAN
 
@@ -8,7 +8,7 @@ Verified on an owner unit at `192.168.50.85` (home Wi-Fi), 2026-10-31.
 |---|---|
 | **TCP 8080** | Open. HTTP API served by **kore** (`server: kore …`). This is the only open TCP port. |
 | **UDP 20050** | Discovery: broadcast ASCII `discover` → `IVI3D@<ip>|Model:IVI 3D Printer|status:IDLE` |
-| TCP 21 / 22 / 23 and all other TCP ports | Closed or filtered. Full `nmap -Pn -p-` found **no** SSH, Telnet, or FTP. |
+| TCP 21 / 22 / 23 and all other TCP ports | Closed or filtered on stock boot. `sshd` is installed and **not started** (see [a33.md](a33.md#sshd)). |
 
 About 12k ports actively refused; ~53k gave no response. That pattern often means a firewall is dropping traffic (or Wi-Fi is lossy). SSH could still exist on the printer and be blocked from the network — the scan alone cannot prove the binary is gone.
 
@@ -16,7 +16,7 @@ USB-C is **not** a network path: it enumerates as CDC serial (`/dev/cu.usbmodem�
 
 ## HTTP API test results (2026-11-01)
 
-- Works: `connect` (token required; returns `readonly:true`, `series:"IVI Printer"`, `headType:1`, `hasEnclosure:true`), `setSystemTime`, `status` (only `{"status":"IDLE"}`), `execute_code`, `disconnect`, `upload` (201).
+- Works: `connect` (token required; returns `readonly:true`, `series:"IVI Printer"`, `headType:1`, `hasEnclosure:true`), `setSystemTime`, `status` (only `{"status":"IDLE"}`), `execute_code`, `disconnect`, `upload` (201 for a name with exactly one dot and extension `gcode`, `cnc`, or `nc`). A name such as `benchy_0.2mm.gcode` returns **412** `File type error`. See [a33.md](a33.md#kore-upload-api).
 - `sliceUpload` exists (412 `md5 err` without a correct md5; fields `index,count,md5,size,filename,file`, 2 MiB chunks).
 - **404:** `prepare_print`, `start_print`, `pause_print`, `resume_print`, `stop_print`, `confirm`, `accept`, `set_readonly`, `readonly`.
 - No known request clears read-only (extra `readonly=false`/`readOnly=0`/`isReadOnly=false`/`confirm=1`/`accept=1` on connect do nothing).
@@ -26,13 +26,14 @@ USB-C is **not** a network path: it enumerates as CDC serial (`/dev/cu.usbmodem�
 
 USB serial is the working control path: `M2411 S2` (+ `M1001 L` if fw ≥ 2.4.0) starts a PC job (`WORKING_PC`), G-code streamed per `ok`; `M2410` pause, `M2411 S1` resume, `M2411 S3` stop (decoded 2026-11-01; earlier docs said "rejoin" — wrong). Verified with an FDM print on 2026-11-01. See README.
 
-## How to get a shell anyway
+## How to get a shell
 
-1. **`UGUART_RX` / `UGUART_TX`** (likely A33 Linux console) — 3.3 V USB-TTL; see [tools.md](tools.md) and [mainboard.md](mainboard.md).
-2. **STM32 SWD** — ST-Link read-only flash backup (includes the 64 KB bootloader missing from `.supx`).
-3. Once Linux access exists, re-enabling Dropbear/OpenSSH or a simple listener is usually straightforward if the packages or binaries are still on the rootfs.
+1. **`DEBUGUART` / front 3-pin** is the A33 console, ttyS2, 115200 8N1, root with no login. See [a33.md](a33.md) and [tools.md](tools.md).
+2. **sshd** is on the rootfs and is not started. The ephemeral `/tmp` procedure is [home_session/RUNBOOK.md](home_session/RUNBOOK.md). A login shell with no remote command starts a second copy of the UI.
+3. **STM32 SWD** is not a Linux shell. A full flash read is a separate authorized test and is limited to readout-protection level 0. No reset, halt, erase, program, or option-byte write. See [stm32.md](stm32.md).
 
 ## Related docs
 
-- API map: [slicer_report.md](slicer_report.md), README protocol section
-- UI ELF notes: [firmware_report.md](firmware_report.md) (the Qt `firmware` binary is not the HTTP server)
+- API map: [slicer_report.md](slicer_report.md), [a33.md](a33.md), README protocol section
+- UI ELF notes: [firmware_report.md](firmware_report.md) (the Qt `firmware` binary is not the HTTP server; kore is `printer_http_api.so`)
+- Touch injection: [wifi_touch.md](wifi_touch.md)

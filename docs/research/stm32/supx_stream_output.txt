@@ -1,0 +1,8 @@
+file 166984 B; len field 166976 (= file-8: True); format ver 2 (host requires 2); file CRC 0xDC2A vs computed 0xDC2A
+frames: 1 header + 652 records + 1 trailer (44 B) + 1 check; consumed 166984 of 166984 B
+  HDR tag a103 load 0x08010000 lenfield 0x277C4 crc ok=True
+  TRAILER a20ba07703080000 b'ASCII' crc ok=True
+  CHECK a3020aba0000de3a
+records 0x08010000..0x0803779F, contiguous=True, bad CRCs=0
+jumpToApp frame (sent twice): a4 02 aa aa aa aa 9f bd
+bootloader-entry text (Work::jumpToBootloader): b'M997\n'

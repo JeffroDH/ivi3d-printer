@@ -6,6 +6,8 @@ addresses were resolved by hand from literal pools). **Nothing was sent to the p
 
 Confidence tags: **[V]** verified in code/data · **[I]** inferred, likely · **[?]** open.
 
+The flash map, serial-port assignment, fan behaviour, and CAN field layout on this page are aligned with [stm32.md](stm32.md). That page is the one to follow for the update protocol and for `M106`.
+
 ## 1. .supx container — fully solved [V]
 All checksums are **CRC-16/XMODEM** (poly 0x1021, init 0, no reflection, no xorout), stored little-endian
 (the same routine exists in the firmware at 0x080259E6).
@@ -25,7 +27,13 @@ rebuilds a **byte-identical** file. Meaning of `A1/A2/A3` second bytes (03/40/0B
 [?] — they are reproduced literally; likely bootloader command codes (A1 = begin/erase, A2 = write, A3 = finish) [I].
 
 ## 2. Bootloader / M997 / app layout
-- App at 0x08010000, 64 KB bootloader at 0x08000000 (not in the file). SystemInit sets **VTOR = 0x08010000** [V].
+
+Current layout is in [stm32.md](stm32.md). Short form:
+
+- Application at `0x08010000`–`0x0803779F` (161696 bytes). SystemInit sets **VTOR = 0x08010000** [V].
+- Sectors 2–3 (`0x08008000` and `0x0800C000`, 16 KiB each) are settings / EEPROM emulation. The app erases and programs them from M500 / M502 / M504 / M2050 [V].
+- The vendor bootloader occupies sectors 0–1 (`0x08000000`–`0x08007FFF`, 32 KiB). It is not in `.supx` [I].
+
 - **M997** (handler 0x080226E8): parses an optional numeric arg (discarded), then DSB + `AIRCR = 0x05FA0004`
   (**NVIC_SystemReset**). No RAM magic word / flag is written before reset [V] → the bootloader decides on its own
   (most likely waits briefly for the UI board on serial after every reset) [I].
@@ -39,9 +47,9 @@ rebuilds a **byte-identical** file. Meaning of `A1/A2/A3` second bytes (03/40/0B
 ## 3. Buses
 | Function | Peripheral | Settings | Evidence |
 |---|---|---|---|
-| Host link to Linux UI board **and** USB-C port | Two Marlin serial ports (objects 0x2000111C and 0x20001378), both 115200 8N1 | `MYSERIAL0/1`; "Current working port is not SCREEN/PC" — the firmware tracks which port owns the job | [V] baud, [I] which UART each is |
-| Smart closed-loop drivers X/Y/Z/E0 | **Serial2/3/4/5 = USART2, USART3, UART4, UART5**, one driver per UART, 115200 8N1 | FUN_0802DB8C | [V] |
-| Default pins for those UARTs (STM32duino first PinMap match) | USART2 PA2/PA3, USART3 PB10/PB11, UART4 PA0/PA1 or PC10/PC11, UART5 PC12/PD2 | PinMap tables at 0x08034140/0x080340BC | [I] — PB10/PB11 and PA0/PA1 are also used as GPIO below, so actual pins need board check |
+| PC port (USB-C) | `MYSERIAL0` USB OTG FS CDC, PA11/PA12, object 0x2000111C | Product string `BLACK_F407VE CDC in FS Mode`, VID `0483` PID `5740` | [V] |
+| Screen port (A33 `ttyUSB0` via CH340) | `MYSERIAL1` USART2, TX PD5 / RX PD6, object 0x20001378, 115200 8N1 | A second USART2 object is constructed and never `begin()`'d | [V] pins, [I] the CH340 wiring |
+| Smart closed-loop drivers X/Y/Z/E | Serial3 USART3 PD8/PD9; Serial4 object on UART5 pins PC12/PD2; Serial5 object on UART4 pins PC10/PC11; Serial6 USART6 PC6/PC7. All 115200 8N1 | FUN_0802DB8C and the variant pin map | [V] |
 | Tool head | **CAN2**, PB5 = RX, PB6 = TX (AF9), IRQ CAN2_RX0 | Prescaler 6, BS1 6 tq, BS2 7 tq → 42 MHz/6/14 = **500 kbit/s**, normal mode; host TX std-ID **0x12** | [V] |
 | EEPROM / temp-humidity sensor | Bit-banged I²C-style on D69/D70 (PB10/PB11 per variant table) | FUN_08019C8C etc. | [I] |
 
@@ -95,7 +103,8 @@ was not resolved [?].
 | M2007 | status report: position, origin offsets, `Working Status:` (FUN_08025D60 → FUN_08025C30); also sent by the M2155 timer |
 | M2010 [S0/1] | auto door check on/off; no S = report door opened/closed |
 | M2049 | load-cell report (" info:weight_0 / weight_1 ") |
-| M2050 / M2051 | internal (reset/settings helpers, not decoded) |
+| M2050 | Settings helper. Writes both settings sectors. Not sent by the touchscreen app |
+| M2051 | Head-type query (CAN `A0`). Reply text and class codes: [stm32.md](stm32.md#head-type-codes-a0-byte-1) |
 | M2055 | read head SN from EEPROM, verify CRC-16, rewrite if bad, prints "OK" |
 | M2056 | print head SN ("SN:"), CRC-16 check |
 | M2060 / M2061 | self-test strings ("sensor: XMotor:ok …" / "Print:ok …") |

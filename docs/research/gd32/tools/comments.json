@@ -1,0 +1,18 @@
+{
+"0x08000190":"RCU_CTL0.IRC8MEN=1","0x080001a0":"wait IRC8MSTB (bit1)","0x080001ae":"CFG0 &= 0x08FF000C (reset SCS/prescalers/CKOUT)","0x080001c0":"CTL0: clear HXTALEN/HXTALBPS/CKMEN/PLLEN","0x080001ca":"CFG1.PREDV=0","0x080001d4":"CFG2: clear USART0SEL/ADCSEL","0x080001e0":"CFG2.IRC28MDIV=0","0x080001e8":"CFG2 bit31 (ADCPSC[2])=0","0x080001f2":"CTL1.IRC28MEN=0","0x080001fa":"RCU_INT=0 (disable clock IRQs)",
+"0x08000206":"r0 = 1<<27 = 0x08000000 (NVIC_VECTTAB_FLASH)",
+"0x08000364":"0x609 = (0x18<<6)|9 -> RCU_APB2EN bit9 ADCEN","0x0800036a":"6 = RCU_ADCCK_APB2_DIV6","0x08000372":"r0 = 9<<27 = 0x48000000 GPIOA","0x08000378":"gpio_mode_set(GPIOA, ANALOG=3, NOPULL, PIN_3)","0x08000382":"2 = ADC_CONTINUOUS_MODE","0x0800038e":"(7<<17) = ETSRC SWRCST","0x080003ae":"rank 0, ADC_CHANNEL_3, sample time 7 (239.5 cyc)","0x080003c4":"delay_ms(1) before calibration",
+"0x080007e8":"threshold 0x7C1 = 1985 counts (~1.60 V if VREF=VDDA=3.3 V)",
+"0x08000850":"timeout = 1,000,000","0x08000856":"CH3, sample time 1 (7.5 cyc)","0x08000866":"2 = ADC_FLAG_EOC",
+"0x08000908":"0x511 = AHBEN bit17 PAEN","0x0800090e":"0x512 = AHBEN bit18 PBEN","0x08000926":"gpio_mode_set(GPIOA, OUTPUT, PULLDOWN, PIN_4)","0x08000934":"gpio_mode_set(GPIOB, OUTPUT, PULLDOWN, PIN_1)","0x0800094c":"gpio_mode_set(GPIOA, OUTPUT, NOPULL, PIN_7)","0x08000958":"gpio_mode_set(GPIOA, INPUT, NOPULL, PIN_6)","0x0800096a":"gpio_output_options_set(GPIOA, PP, 50MHz, PIN_4)","0x08000976":"gpio_output_options_set(GPIOB, PP, 50MHz, PIN_1)","0x08000982":"gpio_output_options_set(GPIOA, PP, 50MHz, PIN_7)","0x0800098a":"PA4 low","0x08000990":"PB1 low","0x08000994":"PA7 low",
+"0x08000afa":"0x511 = PAEN","0x08000b00":"0x600 = APB2EN bit0 CFGCMPEN (SYSCFG/CMP clock)","0x08000b12":"gpio_mode_set(GPIOA, INPUT, PULLUP, PIN_1)",
+"0x08000b5a":"gpio_mode_set(GPIOA, OUTPUT, NOPULL, PIN_2)","0x08000b66":"gpio_output_options_set(GPIOA, PP, 50MHz, PIN_2)","0x08000b6e":"PA2 high",
+"0x08000ba2":"hold_timeout = 3000 ms","0x08000bba":"delay_ms(500)","0x08000bc6":"g_mode(0x20000014)=2 (write-only variable)",
+"0x08000bca":"STANDBY: PA2 low","0x08000bda":"debounce 50 ms","0x08000bee":"g_btn_last=0 (pressed)","0x08000bf6":"POWER ON: PA2 high, PA4 high, PB1 high","0x08000c0a":"wait for button release","0x08000c1a":"g_btn_last=1; g_mode=0",
+"0x08000c24":"MAIN LOOP","0x08000c2e":"PA3 low -> latched shutdown loop (never exits)","0x08000c40":"PA6 high -> hold_timeout = 6000 ms","0x08000c5a":"PB1 low; 10 ms; PA4 low (repeats forever)",
+"0x08000c8e":"press edge: g_btn_last=0, g_press_tick=now, toggle PA2, g_blink=0","0x08000cc6":"release edge: g_btn_last=1","0x08000ccc":"if g_blink>=6 -> power off","0x08000cf4":"-> STANDBY",
+"0x08000d10":"(elapsed*inv(125)) ror 2 <= 0x0083126E  <=>  elapsed % 500 == 0","0x08000d2e":"toggle PA2, g_blink++","0x08000d40":"held: g_blink>=7 -> power off","0x08000d68":"-> STANDBY","0x08000d6c":"button idle: g_blink=0; PA2 high",
+"0x08000e1e":"computed jump into branch table 0x08000E20..0x08000E47 (10 x b.w)",
+"0x08000fe2":"poll IRC8MSTB, timeout 0x500","0x0800101e":"hang if IRC8M not stable","0x08001024":"FMC_WS.WSCNT=2","0x0800103e":"clear PLLSEL/PLLMF/PLLMF4/PLLDV fields","0x08001046":"PLLMF=0b10001 (x18), PLLSEL=0 (IRC8M/2)","0x08001052":"PLLEN","0x0800105e":"wait PLLSTB","0x08001074":"SCS=PLL","0x08001080":"wait SCSS=PLL",
+"0x080010b4":"SystemCoreClock/1000 -> 1 ms SysTick","0x080010c8":"hang if SysTick_Config failed"
+}

@@ -1,0 +1,4 @@
+03:06:08 #001 safety   bridge job_active=False (static False)
+03:06:08 #002 safety   app print-file fds: {'/userdata/WifiFile/cube.gcode': 2} -> streaming
+03:06:08 #003 abort    refusing goto-print: the printer app is streaming /userdata/WifiFile/cube.gcode (2 open fds) - a print is running
+03:06:08 #004 summary  1 SSH commands, 0 taps injected: []

@@ -1,0 +1,29 @@
+{"n": 1, "t": 1794279965.5074956, "kind": "safety", "msg": "bridge job_active=False (static False)", "png": null}
+{"n": 2, "t": 1794279965.5075648, "kind": "safety", "msg": "app print-file fds: none -> idle", "png": null, "probe": {"counts": {}, "verdict": "idle", "streaming": [], "loaded": []}}
+{"n": 3, "t": 1794279965.5076513, "kind": "list", "msg": "/userdata/WifiFile: 11 entries, 11 shown by the app", "png": null, "order": ["part00.gcode", "part01.gcode", "part02.gcode", "part03.gcode", "part04.gcode", "part05.gcode", "part06.gcode", "part07.gcode", "benchy_0.2mm.gcode", "zz_same_time.gcode", "part08.gcode"]}
+{"n": 4, "t": 1794279965.6585128, "kind": "identify", "msg": "<header provisional score=43.9 best ref homing: no ref <= 8.0>", "png": "004_identify.png", "label": "header", "score": 43.92857142857143, "provisional": true}
+{"n": 5, "t": 1794279965.709871, "kind": "recover", "msg": "unrecognised page with an enabled Home button -> Home", "png": "005_recover.png"}
+{"n": 6, "t": 1794279965.7710211, "kind": "tap", "msg": "page.home @ (740,29) on page:unknown -> OK", "png": "006_tap.png", "target": "page.home", "x": 740, "y": 29, "status": "OK", "expect": "home"}
+{"n": 7, "t": 1794279965.9161193, "kind": "identify", "msg": "<header provisional score=43.9 best ref homing: no ref <= 8.0>", "png": "007_identify.png", "label": "header", "score": 43.92857142857143, "provisional": true}
+{"n": 8, "t": 1794279965.9674082, "kind": "recover", "msg": "unrecognised page with an enabled Home button -> Home", "png": "008_recover.png"}
+{"n": 9, "t": 1794279966.0277863, "kind": "tap", "msg": "page.home @ (740,29) on page:unknown -> OK", "png": "009_tap.png", "target": "page.home", "x": 740, "y": 29, "status": "OK", "expect": "home"}
+{"n": 10, "t": 1794279966.173128, "kind": "identify", "msg": "<home score=0.0 ref match (next 97.1)>", "png": "010_identify.png", "label": "home", "score": 0.0, "provisional": false}
+{"n": 11, "t": 1794279966.232733, "kind": "tap", "msg": "wake @ (400,472) on home -> OK", "png": "011_tap.png", "target": "wake", "x": 400, "y": 472, "status": "OK", "expect": null}
+{"n": 12, "t": 1794279966.3266826, "kind": "identify", "msg": "after wake: <home score=0.0 ref match (next 97.1)>", "png": null, "label": "home"}
+{"n": 13, "t": 1794279966.392759, "kind": "tap", "msg": "home.files @ (122,209) on home -> OK", "png": "013_tap.png", "target": "home.files", "x": 122, "y": 209, "status": "OK", "expect": "files"}
+{"n": 14, "t": 1794279966.5386326, "kind": "identify", "msg": "<files score=0.0 ref match (next 39.3)>", "png": "014_identify.png", "label": "files", "score": 0.0, "provisional": false}
+{"n": 15, "t": 1794279966.617656, "kind": "tap", "msg": "files.wifi @ (400,225) on files -> OK", "png": "015_tap.png", "target": "files.wifi", "x": 400, "y": 225, "status": "OK", "expect": "wifi_list"}
+{"n": 16, "t": 1794279966.767328, "kind": "identify", "msg": "<wifi_list score=0.0 ref match (next 99.4)>", "png": "016_identify.png", "label": "wifi_list", "score": 0.0, "provisional": false}
+{"n": 17, "t": 1794279966.8342314, "kind": "tap", "msg": "wifi.drag @ (250,400) drag->(250,100) on wifi_list -> OK", "png": "017_tap.png", "target": "wifi.drag", "x": 250, "y": 400, "status": "OK", "expect": "wifi_list"}
+{"n": 18, "t": 1794279966.9012098, "kind": "tap", "msg": "wifi.drag @ (250,400) drag->(250,100) on wifi_list -> OK", "png": "018_tap.png", "target": "wifi.drag", "x": 250, "y": 400, "status": "OK", "expect": "wifi_list"}
+{"n": 19, "t": 1794279966.9670014, "kind": "tap", "msg": "wifi.drag @ (250,400) drag->(250,100) on wifi_list -> OK", "png": "019_tap.png", "target": "wifi.drag", "x": 250, "y": 400, "status": "OK", "expect": "wifi_list"}
+{"n": 20, "t": 1794279967.0645905, "kind": "select", "msg": "file 'benchy_0.2mm.gcode' = row 8 of 11, Make at (552,288), contentY=868", "png": null}
+{"n": 21, "t": 1794279967.1346946, "kind": "tap", "msg": "wifi.make @ (552,288) on wifi_list -> OK", "png": "021_tap.png", "target": "wifi.make", "x": 552, "y": 288, "status": "OK", "expect": "dialog_print"}
+{"n": 22, "t": 1794279967.2840877, "kind": "identify", "msg": "<dialog_print score=0.0 ref match (next 35.4)>", "png": "022_identify.png", "label": "dialog_print", "score": 0.0, "provisional": false}
+{"n": 23, "t": 1794279967.3590121, "kind": "tap", "msg": "dialog.right @ (585,345) on dialog_print -> OK", "png": "023_tap.png", "target": "dialog.right", "x": 585, "y": 345, "status": "OK", "expect": "dialog_plate"}
+{"n": 24, "t": 1794279967.5021536, "kind": "identify", "msg": "<dialog_plate score=0.0 ref match (next 38.5)>", "png": "024_identify.png", "label": "dialog_plate", "score": 0.0, "provisional": false}
+{"n": 25, "t": 1794279967.5848744, "kind": "tap", "msg": "dialog.one @ (400,345) on dialog_plate -> OK", "png": "025_tap.png", "target": "dialog.one", "x": 400, "y": 345, "status": "OK", "expect": "status_ready"}
+{"n": 26, "t": 1794279967.7248514, "kind": "identify", "msg": "<status_ready score=0.0 ref match (next 7.4)>", "png": "026_identify.png", "label": "status_ready", "score": 0.0, "provisional": false}
+{"n": 27, "t": 1794279967.7745695, "kind": "arrive", "msg": "Start button ready for 'benchy_0.2mm.gcode' (stop-before-Start; use --start)", "png": "027_arrive.png"}
+{"n": 28, "t": 1794279967.7748508, "kind": "result", "msg": "OK <status_ready score=0.0 ref match (next 7.4)>", "png": null}
+{"n": 29, "t": 1794279967.774885, "kind": "summary", "msg": "14 SSH commands, 11 taps injected: [(740, 29, 'page:settings'), (740, 29, 'page:settings'), (400, 472, 'home'), (122, 209, 'home'), (400, 225, 'files'), (250, 400, 'wifi_list:drag'), (250, 400, 'wifi_list:drag'), (250, 400, 'wifi_list:drag'), (552, 288, 'wifi_list'), (585, 345, 'dialog_print'), (400, 345, 'dialog_plate')]", "png": null}

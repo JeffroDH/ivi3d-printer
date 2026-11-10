@@ -1,0 +1,976 @@
+# IVI3D printer main board - A33 Linux UART documentation log
+# Prepared 2026-11-07 (America/Chicago, CST = UTC-6) from saved Mac captures in /tmp/ivi_uart_capture
+# FORMAT: raw cleaned/redacted UART transcript lines are UNCOMMENTED. Lines starting "# " are documentation.
+# "# NOTE:" explains the next transcript line(s); "# COMMAND:" explains a command sent and how to read its response.
+# ">>>CMD <text>" lines are markers written by the Mac capture script when it transmitted <text>; the board echo follows.
+# Board clock = UTC. Mac status files = CST.
+# Redacted: serial numbers, eMMC/card serials, UUIDs, MAC/BSSID, SSIDs, IP addresses, netmasks, personal paths.
+# No raw firmware contents included. Scope: A33 Linux side only. No SWD/STM32/GD32 access was performed.
+#
+# ==============================================================================
+# 1. SOURCE MANIFEST
+# ==============================================================================
+#   - boot3_115200_20261107_153612.bin: clean cold boot, receive-only, 115200 8N1 (selected representative boot)
+#   - boot5_115200_20261107_161435.bin(+.status): clean boot + single CR -> "# " prompt test
+#   - shell_ro_20261107_161716.log: first read-only shell inspection (id/uname/proc/sys)
+#   - sdinsert_115200_20261107_162100.bin: receive-only monitor during live microSD insertion
+#   - sd_ro_20261107_162419.log: read-only SD metadata session (start contaminated by host replay; see note)
+#   - cont_20261107_163524.bin(+.status): continuous session: boot + card guard + 64 KiB dd read test
+#   - backup_20261107_164205.bin(+.status): continuous session: boot + SD-card backup of eMMC + verify + unmount
+#   - agent session transcript: Mac-side md5 verification of the 14TB copy (quoted from recorded tool output)
+# Omitted as INVALID (host-side CP2102/macOS replay artifact, repeated stale data at impossible rate):
+#   boot_115200_20261107_153330.bin, boot2_115200_20261107_153447.bin, backup_20261107_164058.bin,
+#   sanity2_*.bin (16:30), sd_dd_20261107_163308.log. Duplicate clean boots (boot5/cont/backup) not repeated in full.
+#
+# ==============================================================================
+# 2. CHRONOLOGY (CST)
+# ==============================================================================
+#   - 15:31 18 s receive-only capture at 115200 8N1 (hypothesis) -> readable Marlin-style poll text: baud confirmed
+#   - 15:33-15:35 two captures invalid: same lines replayed at >200 KB/s (impossible at 115200); stopped
+#   - 15:36 board off, 0-byte quiet check; 15:36:12 capture armed; user powered on -> full clean boot (boot3)
+#   - 16:14:35 capture armed with board off; boot; 16:15:45 exactly one CR sent -> "# " root shell prompt
+#   - 16:17 bounded read-only shell inspection (id, uname, /proc, /sys)
+#   - 16:21 receive-only monitor; user inserted 8 GB microSD -> mmcblk1 detected, one -123 read error at insert
+#   - 16:24 read-only SD metadata (session start contaminated by replay; board executed id once)
+#   - 16:30/16:33 sanity checks failed (replay) -> no commands sent
+#   - 16:35:24 armed with board off; boot; 16:36:36 card test: dd of last 64 KiB OK (DD_RC=0)
+#   - 16:40:58 arm aborted (replay even with board off -> host-side); adapter replugged
+#   - 16:42:05 armed; boot; 16:43:58-16:54:39 backup to SD; 16:56-17:00 md5sum -c OK; 17:00:54 SD unmounted; reader closed
+#   - 17:39 user copied folder to 14TB; Mac md5 verification: all 3 images match
+#
+# ==============================================================================
+# 3. REPRESENTATIVE CLEAN COLD BOOT (boot0 -> U-Boot -> Linux -> app)
+# ==============================================================================
+# Source boot3_115200_20261107_153612.bin; receive-only, nothing transmitted. Output: boot0/U-Boot/Linux/app (mixed console).
+# Leading line noise before "BOOT0" removed.
+# --- BEGIN excerpt | source: boot3_115200_20261107_153612.bin | output type: A33 boot0 / U-Boot / Linux kernel + userspace ---
+# NOTE: boot0 = Allwinner first-stage loader (runs from eMMC boot area after the BROM). BROM itself prints nothing.
+=! BOOT0 is starting!
+boot0 version : 3.1.0
+reg_addr 0x01f00100 =0x00000000
+reg_addr 0x01f00104 =0x00000000
+reg_addr 0x01f00108 =0x00000000
+reg_addr 0x01f0010c =0x00000000
+reg_addr 0x01f00110 =0x00000000
+reg_addr 0x01f00114 =0x00000000
+DRAM DRIVE INFO: V1.4
+DRAM CLK =408 MHZ
+DRAM simple test OK.
+dram size =512
+# NOTE: boot0 reports it was started from SD/MMC controller 2 (bootloader numbering: SMHC/SDC2 = eMMC bus on A33). This is the card it will load U-Boot from.
+card boot number = 2
+card no is 2
+sdcard 2 line count 0
+[mmc]: mmc driver ver 2014-06-05 14:18
+# NOTE: boot0 probes controller 2 with the SD-card init sequence first (CMD8/CMD55). These timeouts are EXPECTED for an eMMC chip. It is the SAME controller 2, not the removable microSD slot (SDC0).
+[mmc]: ***Try SD card 2***
+[mmc]: mmc 2 cmd 8 timeout, err 0x00000100
+[mmc]: mmc 2 cmd 8 err 0x00000100
+[mmc]: mmc 2 send if cond failed
+[mmc]: mmc 2 cmd 55 timeout, err 0x00000100
+[mmc]: mmc 2 cmd 55 err 0x00000100
+[mmc]: mmc 2 send app cmd failed
+# NOTE: Retry on the SAME controller 2 with the MMC protocol; the eMMC answers (MMC ver 5.0, 3776MB). So "Try SD" then "Try MMC" = protocol fallback on one device, NOT an SD-card-then-eMMC boot order. This log does not show any attempt on SDC0 (microSD); a BROM check of SDC0 before boot0 would be silent and is unproven either way.
+[mmc]: ***Try MMC card 2***
+[mmc]: MMC ver 5.0
+[mmc]: SD/MMC Card: 4bit, capacity: 3776MB
+[mmc]: vendor: Man 0x00110100 Snr <REDACTED>
+[mmc]: product: 004GA
+[mmc]: revision: 3.0
+[mmc]: ***SD/MMC 2 init OK!!!***
+sdcard 2 init ok
+The size of uboot is 0x000bc000.
+sum=0xb1a8e787
+src_sum=0xb1a8e787
+# NOTE: boot0 loaded U-Boot from the eMMC (checksum matched).
+Succeed in loading uboot from sdmmc flash.
+Ready to disable icache.
+Jump to secend Boot.
+[      0.365]
+
+# NOTE: U-Boot (vendor Allwinner BSP build, Sep 2020).
+U-Boot 2011.09-rc1 (Sep 30 2020 - 14:34:09) Allwinner Technology 
+
+[      0.373]version: 1.1.0
+[      0.452]pmbus:   ready
+# NOTE: Power management IC detected (AXP22x family; board part marked AXP223 per photos).
+[      0.454]PMU: AXP221
+[      0.456]PMU: AXP22x found
+[      0.460]PMU: dcdc3 1200
+[      0.463]PMU: pll1 1008 Mhz,PLL6=600 Mhz
+AXI=336 Mhz,AHB=200 Mhz, APB1=100 Mhz 
+set power on vol to default
+dcdc1_vol = 3000
+dcdc2_vol = 1100
+dcdc3_vol = 1200
+dcdc4_vol = 0
+dcdc5_vol = 1500
+aldo2_vol = 2500
+aldo3_vol = 3000
+find power_sply to end
+vbus dc exist, limit to dc
+# NOTE: U-Boot checks a key/button input for FEL (USB recovery) or recovery modes; none pressed.
+fel key new mode
+run key detect
+no key found
+no key input
+dram_para_set start
+dram_para_set end
+[      0.589]DRAM:  512 MiB
+relocation Offset is: 15b11000
+smcl's set manager is NULL
+<axp22, dldo1>
+workmode = 0
+# NOTE: U-Boot also uses controller 2 (eMMC). U-Boot numbering != Linux numbering (Linux names this host mmc0 / sunxi-mmc.2).
+MMC:	 2
+[      0.792][mmc]: mmc driver ver 2014-07-15 17:16:00
+[      0.797][mmc]: get sdc_2xmode ok, val = 1
+[      0.801][mmc]: get sdc_f_max fail,use default sdc_f_max 50000000
+[      0.807][mmc]: get card_line ok, card_line = 4
+[      0.812][mmc]: get sdc_ex_dly_used fail,use default dly
+[      0.817][mmc]: SUNXI SD/MMC: 2
+[      0.821][mmc]: mmc 2 2xmode config clk
+[      0.834][mmc]: ************Try SD card 2************
+[      0.839][mmc]: mmc 2 cmd 8 timeout, err 100
+[      0.844][mmc]: smc 2 err, cmd 8,  RTO
+[      0.849][mmc]: mmc 2 mmc cmd 8 err 0x00000100
+[      0.853][mmc]: mmc send if cond failed
+[      0.857][mmc]: mmc 2 cmd 55 timeout, err 100
+[      0.861][mmc]: smc 2 err, cmd 55,  RTO
+[      0.867][mmc]: mmc 2 mmc cmd 55 err 0x00000100
+[      0.871][mmc]: send app cmd failed
+[      0.874][mmc]: ************Try MMC card 2************
+[      0.919][mmc]: mmc 2 2xmode config clk
+[      0.929][mmc]: mmc 2 2xmode config clk
+[      0.939][mmc]: mmc 2 2xmode config clk
+[      0.948][mmc]: MID 000011 PSN <REDACTED>
+[      0.951][mmc]: PNM 004GA0 -- 0x30-30-34-47-41-30
+[      0.956][mmc]: PRV 0.2
+[      0.959][mmc]: MDT m-2 y-2020
+[      0.962][mmc]: MMC ver 5.0
+[      0.965][mmc]: ---------------mmc->clock 50000000-----------
+[      0.970][mmc]: ---------------mmc->bus_width 4--------------
+[      0.976][mmc]: SD/MMC Card: 4bit, capacity: 3776MB
+[      0.981][mmc]: boot0 capacity: 2000KB,boot1 capacity: 2000KB
+[      0.987][mmc]: ************SD/MMC 2 init OK!!!************
+[      0.993]sunxi flash init ok
+In:    serial
+Out:   serial
+Err:   serial
+--------fastboot partitions--------
+-total partitions:5-
+-name-        -start-       -size-      
+boot-res    : 1000000       1000000     
+env         : 2000000       1000000     
+boot        : 3000000       1000000     
+rootfs      : 4000000       20000000    
+UDISK       : 24000000      0           
+-----------------------------------
+# NOTE: Boot command selection: env default is NAND args, overridden to setargs_mmc (eMMC rootfs).
+base bootcmd=run setargs_nand boot_normal
+bootcmd set setargs_mmc
+key 0
+# NOTE: Recovery key ADC window check; no recovery requested.
+recovery key high 5, low 3
+cant find fstbt value
+no misc partition is found
+misc_message->command = 0 
+# NOTE: Final boot command: load kernel from eMMC partition "boot" and boot normally.
+to be run cmd=run setargs_mmc boot_normal
+mount part name boot-res
+cant open script.bin, maybe it is not exist
+WORK_MODE_BOOT
+board_status_probe
+[      1.072]power trigger
+bat_exist=32
+use android charge modesunxi_bmp_charger_display
+screen_id =0, screen_width =800, screen_height =480
+# NOTE: Autoboot delay is 0 s: U-Boot prompt is effectively not reachable without changing env.
+[      1.144]Hit any key to stop autoboot:  0 
+read boot or recovery all
+[      1.774]sunxi flash read :offset 3000000, 15070784 bytes OK
+no signature
+[      1.785]ready to boot
+para err in disp_ioctl, cmd = 0xa,screen id = 1
+[      1.792][mmc]: mmc exit start
+[      1.796][mmc]: mmc 2 2xmode config clk
+[      1.806][mmc]: mmc 2 2xmode config clk
+[      1.818][mmc]: mmc 2 cmd 8 timeout, err 100
+[      1.823][mmc]: smc 2 err, cmd 8,  RTO
+[      1.828][mmc]: mmc 2 mmc cmd 8 err 0x00000100
+[      1.832][mmc]: mmc send if cond failed
+[      1.836][mmc]: mmc 2 cmd 55 timeout, err 100
+[      1.840][mmc]: smc 2 err, cmd 55,  RTO
+[      1.846][mmc]: mmc 2 mmc cmd 55 err 0x00000100
+[      1.850][mmc]: send app cmd failed
+[      1.881][mmc]: mmc 2 exit ok
+[      1.884]
+# NOTE: Hand-off to the Linux kernel.
+Starting kernel ...
+
+# NOTE: Linux kernel log (loglevel=4, so only warnings appear).
+<6[    0.755862] aw_pm_init: not support super standby. 
+[    0.930115] Bluetooth: get rtl8723bs rtl8723bs_bt_host_wake gpio failed
+[    0.930123] 
+[    1.683673] otg_wakelock_init: No USB transceiver found
+[    1.689587] ths_fetch_sysconfig_para: type err  device_used = 1. 
+[    1.697324] fetch C0_LV_count from sysconfig failed
+[sinlinx] profile
+[sinlinx] setup module
+# NOTE: Vendor init script tries modules that are absent/mismatched; non-fatal.
+insmod: can't insert '/system/vendor/modules/bcmdhd.ko': No such file or directory
+insmod: can't insert '/system/vendor/modules/cam_detect.ko': No such file or directory
+insmod: can't insert '/system/vendor/modules/ad5820_act.ko': unknown symbol in module, or unknown parameter
+# NOTE: Camera (VFE) driver errors: no camera sensor fitted; harmless.
+[    2.975329] [VFE_DEV_I2C_ERR]cci_read_a16_d8 error! slave = 0x3c, addr = 0x300a, value = 0xde
+[    2.975335]  twi_start()403 - [i2c2] START can't sendout!
+[    2.991589] [VFE_DEV_I2C_ERR]cci_read_a16_d8 error! slave = 0x3c, addr = 0x300a, value = 0xde
+[    2.991596]  sunxi_i2c_do_xfer()950 - [i2c0] incomplete xfer (status: 0x20, dev addr: 0x14)
+[    3.011099] [VFE_DEV_I2C_ERR]cci_read_a16_d8 error! slave = 0x3c, addr = 0x300a, value = 0xde
+[    3.011105]  sunxi_i2c_do_xfer()950 - [i2c0] incomplete xfer (status: 0x20, dev addr: 0x14)
+[    3.055272] [VFE_ERR]vfe sensor register check error at input_num = 0
+ctp_module_name="gt9xx_ts"
+[    3.448913] ctp_fetch_sysconfig_para: ctp_power_io script_get_item err. 
+start wlan config
+# NOTE: Vendor autorun script references a missing helper; non-fatal.
+/userapp/script/autorun.sh: line 40: /userapp/script/udhcpc.sh: not found
+# "Add to watch: /dev/"
+"Add to watch: /userdata/WifiFile/"
+"Directory updated: /dev/"
+"/dev/mmcblk0p1: UUID=<REDACTED> TYPE=\"vfat\" \n/dev/mmcblk0p2: SEC_TYPE=\"msdos\" LABEL=\"Volumn\" UUID=<REDACTED> TYPE=\"vfat\" \n/dev/mmcblk0p7: UUID=<REDACTED> TYPE=\"ext4\" \n"
+0
+# NOTE: Printer UI app: no USB stick detected; it does not report microSD here.
+Didn't find any udisk device!
+"/Local" is not exists.
+setUsbInsert: 0
+Touchscreen version: "1.222"
+"/userapp/app"
+JIT is disabled for QML. Property bindings and animations will be very slow. Visit https://wiki.qt.io/V4 to learn about possible solutions for your platform.
+showGuide: false
+NeedCalibration: false
+ver:  "1.222"
+boardtype 1
+qml: size -1
+showGuide false
+qml: size 0
+Failed to load the library: udev, supported version(s): 1 and 0
+RTS true
+DTR true
+setPortStatus "Connected!"
+# NOTE: UI app talks to the motion MCU over internal USB-serial ttyUSB0 (not this debug UART).
+setCurrentPort "ttyUSB0"
+SendNext: "M2051"
+showGuide false
+qml: isFirstGuide false
+qml: N/A N/A
+--  "info:Head 3DP,0.3mm"
+--- "info:Head 3DP,0.3mm" +++
+PrinterHeadInfo "Head 3DP,0.3mm"
+3DP "Operational"
+qml: FDM FDM
+SendNext: "M2155 S5"
+showGuide false
+NeedCalibration false
+SendNext: "M2005"
+"null" "FDM" "null" "0.3mm"
+# NOTE: UI app logs Wi-Fi helper commands and outputs (network identifiers redacted).
+WiFiPro "OK\n" <--> "wpa_cli -i wlan0 scan\n"
+# NOTE: Reply to M2005: printer motion-controller firmware version (most likely STM32 side).
+--  "Firmware Version:V1.3.2-alpha"
+setWifiData
+WiFiPro "network id / ssid / bssid / flags\n0\t<SSID-REDACTED>\tany\t[DISABLED]\n1\t<SSID-REDACTED>\tany\t[CURRENT]\n" <--> "wpa_cli -i wlan0 list_network\n"
+("0\t<SSID-REDACTED>\tany\t[DISABLED]", "1\t<SSID-REDACTED>\tany\t[CURRENT]") 2 2
+setNetList
+netListData.at( 1 ).ssid "<SSID-REDACTED>"
+setCurrentWiFiSSID
+currentWifiSignalLv: "214"
+-=-=-=-=-=-=-=-=-  "<SSID-REDACTED>"
+WiFiPro "OK\n" <--> "wpa_cli -i wlan0 reconnect\n"
+WiFiPro "udhcpc (v1.18.3) started\n" <--> "udhcpc -i wlan0 -n -t10 -A 1\n"
+WiFiPro "Sending discover...\n" <--> "udhcpc -i wlan0 -n -t10 -A 1\n"
+WiFiPro "Sending discover...\n" <--> "udhcpc -i wlan0 -n -t10 -A 1\n"
+WiFiPro "Sending select for <IP-REDACTED>...\n" <--> "udhcpc -i wlan0 -n -t10 -A 1\n"
+WiFiPro "Lease of <IP-REDACTED> obtained, lease time 86400\n" <--> "udhcpc -i wlan0 -n -t10 -A 1\n"
+WiFiPro "deleting routers\n" <--> "udhcpc -i wlan0 -n -t10 -A 1\n"
+WiFiPro "adding dns <IP-REDACTED>\n" <--> "udhcpc -i wlan0 -n -t10 -A 1\n"
+setCurrentWiFiSSID
+WiFiConnectFinished
+Message Bash start
+WiFiPro "wlan0     Link encap:Ethernet  HWaddr <MAC-REDACTED>  \n          inet addr:<IP-REDACTED>  <NET-REDACTED>  <NET-REDACTED>          inet6 addr: <IPV6-REDACTED> Scope:Global\n          inet6 addr: <IPV6-REDACTED> Scope:Link\n          UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1\n          RX packets:11 errors:0 dropped:1 overruns:0 frame:0\n          TX packets:11 errors:0 dropped:0 overruns:0 carrier:0\n          collisions:0 txqueuelen:1000 \n          RX bytes:1610 (1.5 KiB)  TX bytes:1702 (1.6 KiB)\n\n" <--> "/userapp/script/checkNetAndDate.sh\n"
+"<MAC-REDACTED>" "<IP-REDACTED>" "<IP-REDACTED>" "<IP-REDACTED>"
+qml: ip: <IP-REDACTED>
+closeBashAfterGetMessages
+Message Bash Close
+Message Bash start---+++
+WiFiPro "bssid=<MAC-REDACTED>\nssid=<SSID-REDACTED>\nid=1\nmode=station\npairwise_cipher=CCMP\ngroup_cipher=CCMP\nkey_mgmt=WPA2-PSK\nwpa_state=COMPLETED\nip_address=<IP-REDACTED>\n" <--> "wpa_cli -i wlan0 status\n"
+ip: "<SSID-REDACTED>"
+ip: "<IP-REDACTED>"
+WiFiPro "udhcpc (v1.18.3) started\n" <--> "udhcpc -i wlan0 -n -t10 -A 1\n"
+WiFiPro "Sending discover...\n" <--> "udhcpc -i wlan0 -n -t10 -A 1\n"
+WiFiPro "Sending select for <IP-REDACTED>...\n" <--> "udhcpc -i wlan0 -n -t10 -A 1\n"
+WiFiPro "Lease of <IP-REDACTED> obtained, lease time 86400\n" <--> "udhcpc -i wlan0 -n -t10 -A 1\n"
+WiFiPro "deleting routers\n" <--> "udhcpc -i wlan0 -n -t10 -A 1\n"
+WiFiPro "adding dns <IP-REDACTED>\n" <--> "udhcpc -i wlan0 -n -t10 -A 1\n"
+WiFiConnectFinished
+Message Bash start
+--  "SN:<SERIAL-REDACTED>"
+--  "Tool Head Firmware Version:V1.1"
+--  "Tool Head Hardware Version:V1"
+# NOTE: Temperature report echoed by the app: hotend/bed actual/target. Further repeats omitted.
+--  "T:27.15 /0.00 B:25.45 /0.00 @:0 B@:0"
+--  "Homed: NO"
+WiFiPro "has ping\n" <--> "/userapp/script/checkNetAndDate.sh\n"
+WiFiPro "timesh end\n" <--> "/userapp/script/checkNetAndDate.sh\n"
+closeBashAfterGetMessages
+Message Bash Close
+
+[OMITTED: 16 further repeated printer temperature/homing poll lines]
+# --- END excerpt | boot3_115200_20261107_153612.bin ---
+#
+# ==============================================================================
+# 4. SINGLE ENTER (CR) TEST
+# ==============================================================================
+# Source boot5 *.status records: "SENT one CR at t=69.4s Sat Nov 7 16:15:45 2026" (CST, Mac clock).
+# Exact bytes received in following 8 s (from agent transcript, raw repr):
+#     b'\r\n# --  "T:27.09 /0.00 B:25.54 /0.00 @:0 B@:0"\r\n--  "Homed: NO"\r\n...'
+# Observation: newline + "# " prompt (BusyBox-style root shell, no login). Confirmed as root by "id" in section 5.
+#
+# ==============================================================================
+# 5. READ-ONLY SHELL INSPECTION (16:17 CST)
+# ==============================================================================
+# Leading 0xFF noise at port open removed. Commands sent one per line over UART.
+# --- BEGIN excerpt | source: shell_ro_20261107_161716.log | output type: Linux shell (root) responses; commands echoed by board ---
+# COMMAND: id -> shows which user the shell runs as. Response uid=0(root) = root shell, no login.
+>>>CMD id
+id
+uid=0(root) gid=0(root)
+# 
+# COMMAND: uname -a -> kernel version/build/arch.
+>>>CMD uname -a
+uname -a
+Linux sinlinx 3.4.39 #176 SMP PREEMPT Tue Nov 17 11:35:12 CST 2020 armv7l GNU/Linux
+
+# COMMAND: kernel build string (compiler, builder).
+>>>CMD cat /proc/version
+cat /proc/version
+Linux version 3.4.39 (builder@buildhost) (gcc version 4.6.3 20120201 (prerelease) (crosstool-NG linaro-1.13.1-2012.02-20120222 - Linaro GCC 2012.02) ) #176 SMP PREEMPT Tue Nov 17 11:35:12 CST 2020
+# 
+# COMMAND: distro banner. "sun8i linux" = Allwinner sun8i (A23/A33-class) BSP.
+>>>CMD cat /etc/issue 2>/dev/null; cat /etc/os-release 2>/dev/null
+cat /etc/issue 2>/dev/null; cat /etc/os-release 2>/dev/null
+Welcome to sun8i linux
+
+# COMMAND: kernel boot arguments: console=ttyS2 (this UART), root=/dev/mmcblk0p7, partition map, boot_type=2 (eMMC).
+>>>CMD cat /proc/cmdline
+cat /proc/cmdline
+console=ttyS2,115200 root=/dev/mmcblk0p7 init=/init loglevel=4 partitions=boot-res@mmcblk0p2:env@mmcblk0p5:boot@mmcblk0p6:rootfs@mmcblk0p7:UDISK@mmcblk0p1 boot_type=2 androidboot.mode=charger config_size=0
+# 
+# COMMAND: what is mounted. Shows rootfs p7 ext4 rw and p1 vfat at /userdata/WifiFile; whether microSD is mounted.
+>>>CMD cat /proc/mounts
+cat /proc/mounts
+rootfs / rootfs rw 0 0
+proc /proc proc rw,relatime 0 0
+sysfs /sys sysfs rw,relatime 0 0
+none /dev devtmpfs rw,relatime,size=202500k,nr_inodes=50625,mode=755 0 0
+/dev/mmcblk0p7 / ext4 rw,noatime,nodiratime,nobarrier,noauto_da_alloc,data=ordered 0 0
+proc /proc proc rw,relatime 0 0
+devpts /dev/pts devpts rw,relatime,mode=600 0 0
+tmpfs /tmp tmpfs rw,relatime 0 0
+none /dev devtmpfs rw,relatime,size=202500k,nr_inodes=50625,mode=755 0 0
+none /dev/pts devpts rw,relatime,mode=600 0 0
+sysfs /sys sysfs rw,relatime 0 0
+/dev/mmcblk0p1 /userdata/WifiFile vfat rw,relatime,fmask=0022,dmask=0022,codepage=cp437,iocharset=ascii,shortname=mixed,errors=remount-ro 0 0
+
+# COMMAND: block devices and sizes in 1 KiB blocks (mmcblk0 = eMMC; mmcblk1 = microSD when present).
+>>>CMD cat /proc/partitions
+cat /proc/partitions
+major minor  #blocks  name
+
+ 179        0    3866624 mmcblk0
+ 179        1    3256320 mmcblk0p1
+ 179        2      16384 mmcblk0p2
+ 179        3          1 mmcblk0p3
+ 179        5      16384 mmcblk0p5
+ 179        6      16384 mmcblk0p6
+ 179        7     524288 mmcblk0p7
+ 179       32       2048 mmcblk0boot1
+ 179       16       2048 mmcblk0boot0
+
+# COMMAND: filesystem usage.
+>>>CMD df -k
+df -k
+Filesystem                Size      Used Available Use% Mounted on
+none                    197.8M         0    197.8M   0% /dev
+/dev/mmcblk0p7          409.4M    298.6M    110.8M  73% /
+tmpfs                   199.2M     20.0K    199.2M   0% /tmp
+none                    197.8M         0    197.8M   0% /dev
+/dev/mmcblk0p1            3.1G      8.0K      3.1G   0% /userdata/WifiFile
+# 
+# COMMAND: maps Linux host names to platform controllers: mmc0->sunxi-mmc.2 (eMMC), mmc1->sunxi-mmc.0 (microSD slot), mmc2->sunxi-mmc.1 (SDIO Wi-Fi).
+>>>CMD ls -l /sys/class/mmc_host/
+ls -l /sys/class/mmc_host/
+total 0
+lrwxrwxrwx    1 root     root             0 Jan  1  1970 mmc0 -> ../../devices/platform/sunxi-mmc.2/mmc_host/mmc0
+lrwxrwxrwx    1 root     root             0 Jan  1  1970 mmc1 -> ../../devices/platform/sunxi-mmc.0/mmc_host/mmc1
+lrwxrwxrwx    1 root     root             0 Jan  1  1970 mmc2 -> ../../devices/platform/sunxi-mmc.1/mmc_host/mmc2
+
+# COMMAND: cards present on each host.
+>>>CMD ls -l /sys/bus/mmc/devices/
+ls -l /sys/bus/mmc/devices/
+total 0
+lrwxrwxrwx    1 root     root             0 Nov  7 22:17 mmc0:0001 -> ../../../devices/platform/sunxi-mmc.2/mmc_host/mmc0/mmc0:0001
+lrwxrwxrwx    1 root     root             0 Nov  7 22:17 mmc2:0001 -> ../../../devices/platform/sunxi-mmc.1/mmc_host/mmc2/mmc2:0001
+
+# COMMAND: card type/name per host (serials excluded). MMC 004GA0 = eMMC; SDIO = Wi-Fi.
+>>>CMD for d in /sys/bus/mmc/devices/*; do echo "== $d"; cat $d/type $d/name 2>/dev/null; grep -v -i serial $d/uevent 2>/dev/null; done
+for d in /sys/bus/mmc/devices/*; do echo "== $d"; cat $d/type $d/name 2>/dev/n
+ull; grep -v -i serial $d/uevent 2>/dev/null; done
+== /sys/bus/mmc/devices/mmc0:0001
+MMC
+004GA0
+DRIVER=mmcblk
+MMC_TYPE=MMC
+MMC_NAME=004GA0
+MODALIAS=mmc:block
+== /sys/bus/mmc/devices/mmc2:0001
+SDIO
+MMC_TYPE=SDIO
+MMC_NAME=
+MODALIAS=mmc:block
+# 
+# COMMAND: removable flag, size in 512-byte sectors, and backing controller.
+>>>CMD for b in /sys/block/mmcblk*; do echo "== $b"; cat $b/removable $b/size; readlink -f $b/device; done
+for b in /sys/block/mmcblk*; do echo "== $b"; cat $b/removable $b/size; readli
+nk -f $b/device; done
+== /sys/block/mmcblk0
+0
+7733248
+/sys/devices/platform/sunxi-mmc.2/mmc_host/mmc0/mmc0:0001
+== /sys/block/mmcblk0boot0
+0
+4096
+/sys/devices/platform/sunxi-mmc.2/mmc_host/mmc0/mmc0:0001/block/mmcblk0
+== /sys/block/mmcblk0boot1
+0
+4096
+/sys/devices/platform/sunxi-mmc.2/mmc_host/mmc0/mmc0:0001/block/mmcblk0
+
+# COMMAND: filesystems the kernel supports.
+>>>CMD cat /proc/filesystems
+cat /proc/filesystems
+nodev	sysfs
+nodev	rootfs
+nodev	bdev
+nodev	proc
+nodev	cgroup
+nodev	cpuset
+nodev	tmpfs
+nodev	devtmpfs
+nodev	binfmt_misc
+nodev	debugfs
+nodev	securityfs
+nodev	sockfs
+nodev	pipefs
+nodev	anon_inodefs
+nodev	rpc_pipefs
+nodev	devpts
+	ext3
+	ext2
+	ext4
+	cramfs
+nodev	ramfs
+	vfat
+	msdos
+nodev	nfs
+nodev	cifs
+	ntfs
+	fuseblk
+nodev	fuse
+nodev	fusectl
+nodev	selinuxfs
+nodev	functionfs
+# 
+# COMMAND: static mounts; no SD/USB automount entries.
+>>>CMD cat /etc/fstab 2>/dev/null
+cat /etc/fstab 2>/dev/null
+# /etc/fstab: static file system information.
+#
+# <file system> <mount pt>     <type>	<options>         <dump> <pass>
+/dev/root       /              ext2	rw,noauto         0      1
+proc		/proc	       proc     defaults	  0	 0
+devpts		/dev/pts       devpts   defaults,gid=5,mode=620	  0	 0
+tmpfs           /tmp           tmpfs    defaults          0      0
+sysfs		/sys	       sysfs    defaults	  0	 0
+
+# COMMAND: device tree absent -> old script.bin/FEX-configured kernel.
+>>>CMD cat /proc/device-tree/model 2>/dev/null; echo; ls /proc/device-tree 2>&1 | head -5
+cat /proc/device-tree/model 2>/dev/null; echo; ls /proc/device-tree 2>&1 | hea
+d -5
+
+ls: /proc/device-tree: No such file or directory
+
+# COMMAND: block device nodes present.
+>>>CMD ls -l /boot /dev/mmcblk* /dev/block 2>&1 | head -40
+ls -l /boot /dev/mmcblk* /dev/block 2>&1 | head -40
+ls: /dev/block: No such file or directory
+brw-rw----    1 root     root      179,   0 Jan  1  1970 /dev/mmcblk0
+brw-rw----    1 root     root      179,  16 Jan  1  1970 /dev/mmcblk0boot0
+brw-rw----    1 root     root      179,  32 Jan  1  1970 /dev/mmcblk0boot1
+brw-rw----    1 root     root      179,   1 Jan  1  1970 /dev/mmcblk0p1
+brw-rw----    1 root     root      179,   2 Jan  1  1970 /dev/mmcblk0p2
+brw-rw----    1 root     root      179,   3 Jan  1  1970 /dev/mmcblk0p3
+brw-rw----    1 root     root      179,   5 Jan  1  1970 /dev/mmcblk0p5
+brw-rw----    1 root     root      179,   6 Jan  1  1970 /dev/mmcblk0p6
+brw-rw----    1 root     root      179,   7 Jan  1  1970 /dev/mmcblk0p7
+
+/boot:
+total 0
+# 
+>>>CMD echo DONE_RO
+echo DONE_RO
+DONE_RO
+
+[OMITTED: 20 further repeated printer temperature/homing poll lines]
+# --- END excerpt | shell_ro_20261107_161716.log ---
+#
+# ==============================================================================
+# 6. LIVE microSD INSERTION MONITOR (16:21 CST)
+# ==============================================================================
+# Source sdinsert_115200_20261107_162100.bin; receive-only. Linux kernel + app messages.
+# --- BEGIN excerpt | source: sdinsert_115200_20261107_162100.bin | output type: Linux kernel/app ---
+"Directory updated: /dev/"
+# NOTE: Linux: -123 = ENOMEDIUM during hot insertion of the microSD (Linux mmcblk1 on sunxi-mmc.0). Later full read succeeded.
+[  397.576842] mmcblk1: error -123 sending status command, retrying
+[  397.583554] mmcblk1: error -123 sending status command, retrying
+[  397.595315] mmcblk1: unknown error -123 sending read/write command, card status 0x900
+[  397.604023] end_request: I/O error, dev mmcblk1, sector 15523712
+[  397.610689] Buffer I/O error on device mmcblk1, logical block 1940464
+"/dev/mmcblk0p1: UUID=<REDACTED> TYPE=\"vfat\" \n/dev/mmcblk0p2: SEC_TYPE=\"msdos\" LABEL=\"Volumn\" UUID=<REDACTED> TYPE=\"vfat\" \n/dev/mmcblk0p7: UUID=<REDACTED> TYPE=\"ext4\" \n"
+0
+# NOTE: Printer UI app: no USB stick detected; it does not report microSD here.
+Didn't find any udisk device!
+"/Local" is not exists.
+setUsbInsert: 0
+"Directory updated: /dev/"
+# NOTE: Linux sees the inserted card partition (vfat). App still reports no udisk; card not auto-mounted.
+"/dev/mmcblk0p1: UUID=<REDACTED> TYPE=\"vfat\" \n/dev/mmcblk0p2: SEC_TYPE=\"msdos\" LABEL=\"Volumn\" UUID=<REDACTED> TYPE=\"vfat\" \n/dev/mmcblk0p7: UUID=<REDACTED> TYPE=\"ext4\" \n/dev/mmcblk1p1: LABEL=\"SANDISK8GB\" UUID=<REDACTED> TYPE=\"vfat\" \n"
+0
+Didn't find any udisk device!
+"/Local" is not exists.
+setUsbInsert: 0
+
+[OMITTED: 30 further repeated printer temperature/homing poll lines]
+# --- END excerpt | sdinsert_115200_20261107_162100.bin ---
+#
+# ==============================================================================
+# 7. READ-ONLY SD METADATA (16:24 CST)
+# ==============================================================================
+# NOTE: start of this session was contaminated by the host replay artifact; later responses were single and consistent.
+# --- BEGIN excerpt | source: sd_ro_20261107_162419.log | output type: Linux shell (root) ---
+# COMMAND: id -> shows which user the shell runs as. Response uid=0(root) = root shell, no login.
+>>>CMD id
+[OMITTED: ~100 host-replayed "id" echoes and stale poll fragments; only ONE uid= reply received]
+uid=0(root) gid=0(root)
+
+# COMMAND: uname -a -> kernel version/build/arch.
+>>>CMD uname -a
+uname -a
+Linux sinlinx 3.4.39 #176 SMP PREEMPT Tue Nov 17 11:35:12 CST 2020 armv7l GNU/Linux
+# 
+# COMMAND: block devices and sizes in 1 KiB blocks (mmcblk0 = eMMC; mmcblk1 = microSD when present).
+>>>CMD cat /proc/partitions
+cat /proc/partitions
+major minor  #blocks  name
+
+ 179        0    3866624 mmcblk0
+ 179        1    3256320 mmcblk0p1
+ 179        2      16384 mmcblk0p2
+ 179        3          1 mmcblk0p3
+ 179        5      16384 mmcblk0p5
+ 179        6      16384 mmcblk0p6
+ 179        7     524288 mmcblk0p7
+ 179       32       2048 mmcblk0boot1
+ 179       16       2048 mmcblk0boot0
+ 179       48    7761920 mmcblk1
+ 179       49    7760896 mmcblk1p1
+
+# COMMAND: what is mounted. Shows rootfs p7 ext4 rw and p1 vfat at /userdata/WifiFile; whether microSD is mounted.
+>>>CMD cat /proc/mounts
+cat /proc/mounts
+rootfs / rootfs rw 0 0
+proc /proc proc rw,relatime 0 0
+sysfs /sys sysfs rw,relatime 0 0
+none /dev devtmpfs rw,relatime,size=202500k,nr_inodes=50625,mode=755 0 0
+/dev/mmcblk0p7 / ext4 rw,noatime,nodiratime,nobarrier,noauto_da_alloc,data=ordered 0 0
+proc /proc proc rw,relatime 0 0
+devpts /dev/pts devpts rw,relatime,mode=600 0 0
+tmpfs /tmp tmpfs rw,relatime 0 0
+none /dev devtmpfs rw,relatime,size=202500k,nr_inodes=50625,mode=755 0 0
+none /dev/pts devpts rw,relatime,mode=600 0 0
+sysfs /sys sysfs rw,relatime 0 0
+/dev/mmcblk0p1 /userdata/WifiFile vfat rw,relatime,fmask=0022,dmask=0022,codepage=cp437,iocharset=ascii,shortname=mixed,errors=remount-ro 0 0
+# 
+# COMMAND: which controller the microSD is on -> sunxi-mmc.0.
+>>>CMD readlink -f /sys/block/mmcblk1/device
+readlink -f /sys/block/mmcblk1/device
+/sys/devices/platform/sunxi-mmc.0/mmc_host/mmc1/mmc1:aaaa
+
+# COMMAND: removable flag, size (sectors), sector size.
+>>>CMD cat /sys/block/mmcblk1/removable /sys/block/mmcblk1/size /sys/block/mmcblk1/queue/logical_block_size
+cat /sys/block/mmcblk1/removable /sys/block/mmcblk1/size /sys/block/mmcblk1/qu
+eue/logical_block_size
+0
+15523840
+512
+
+# COMMAND: partition 1 start and length (sectors) to check that sector 15523712 lies inside the card.
+>>>CMD cat /sys/block/mmcblk1/mmcblk1p1/start /sys/block/mmcblk1/mmcblk1p1/size
+cat /sys/block/mmcblk1/mmcblk1p1/start /sys/block/mmcblk1/mmcblk1p1/size
+2048
+15521792
+# 
+# COMMAND: card type/name (SD, SL08G).
+>>>CMD cat /sys/block/mmcblk1/device/type /sys/block/mmcblk1/device/name; grep -v -i serial /sys/block/mmcblk1/device/uevent
+cat /sys/block/mmcblk1/device/type /sys/block/mmcblk1/device/name; grep -v -i 
+serial /sys/block/mmcblk1/device/uevent
+SD
+SL08G
+DRIVER=mmcblk
+MMC_TYPE=SD
+MMC_NAME=SL08G
+MODALIAS=mmc:block
+
+>>>CMD ls /sys/bus/mmc/devices/
+ls /sys/bus/mmc/devices/
+mmc0:0001  mmc1:aaaa  mmc2:0001
+# 
+# COMMAND: recent kernel MMC messages (filtered). "smc 1 cmd 52 RTO" lines belong to the SDIO Wi-Fi host, not the SD card.
+>>>CMD dmesg | grep -i -E "mmc|sdc|I/O error" | tail -40
+dmesg | grep -i -E "mmc|sdc|I/O error" | tail -40
+[  522.012559] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  527.009583] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  527.010698] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  527.011837] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  532.009770] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  532.010878] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  532.011966] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  537.010015] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  537.011193] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  537.012308] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  542.009317] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  542.010442] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  542.011697] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  547.007910] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  547.009060] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  547.010175] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  552.009826] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  552.010952] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  552.012225] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  562.009231] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  562.010344] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  562.011713] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  562.960332] [mmc]: sdc2 set ios: clk 50000000Hz bm PP pm ON vdd 3.3V width 8 timing MMC-HS(SDR20) dt B
+[  562.960476] [mmc]: sdc2 set ios: clk 50000000Hz bm PP pm ON vdd 3.3V width 8 timing MMC-HS(SDR20) dt B
+[  562.960582] [mmc]: sdc2 set ios: clk 50000000Hz bm PP pm ON vdd 3.3V width 8 timing MMC-HS(SDR20) dt B
+[  562.960680] [mmc]: sdc2 set ios: clk 50000000Hz bm PP pm ON vdd 3.3V width 8 timing MMC-HS(SDR20) dt B
+[  562.960776] [mmc]: sdc2 set ios: clk 50000000Hz bm PP pm ON vdd 3.3V width 8 timing MMC-HS(SDR20) dt B
+[  562.960872] [mmc]: sdc2 set ios: clk 50000000Hz bm PP pm ON vdd 3.3V width 8 timing MMC-HS(SDR20) dt B
+[  567.009595] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  567.010720] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  567.011836] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  572.009873] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  572.010984] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  572.012306] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  577.010159] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  577.011269] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  577.012378] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  582.009474] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  582.010600] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+[  582.011855] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 1 err, cmd 52,  RTO !!
+
+>>>CMD echo DONE_SD
+echo DONE_SD
+DONE_SD
+
+[OMITTED: 14 further repeated printer temperature/homing poll lines]
+# --- END excerpt | sd_ro_20261107_162419.log ---
+#
+# ==============================================================================
+# 8. CARD TEST VIA CONTINUOUS SESSION (16:36 CST)
+# ==============================================================================
+# Boot portion omitted (duplicate of section 3). Status: TRIGGER 16:36:36; closed bytes=13030 secs=92 bad=False.
+# --- BEGIN excerpt | source: cont_20261107_163524.bin | output type: Linux shell (root) ---
+# COMMAND: id -> shows which user the shell runs as. Response uid=0(root) = root shell, no login.
+>>>CMD id
+id
+uid=0(root) gid=0(root)
+
+# COMMAND: guard check before dd: card name, size, controller, mount state.
+>>>CMD cat /sys/block/mmcblk1/device/name /sys/block/mmcblk1/size; readlink -f /sys/block/mmcblk1/device; grep mmcblk1 /proc/mounts || echo NOT_MOUNTED
+cat /sys/block/mmcblk1/device/name /sys/block/mmcblk1/size; readlink -f /sys/b
+lock/mmcblk1/device; grep mmcblk1 /proc/mounts || echo NOT_MOUNTED
+SL08G
+15523840
+/sys/devices/platform/sunxi-mmc.0/mmc_host/mmc1/mmc1:aaaa
+NOT_MOUNTED
+
+# COMMAND: guarded read test: only if card is SL08G/15523840 sectors, read last 64 KiB (sectors 15523712..15523839) to /dev/null. DD_RC=0 = readable.
+>>>CMD N=$(cat /sys/block/mmcblk1/device/name); S=$(cat /sys/block/mmcblk1/size); if [ "$N" = SL08G ] && [ "$S" = 15523840 ]; then dd if=/dev/mmcblk1 of=/dev/null bs=512 skip=15523712 count=128; echo DD_RC=$?; else echo DD_SKIPPED; fi
+N=$(cat /sys/block/mmcblk1/device/name); S=$(cat /sys/block/mmcblk1/size); if 
+[ "$N" = SL08G ] && [ "$S" = 15523840 ]; then dd if=/dev/mmcblk1 of=/dev/null bs
+=512 skip=15523712 count=128; echo DD_RC=$?; else echo DD_SKIPPED; fi
+128+0 records in
+128+0 records out
+DD_RC=0
+
+# COMMAND: recent kernel MMC messages (filtered). "smc 1 cmd 52 RTO" lines belong to the SDIO Wi-Fi host, not the SD card.
+>>>CMD dmesg | grep -E "mmcblk1|smc 0|sdc0|I/O error" | tail -15; echo DONE_CARD
+dmesg | grep -E "mmcblk1|smc 0|sdc0|I/O error" | tail -15; echo DONE_CARD
+[    1.093251] [mmc]: sdc0 set ios: clk 400000Hz bm PP pm ON vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    1.095758] [mmc]: sdc0 set ios: clk 400000Hz bm PP pm ON vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    1.098048] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 0 err, cmd 5,  RTO !!
+[    1.098906] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 0 err, cmd 5,  RTO !!
+[    1.099760] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 0 err, cmd 5,  RTO !!
+[    1.100616] [mmc]: *** sunxi_mci_dump_errinfo(L915): smc 0 err, cmd 5,  RTO !!
+[    1.101313] [mmc]: sdc0 set ios: clk 400000Hz bm PP pm ON vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    1.101433] [mmc]: sdc0 set ios: clk 400000Hz bm PP pm ON vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    1.103937] [mmc]: sdc0 set ios: clk 400000Hz bm PP pm ON vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    1.161589] [mmc]: sdc0 set ios: clk 25000000Hz bm PP pm ON vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    1.167286] [mmc]: sdc0 set ios: clk 25000000Hz bm PP pm ON vdd 3.3V width 1 timing SD-HS(SDR25) dt B
+[    1.167372] [mmc]: sdc0 set ios: clk 50000000Hz bm PP pm ON vdd 3.3V width 1 timing SD-HS(SDR25) dt B
+[    1.167511] [mmc]: sdc0 set ios: clk 50000000Hz bm PP pm ON vdd 3.3V width 4 timing SD-HS(SDR25) dt B
+[    1.168118] mmcblk1: mmc1:aaaa SL08G 7.40 GiB 
+[    1.169534]  mmcblk1: p1
+DONE_CARD
+
+[OMITTED: 8 further repeated printer temperature/homing poll lines]
+# --- END excerpt | cont_20261107_163524.bin ---
+#
+# ==============================================================================
+# 9. eMMC BACKUP TO microSD (16:43-17:00 CST)
+# ==============================================================================
+# Boot portion omitted (duplicate). Board clock UTC: 22:43:58 UTC = 16:43:58 CST; 22:51:33 UTC = 16:51:33 CST; 22:54:39 UTC = 16:54:39 CST.
+# The job was launched with nohup as recorded below (the backgrounded "cd" ran in a subshell; root fs verified clean).
+# --- BEGIN excerpt | source: backup_20261107_164205.bin | output type: Linux shell (root) ---
+# COMMAND: id -> shows which user the shell runs as. Response uid=0(root) = root shell, no login.
+# COMMAND: backup guards: root user, source eMMC type/name/size, boot0/boot1 sizes, destination card, tool availability.
+>>>CMD id; for b in mmcblk0 mmcblk0boot0 mmcblk0boot1 mmcblk1; do echo "$b $(cat /sys/block/$b/size)"; done; cat /sys/block/mmcblk0/device/type /sys/block/mmcblk0/device/name /sys/block/mmcblk1/device/type /sys/block/mmcblk1/device/name; grep -E "mmcblk1|sdbk" /proc/mounts || echo SD_NOT_MOUNTED; which dd md5sum sha1sum nohup sync fdisk
+id; for b in mmcblk0 mmcblk0boot0 mmcblk0boot1 mmcblk1; do echo "$b $(cat /sys
+/block/$b/size)"; done; cat /sys/block/mmcblk0/device/type /sys/block/mmcblk0/de
+vice/name /sys/block/mmcblk1/device/type /sys/block/mmcblk1/device/name; grep -E
+ "mmcblk1|sdbk" /proc/mounts || echo SD_NOT_MOUNTED; which dd md5sum sha1sum noh
+up sync fdisk
+uid=0(root) gid=0(root)
+mmcblk0 7733248
+mmcblk0boot0 4096
+mmcblk0boot1 4096
+mmcblk1 15523840
+MMC
+004GA0
+SD
+SL08G
+SD_NOT_MOUNTED
+/bin/dd
+/usr/bin/md5sum
+/usr/bin/sha1sum
+/usr/bin/nohup
+/bin/sync
+/sbin/fdisk
+
+# COMMAND: mount microSD read-write at a RAM (tmpfs) mount point, show free space and top-level files.
+>>>CMD mkdir -p /tmp/sdbk && mount -t vfat -o rw /dev/mmcblk1p1 /tmp/sdbk && grep sdbk /proc/mounts && df -k /tmp/sdbk && ls /tmp/sdbk
+mkdir -p /tmp/sdbk && mount -t vfat -o rw /dev/mmcblk1p1 /tmp/sdbk && grep sdb
+k /proc/mounts && df -k /tmp/sdbk && ls /tmp/sdbk
+/dev/mmcblk1p1 /tmp/sdbk vfat rw,relatime,fmask=0022,dmask=0022,codepage=cp437,iocharset=ascii,shortname=mixed,errors=remount-ro 0 0
+Filesystem                Size      Used Available Use% Mounted on
+/dev/mmcblk1p1            7.4G     14.7M      7.4G   0% /tmp/sdbk
+Ascendancy Dice.pwms
+
+# COMMAND: create unique backup folder (abort if exists) and save layout.txt (uname, cmdline, partitions, mounts, fdisk, sizes).
+>>>CMD D=/tmp/sdbk/IVI_A33_BACKUP_20261107_1644; if [ -e $D ]; then echo DIR_EXISTS_ABORT; else mkdir $D && { uname -a; cat /proc/cmdline; cat /proc/partitions; cat /proc/mounts; fdisk -l /dev/mmcblk0; for b in mmcblk0 mmcblk0boot0 mmcblk0boot1 mmcblk1; do echo $b $(cat /sys/block/$b/size); done; } > $D/layout.txt 2>&1; ls -l $D; echo LAYOUT_OK; fi
+D=/tmp/sdbk/IVI_A33_BACKUP_20261107_1644; if [ -e $D ]; then echo DIR_EXISTS_A
+BORT; else mkdir $D && { uname -a; cat /proc/cmdline; cat /proc/partitions; cat 
+/proc/mounts; fdisk -l /dev/mmcblk0; for b in mmcblk0 mmcblk0boot0 mmcblk0boot1 
+mmcblk1; do echo $b $(cat /sys/block/$b/size); done; } > $D/layout.txt 2>&1; ls 
+-l $D; echo LAYOUT_OK; fi
+total 4
+-rwxr-xr-x    1 root     root          2346 Nov  7 22:43 layout.txt
+LAYOUT_OK
+
+# COMMAND: background job: dd boot0, boot1, full eMMC to image files on the SD, md5 of source boot areas and images, DONE marker. Foreground "cat status.txt" failed only because the backgrounded cd ran in a subshell; listing shown is of / (root fs untouched).
+>>>CMD cd /tmp/sdbk/IVI_A33_BACKUP_20261107_1644 && nohup sh -c "echo START \$(date) > status.txt; sync; for x in mmcblk0boot0 mmcblk0boot1 mmcblk0; do dd if=/dev/\$x of=\$x.img bs=1048576 2>>run.log; echo DD_\${x}_RC=\$? \$(date) >> status.txt; sync; done; md5sum /dev/mmcblk0boot0 /dev/mmcblk0boot1 > src_boot.md5; md5sum mmcblk0boot0.img mmcblk0boot1.img mmcblk0.img > images.md5; echo MD5_RC=\$? >> status.txt; ls -l > sizes.txt; sync; echo DONE \$(date) >> status.txt" > /dev/null 2>&1 & sleep 3; cat status.txt; ls -l; cd /
+cd /tmp/sdbk/IVI_A33_BACKUP_20261107_1644 && nohup sh -c "echo START \$(date) 
+> status.txt; sync; for x in mmcblk0boot0 mmcblk0boot1 mmcblk0; do dd if=/dev/\$
+x of=\$x.img bs=1048576 2>>run.log; echo DD_\${x}_RC=\$? \$(date) >> status.txt;
+ sync; done; md5sum /dev/mmcblk0boot0 /dev/mmcblk0boot1 > src_boot.md5; md5sum m
+mcblk0boot0.img mmcblk0boot1.img mmcblk0.img > images.md5; echo MD5_RC=\$? >> st
+atus.txt; ls -l > sizes.txt; sync; echo DONE \$(date) >> status.txt" > /dev/null
+ 2>&1 & sleep 3; cat status.txt; ls -l; cd /
+cat: can't open 'status.txt': No such file or directory
+total 84
+drwxrwxrwx    2 root     root          4096 Nov  5  2020 Default
+drwxrwxrwx    2 root     root          4096 Nov  3 15:55 Local
+drwxrwxrwx    5 root     root          4096 May 28  2020 PresetFile
+drwxrwxrwx    2 root     root          4096 May  6  2017 bin
+drwxr-xr-x    2 root     root          4096 Jan  1  1970 boot
+drwxrwxrwx    2 root     root          4096 May  6  2017 data
+drwxr-xr-x    8 root     root          3520 Jan  1  1970 dev
+drwxrwxrwx   10 root     root          4096 Jan  1  1970 etc
+drwxrwxrwx    3 root     root          4096 May  6  2017 home
+lrwxrwxrwx    1 root     root            11 Sep 25  2020 init -> bin/busybox
+drwxrwxrwx    3 root     root          4096 Sep 25  2020 kore
+-rw-r--r--    1 root     root             4 Jan  1  1970 kore.pid
+drwxrwxrwx    5 root     root          4096 Sep 29  2020 lib
+lrwxrwxrwx    1 root     root            11 Sep 25  2020 linuxrc -> bin/busybox
+drwx------    2 root     root          4096 Jan  1  1970 lost+found
+drwxrwxrwx    2 root     root          4096 May  6  2017 mnt
+drwxrwxrwx    3 root     root          4096 Nov 17  2020 opt
+dr-xr-xr-x  105 root     root             0 Jan  1  1970 proc
+drwxrwxrwx    2 root     root          4096 May  6  2017 sbin
+drwxrwxrwx    4 root     root          4096 Oct 23  2020 sinlinx
+dr-xr-xr-x   13 root     root             0 Jan  1  1970 sys
+drwxr-xr-x    3 root     root          4096 Jan  1  1970 system
+drwxrwxrwt    6 root     root           180 Nov  7 22:43 tmp
+drwxrwxrwx    6 root     root          4096 Oct 20  2020 userapp
+drwxrwxrwx    3 root     root          4096 Oct 20  2020 userdata
+drwxrwxrwx    8 root     root          4096 Sep 29  2020 usr
+drwxrwxrwx    4 root     root          4096 May  6  2017 var
+
+# COMMAND: progress check: image sizes, status, root fs clean, dd process running.
+>>>CMD ls -l /tmp/sdbk/IVI_A33_BACKUP_20261107_1644; cat /tmp/sdbk/IVI_A33_BACKUP_20261107_1644/status.txt; ls / | grep -E "status|img|run.log" || echo ROOT_CLEAN; ps | grep -E "dd if|md5" | grep -v grep
+ls -l /tmp/sdbk/IVI_A33_BACKUP_20261107_1644; cat /tmp/sdbk/IVI_A33_BACKUP_202
+61107_1644/status.txt; ls / | grep -E "status|img|run.log" || echo ROOT_CLEAN; p
+s | grep -E "dd if|md5" | grep -v grep
+total 170480
+-rwxr-xr-x    1 root     root          2346 Nov  7 22:43 layout.txt
+-rwxr-xr-x    1 root     root     170364928 Nov  7 22:44 mmcblk0.img
+-rwxr-xr-x    1 root     root       2097152 Nov  7 22:43 mmcblk0boot0.img
+-rwxr-xr-x    1 root     root       2097152 Nov  7 22:43 mmcblk0boot1.img
+-rwxr-xr-x    1 root     root            62 Nov  7 22:43 run.log
+-rwxr-xr-x    1 root     root           132 Nov  7 22:43 status.txt
+START Sat Nov 7 22:43:58 UTC 2026
+DD_mmcblk0boot0_RC=0 Sat Nov 7 22:43:58 UTC 2026
+DD_mmcblk0boot1_RC=0 Sat Nov 7 22:43:58 UTC 2026
+ROOT_CLEAN
+  534 root     sh -c echo START $(date) > status.txt; sync; for x in mmcblk0boot0 mmcblk0boot1 mmcblk0; do dd if=/dev/$x of=$x.img bs=1048576 2>>run.log; echo DD_${x}_RC=$? $(date) >> status.txt; sync; done; md5sum /dev/mmcblk0boot0 /dev/mmcblk0boot1 > src_boot.md5; md5sum mmcblk0boot0.img mmcblk0boot1.img mmcblk0.img > images.md5; echo MD5_RC=$? >> status.txt; ls -l > sizes.txt; sync; echo DONE $(date) >> status.txt
+  544 root     dd if /dev/mmcblk0 of mmcblk0.img bs 1048576
+
+# COMMAND: progress check (bytes written so far).
+>>>CMD cat /tmp/sdbk/IVI_A33_BACKUP_20261107_1644/status.txt; ls -l /tmp/sdbk/IVI_A33_BACKUP_20261107_1644/mmcblk0.img
+cat /tmp/sdbk/IVI_A33_BACKUP_20261107_1644/status.txt; ls -l /tmp/sdbk/IVI_A33
+_BACKUP_20261107_1644/mmcblk0.img
+START Sat Nov 7 22:43:58 UTC 2026
+DD_mmcblk0boot0_RC=0 Sat Nov 7 22:43:58 UTC 2026
+DD_mmcblk0boot1_RC=0 Sat Nov 7 22:43:58 UTC 2026
+-rwxr-xr-x    1 root     root     2550542336 Nov  7 22:48 /tmp/sdbk/IVI_A33_BACKUP_20261107_1644/mmcblk0.img
+
+# COMMAND: completion check: dd return codes, record counts, source boot hashes, file sizes (3959422976 = full eMMC).
+>>>CMD cd /tmp/sdbk/IVI_A33_BACKUP_20261107_1644; cat status.txt run.log; cat src_boot.md5 images.md5 2>/dev/null; ls -l; cd /
+cd /tmp/sdbk/IVI_A33_BACKUP_20261107_1644; cat status.txt run.log; cat src_boo
+t.md5 images.md5 2>/dev/null; ls -l; cd /
+START Sat Nov 7 22:43:58 UTC 2026
+DD_mmcblk0boot0_RC=0 Sat Nov 7 22:43:58 UTC 2026
+DD_mmcblk0boot1_RC=0 Sat Nov 7 22:43:58 UTC 2026
+DD_mmcblk0_RC=0 Sat Nov 7 22:51:33 UTC 2026
+2+0 records in
+2+0 records out
+2+0 records in
+2+0 records out
+3776+0 records in
+3776+0 records out
+50446d3316c714e8203433f714253ef8  /dev/mmcblk0boot0
+b2d1236c286a3c0704224fe4105eca49  /dev/mmcblk0boot1
+total 3870736
+-rwxr-xr-x    1 root     root             0 Nov  7 22:51 images.md5
+-rwxr-xr-x    1 root     root          2346 Nov  7 22:43 layout.txt
+-rwxr-xr-x    1 root     root     3959422976 Nov  7 22:51 mmcblk0.img
+-rwxr-xr-x    1 root     root       2097152 Nov  7 22:43 mmcblk0boot0.img
+-rwxr-xr-x    1 root     root       2097152 Nov  7 22:43 mmcblk0boot1.img
+-rwxr-xr-x    1 root     root            99 Nov  7 22:51 run.log
+-rwxr-xr-x    1 root     root           104 Nov  7 22:51 src_boot.md5
+-rwxr-xr-x    1 root     root           176 Nov  7 22:51 status.txt
+
+# COMMAND: DONE marker and image MD5s; boot image MD5s equal source device MD5s.
+>>>CMD cd /tmp/sdbk/IVI_A33_BACKUP_20261107_1644; cat status.txt images.md5 src_boot.md5; cd /
+cd /tmp/sdbk/IVI_A33_BACKUP_20261107_1644; cat status.txt images.md5 src_boot.
+md5; cd /
+START Sat Nov 7 22:43:58 UTC 2026
+DD_mmcblk0boot0_RC=0 Sat Nov 7 22:43:58 UTC 2026
+DD_mmcblk0boot1_RC=0 Sat Nov 7 22:43:58 UTC 2026
+DD_mmcblk0_RC=0 Sat Nov 7 22:51:33 UTC 2026
+MD5_RC=0
+DONE Sat Nov 7 22:54:39 UTC 2026
+50446d3316c714e8203433f714253ef8  mmcblk0boot0.img
+b2d1236c286a3c0704224fe4105eca49  mmcblk0boot1.img
+400889383907f6a864e65bbea4e27c57  mmcblk0.img
+50446d3316c714e8203433f714253ef8  /dev/mmcblk0boot0
+b2d1236c286a3c0704224fe4105eca49  /dev/mmcblk0boot1
+[3]+  Done                       cd /tmp/sdbk/IVI_A33_BACKUP_20261107_1644 && nohup sh -c "echo START \$(date) > status.txt; sync; for x in mmcblk0boot0 mmcblk0boot1 mmcblk0; do dd if=/dev/\$x of=\$x.img bs=1048576 2>>run.log; echo DD_\${x}_RC=\$? \$(date) >> status.txt; sync; done; md5sum /dev/mmcblk0boot0 /dev/mmcblk0boot1 > src_boot.md5; md5sum mmcblk0boot0.img mmcblk0boot1.img mmcblk0.img > images.md5; echo MD5_RC=\$? >> status.txt; ls -l > sizes.txt; sync; echo DONE \$(date) >> status.txt" 1>/dev/null 2>&1
+
+# COMMAND: start re-read verification (md5sum -c) in background.
+>>>CMD cd /tmp/sdbk/IVI_A33_BACKUP_20261107_1644 && (md5sum -c images.md5 > verify.txt 2>&1; echo VERIFY_RC=$? >> verify.txt; sync) > /dev/null 2>&1 & cd /
+cd /tmp/sdbk/IVI_A33_BACKUP_20261107_1644 && (md5sum -c images.md5 > verify.tx
+t 2>&1; echo VERIFY_RC=$? >> verify.txt; sync) > /dev/null 2>&1 & cd /
+
+# COMMAND: verification result: all OK, VERIFY_RC=0 (may be partly cache-served).
+>>>CMD cat /tmp/sdbk/IVI_A33_BACKUP_20261107_1644/verify.txt; ps | grep "md5sum -c" | grep -v grep || echo NO_MD5_RUNNING
+cat /tmp/sdbk/IVI_A33_BACKUP_20261107_1644/verify.txt; ps | grep "md5sum -c" |
+ grep -v grep || echo NO_MD5_RUNNING
+mmcblk0boot0.img: OK
+mmcblk0boot1.img: OK
+mmcblk0.img: OK
+VERIFY_RC=0
+NO_MD5_RUNNING
+[3]+  Done                       cd /tmp/sdbk/IVI_A33_BACKUP_20261107_1644 && (md5sum -c images.md5 1>verify.txt 2>&1; echo VERIFY_RC=${?} 1>>verify.txt; sync)
+
+# COMMAND: flush and unmount the SD; SD_NOT_MOUNTED confirms safe removal.
+>>>CMD cd /; sync; umount /tmp/sdbk && echo UMOUNT_OK; grep -E "mmcblk1|sdbk" /proc/mounts || echo SD_NOT_MOUNTED
+cd /; sync; umount /tmp/sdbk && echo UMOUNT_OK; grep -E "mmcblk1|sdbk" /proc/m
+ounts || echo SD_NOT_MOUNTED
+UMOUNT_OK
+SD_NOT_MOUNTED
+
+[OMITTED: 422 further repeated printer temperature/homing poll lines]
+# --- END excerpt | backup_20261107_164205.bin ---
+# Reader status file (Mac clock, CST):
+#     armed Sat Nov  7 16:42:05 2026 pid=85401
+#     SENT cmd_001.txt Sat Nov  7 16:43:23 2026
+#     SENT cmd_002.txt Sat Nov  7 16:43:32 2026
+#     SENT cmd_003.txt Sat Nov  7 16:43:47 2026
+#     SENT cmd_004.txt Sat Nov  7 16:43:58 2026
+#     SENT cmd_005.txt Sat Nov  7 16:44:11 2026
+#     SENT cmd_006.txt Sat Nov  7 16:48:55 2026
+#     SENT cmd_007.txt Sat Nov  7 16:54:06 2026
+#     SENT cmd_008.txt Sat Nov  7 16:56:27 2026
+#     SENT cmd_009.txt Sat Nov  7 16:56:37 2026
+#     SENT cmd_010.txt Sat Nov  7 17:00:43 2026
+#     SENT cmd_011.txt Sat Nov  7 17:00:54 2026
+#     STOP requested
+#     closed bytes=32857 secs=1135 bad=False
+#
+# ==============================================================================
+# 10. MAC-SIDE VERIFICATION OF 14TB COPY (17:39 CST)
+# ==============================================================================
+# Folder: <off-repo backup directory>  (macOS, output type: Mac shell)
+# Command: md5 mmcblk0boot0.img mmcblk0boot1.img mmcblk0.img   (recorded output):
+MD5 (mmcblk0boot0.img) = <redacted; matched the off-repo manifest>
+MD5 (mmcblk0boot1.img) = <redacted; matched the off-repo manifest>
+MD5 (mmcblk0.img) = <redacted; matched the off-repo manifest>
+# Sizes: mmcblk0.img 3959422976; mmcblk0boot0.img 2097152; mmcblk0boot1.img 2097152. All match images.md5 and board hashes.
+#
+# ==============================================================================
+# 11. FINDINGS: OBSERVED vs INFERRED vs NOT DONE
+# ==============================================================================
+#   - OBSERVED: debug UART 115200 8N1 = Linux console ttyS2; unauthenticated root shell "#" (uid=0).
+#   - OBSERVED: Linux 3.4.39 sun8i (Sinlinx build, Nov 2020); U-Boot 2011.09-rc1 Allwinner; boot0 3.1.0; AXP221/22x PMU; 512 MiB DRAM.
+#   - OBSERVED: eMMC mmcblk0 (MMC 004GA0, 3.69 GiB) on sunxi-mmc.2; SDIO Wi-Fi on sunxi-mmc.1; microSD on sunxi-mmc.0 (mmcblk1).
+#   - OBSERVED: rootfs mmcblk0p7 ext4 rw; UDISK mmcblk0p1 vfat mounted /userdata/WifiFile; app did not mount microSD.
+#   - OBSERVED: 8 GB SD read fully (15523840 sectors); last 64 KiB dd OK at 16:36; earlier -123 error only during hot insert.
+#   - OBSERVED: boot0/U-Boot load from controller 2 (eMMC); "Try SD card 2" then "Try MMC card 2" is protocol fallback on that same controller, not a microSD boot attempt. bootcmd "run setargs_mmc boot_normal"; autoboot delay 0.
+#   - A33 IDENTIFICATION: Allwinner A33 independently confirmed from board photos (earlier documentation); this log alone only implies sun8i/A33-class - chip name not printed. eMMC vendor 0x11 likely Toshiba/Kioxia (inferred).
+#   - NOT PROVEN: microSD boot/recovery support by BROM or U-Boot (no SD boot attempt logged).
+#   - LIMITATION: eMMC image taken live with p7/p1 mounted rw -> not guaranteed coherent; restore untested.
+#   - NOT DONE: SWD, STM32/GD32 reads, firmware modification, flashing, network services.
+#   - HOST ISSUE (observed): stale repeated output at an impossible rate for 115200 baud, including once with the board OFF; location/cause (adapter, macOS driver or USB stack) unproven. Empirically working: USB replug, then ONE port open with board off kept through boot and all commands.
+#
+# END OF LOG

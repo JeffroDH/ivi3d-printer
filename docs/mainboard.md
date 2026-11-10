@@ -111,11 +111,11 @@ Evidence labels used throughout:
 | Front **central** SWD-style 5-pin (by STM32) | **Confirmed [P]**; **target STM32 [O]** | Silk `RST`/`GND`/`CLK`/`3V3`/`DIO` **[P]**. Owner traces this header to the **STM32F407** **[O]**. Distinct from the lower 5-pin near SD. |
 | Front **lower** SWD-style 5-pin (near SD / bottom edge) | **Confirmed [P]**; **pin map [O]** | **Two distinct** SWD-style 5-pin headers on this board. Lower header **top→bottom: 1 DIO, 2 3V3, 3 CLK, 4 GND, 5 RST [O]**. Earlier “pin 2 = GND” reading is **superseded**. Owner continuity: lower header ↔ rear bottom-right `DIO`/`CLK`/`RST#`/`3V3`/`GND` pads **[O]**. |
 | Rear SWD-like pads near bottom-right chip | **Confirmed [P]**; **continuity to lower 5-pin [O]** | Pads `DIO`/`CLK`/`RST#`/`3V3`/`GND` **[P]**. Continuous with front lower 5-pin **[O]**. Nearby MCU marking **E230F4** = GigaDevice **GD32E230F4** **[P]** (see §4.5). **Header↔chip pin continuity not measured [U]** — GD32 is the **likely** lower-header target **[G]** only. |
-| Rear debug UART pads | **Confirmed visible [P]**; **continuity to front 3-pin [O] 2026-11-06** | Silk **`DEBUGUART_RX`**, **`DEBUGUART_TX`**, plus **`GND`**. Evening rear crop (`rear_debuguart_gnd_rx_tx.jpg`) shows pad reading order **along that strip: `GND` → `DEBUGUART_RX` → `DEBUGUART_TX`**. Older 2026-10 `UGUART_*` transcription is **not re-proven** and must not override. **Owner continuity** links these pads to the front 3-pin by micro-USB **[O]**. Which CPU owns the UART and idle voltage remain **unmeasured [U]**. |
-| Front 3-pin by micro-USB / microSD | **Confirmed silk [P]**; **nets [O]** | Evening macro silk **`RX`**, **`TX`**, **`GND`** (`front_3pin_rx_tx_gnd.jpg`). **Owner pin map facing the connector, left→right: TX, RX, GND [O]** (supersedes treating silk-along-edge alone as pin-1 order). Continuity to rear `DEBUGUART_*` **confirmed by owner [O]**. Levels / which CPU **[U]**. |
+| Rear debug UART pads | **Confirmed visible [P]**; **A33 console [V]** | Silk **`DEBUGUART_RX`**, **`DEBUGUART_TX`**, plus **`GND`**. Evening rear crop shows pad order **`GND` → `DEBUGUART_RX` → `DEBUGUART_TX`**. Continuous with the front 3-pin **[O]**. On this unit the port is the A33 Linux console **ttyS2, 115200 8N1** (`script.bin` port 2, PB0/PB1). A full boot and a root shell were captured there. See [a33.md](a33.md). |
+| Front 3-pin by micro-USB / microSD | **Confirmed silk [P]**; **same nets as DEBUGUART [O]** | Silk **`RX`**, **`TX`**, **`GND`**. Facing the connector, left→right: **TX, RX, GND [O]**. Same console as the rear pads. Adapter VCC stays unconnected. |
 | Front bottom-left **5-pin** + **SOIC-16** | **Confirmed visible [P]** | Distinct from STM32 SWD and from the 3-pin by USB; IC is **CH340C** per 2026-11-06 reupload **[Pᵖ]** |
 | SOIC-16 = **WCH CH340C** (was documented as G) | **First-hand [P]** 2026-11-06 | Recovered reupload `503fbbb7…` (3024×4032): top mark **`CH340C`**, lot **`205695A11`**, WCH logo (`front_ch340c_marking.jpg`). Earlier wood/evening “CH340G” readings **superseded**. Datasheet: **C = built-in oscillator** (XI/XO NC); **G needs external 12 MHz** ([CH340DS1](https://www.wch-ic.com/downloads/CH340DS1_PDF.html)). A **`12.000 MHZ`** can sits between CH340C and GL850G — **proximity is not net ownership**; do not treat it as proof of a CH340G or as proven GL850G clock without tracing. Executor recovered **1/16** reupload files this pass. |
-| Earlier RS-232 / MAX3232 guess | **Superseded** | Polarized caps near a SOIC-16 looked like a charge-pump footprint; marking is CH340-family (**CH340C**). Do not treat the 5-pin as RS-232 on that basis. |
+| Front bottom-left 5-pin | **Not RS-232 [P]** | The SOIC-16 is a CH340C. Nearby polarized capacitors are decoupling / `V3`, not a charge pump. Pinout of the header is still **[U]**. |
 | 5-pin connector net (USB D± vs UART vs power) | **Unknown [U]** | CH340C has USB (`UD+`/`UD-`) and UART (`TXD`/`RXD`) pins — **which nets reach the 5-pin is untraced**. Still measure voltages before attaching anything. |
 | Axis `X_UART_*` / `Y_UART_*` (and Z/F on other edges) | **Confirmed visible [P]** | Do **not** assume driver IC type from pads alone |
 | CTP I²C + LCD bias rails | **Confirmed visible [P]** | See connector table. Owner display-assembly photos (flex / edge board) are summarized in [motors_and_display.md](motors_and_display.md) (**[Pᵗ]** this pass — originals not opened by tools). |
@@ -149,22 +149,22 @@ Evidence labels used throughout:
 - Firmware split **[F]**:
   - Qt ARM Linux UI ELF (`firmware.bin`) + separate HTTP `:8080` process on the application side (`firmware_report.md`, `network.md`).
   - Marlin-derived motion image in `firmware.supx` targeting STM32 (`supx_report.md`, `supx_decompile_report.md`).
-  - UI talks to motion over an internal serial path (`/dev/ttyUSB0`, 115200 8N1, line G-code) **[F]**.
-  - External USB-C enumerates as CDC serial **straight to Marlin**, bypassing the Linux UI for G-code **[F]** (`network.md`).
+  - UI talks to motion over **`/dev/ttyUSB0`**: A33 EHCI → GL850G hub port 2 → CH340C (`1a86:7523`) → STM32 USART2 PD5/PD6, 115200 8N1, line G-code **[V]**. Only `IVI-Main-Controller` holds that fd while the UI runs.
+  - External USB-C enumerates as CDC serial **straight to the STM32** (PA11/PA12), bypassing Linux **[V]** (`network.md`).
+  - `DEBUGUART` / the front 3-pin is the A33 console **ttyS2** **[V]**. It is not the CH340 path.
 
-**What is still a hypothesis [G]**
+**Still open [U]**
 
-- Exact on-board wiring between A33 UART and STM32 USART (which pins, level shifting, who is DCE).
-- Whether the bottom-left **CH340C 5-pin** shares nets with the front 3-pin / rear `DEBUGUART_*` (those two UART paths **are** continuous per owner **[O]**; CH340C path still **[U]**).
-- Which CPU owns the AP6236 SDIO/UART lines (almost certainly the A33 on typical A33 tablets, but not traced here).
+- Whether the bottom-left **CH340C 5-pin** exposes USB D±, the UART, or power. It is not the DEBUGUART breakout.
+- Level shifting, if any, between the CH340 and PD5/PD6.
+- Which A33 balls own the AP6236 SDIO and BT UART (the module is on the A33's USB/SDIO side of the board in software: Wi-Fi comes up as `wlan0`).
 
 **Safe exploration (read-only first)**
 
 | Path | Likely grants | Risk notes |
 |---|---|---|
-| STM32 **SWD** (`RST`/`GND`/`CLK`/`3V3`/`DIO`) | Inspect connection / RDP **status** with ST-Link | **Never** unlock or disable readout protection (can mass-erase). Do **not** claim a full flash dump is possible until RDP level is known. Never force 5 V onto `3V3`. |
-| Rear **`DEBUGUART_RX`/`DEBUGUART_TX`** (Nov 2026 silk) | Candidate **debug / Linux console** | Measure idle/active levels first. Do **not** assume 3.3 V TTL. |
-| Front **3-pin** by USB | Convenient breakout of rear `DEBUGUART_*` **[O]** | Continuity confirmed **[O]**; still **measure voltage** before attaching a USB-TTL adapter. CPU owner **[U]**. |
+| STM32 **SWD** (`RST`/`GND`/`CLK`/`3V3`/`DIO`) | Inspect connection only, and only when that test is authorized | **No reset, halt, erase, program, or option-byte write.** Never clear readout protection (mass-erase). Never force 5 V onto `3V3`. |
+| Rear **`DEBUGUART_*`** and the front **3-pin** | A33 **ttyS2** root shell, 115200 8N1 **[V]** | USB-TTL at 3.3 V, **VCC open**, RX/TX crossed. Open the terminal before power-on. |
 | Front **5-pin** by **CH340C** | Unknown — may be USB or UART side of the bridge **[U]** | Trace to CH340C pins before use. CH340C ≠ automatic “TTL-safe header.” Measure first. |
 | USB-C CDC | Marlin G-code | Already used by the bridge; not a Linux shell |
 
@@ -213,9 +213,9 @@ Caveats: a soldered module does not prove the antenna path is intact, that Linux
 | Package / orderable | Photo looks LGA20-class; exact suffix (e.g. **F4V6** LGA20 vs **F4P6** TSSOP20) **uncertain [U]** | **[U]** |
 | Citation | [GD32E230xx Datasheet Rev 3.1 (GigaDevice)](https://download.gigadevice.com/Datasheet/GD32E230xx%20Datasheet_Rev3.1.pdf); [download index](https://www.gd32mcu.com/en/download?kw=GD32E230) | |
 
-**Association with lower SWD:** rear pads beside this chip match the front **lower** 5-pin by owner continuity **[O]**. Treat GD32 as the **likely** program target for that header **[G]** until someone continuity-tests chip pins ↔ header (not claimed here).
+**Association with lower SWD:** rear pads beside this chip match the front **lower** 5-pin by owner continuity **[O]**. Chip-pin continuity is still **[U]**. The firmware in the chip is a soft-power sequencer with no USART; see [gd32.md](gd32.md).
 
-**Probe caution:** ST-Link V2-style clones can talk SWD electrically, but **software / target-database / readout-protection** behaviour for GD32 is **not** guaranteed to match STM32 tooling. See [tools.md](tools.md). **No unlock / mass-erase** to dump firmware.
+**Probe caution:** the same limits as the STM32. No reset, halt, erase, program, or option-byte write, and never clear readout protection. OpenOCD `gd32e23x` is the matching target. See [tools.md](tools.md).
 
 ### 4.4 Other carrier parts (partial)
 
@@ -241,7 +241,7 @@ Caveats: a soldered module does not prove the antenna path is intact, that Linux
 | Item | Location | Silk / notes | Status |
 |---|---|---|---|
 | microSD push-push cage | Front edge | Boot / storage candidate for A33; also rear SDMMC test pads | **[P]**; which device is primary boot **[U]** |
-| 3-pin white header | Between microSD and micro-USB | Silk **`RX`/`TX`/`GND` [P]**; owner facing L→R **TX, RX, GND [O]** | Continuity to rear `DEBUGUART_*` **[O]**; levels/CPU **[U]** |
+| 3-pin white header | Between microSD and micro-USB | Silk **`RX`/`TX`/`GND` [P]**; facing L→R **TX, RX, GND [O]** | Same nets as rear `DEBUGUART_*`. A33 ttyS2, 115200 8N1 **[V]** |
 | micro-USB | Front edge | Data vs charge / host vs device **[U]** (rear also has `USBH_D±` silk for a **host** path) |
 | 5-pin white header | Front **bottom-left**, near mounting hole | Traces into adjacent **CH340C** | **[P]**; net roles **[U]** until traced/measured |
 | **Central** SWD 5-pin | Beside STM32 | Silk `RST GND CLK 3V3 DIO` **[P]**; traces to STM32 **[O]** | **[P][O]** |
@@ -277,7 +277,7 @@ Caveats: a soldered module does not prove the antenna path is intact, that Linux
 | `CMD_USB`, `GND_USB` | Right edge | Likely USB device-side / command path **[G]** |
 | `BUTTON`, `LED_CTL` | Right edge | Front power/user button and LED **[P]** (use **[G]**) |
 | Second `DIO`, `CLK`, `RST#`, `3V3`, `GND` | Bottom right, by **GD32E230F4** | Continuous with front **lower** SWD 5-pin **[O]**; chip-net continuity **unmeasured [U]**; likely GD32 SWD **[G]** |
-| `DEBUGUART_RX`, `DEBUGUART_TX`, `GND` | Lower center (Nov 2026 ruler photo) | Debug UART pads **[P]** - full visible strings on primary photo. Older docs transcribed nearby pads as `UGUART_*`; treat that as an **unverified older reading**, not current primary evidence. Role/voltage **[U]** until measured. |
+| `DEBUGUART_RX`, `DEBUGUART_TX`, `GND` | Lower center (Nov 2026 ruler photo) | A33 Linux console ttyS2, 115200 8N1 **[V]**. Pad order along the strip: `GND`, `DEBUGUART_RX`, `DEBUGUART_TX`. Continuous with the front 3-pin **[O]**. |
 | `D2`, `D3`, `CMD`, `CLK`, `D0`, `D1`, `CD#` | Lower center | SD/MMC test pads **[P]** |
 | `CTP_SDA/SCL/RST/INT`, `CTPVCC_3V3` | Top | Capacitive touch I²C **[P]** |
 | `LCDVCCIN`, `VGH_18V`, `VGL_-8V`, `DVDD_3V3`, `AVDD_10V3`, `VCOM_3V5`, `VLED+/-` | Top | LCD bias and backlight **[P]** |
@@ -309,9 +309,7 @@ This is **not** the STM32 SWD header and **not** the 3-pin next to micro-USB.
 - **WCH CH340C** is a USB-UART bridge in SOP-16 with a **built-in clock** — no external crystal ([WCH CH340 datasheet / CH340DS1](https://www.wch-ic.com/downloads/CH340DS1_PDF.html); C/E/B = internal osc, G = external 12 MHz on XI/XO).
 - Relevant CH340C pins (SOP-16): `UD+`/`UD-`, `TXD`/`RXD`, `VCC`/`GND`/`V3`; **XI/XO are NC** on C. A **`12.000 MHZ`** package sits between CH340C and GL850G in the reupload frame — **proximity ≠ net ownership** (not measured). Datasheet-wise CH340C does not need it; GL850G commonly uses 12 MHz — still **trace before asserting**.
 
-### Superseded hypothesis
-
-- An earlier pass guessed **MAX3232-class RS-232** from "SOIC-16 + four `+` caps." **That guess is wrong.** Capacitance around a CH340C is consistent with decoupling / `V3` support, not an RS-232 charge pump. A later pass mis-transcribed the top mark as **CH340C**; the 2026-11-06 reupload corrects it to **CH340C**.
+The capacitors next to the SOIC-16 are decoupling / `V3` support for the CH340C. The header is not an RS-232 port.
 
 ### What is still unknown [U]
 
@@ -363,7 +361,7 @@ Ten additional JPEGs (front/rear/edges/antenna). Shell could not always list has
 - White 3-pin between microSD and micro-USB.
 - Silk clearly **`RX`**, **`TX`**, **`GND`** (`front_3pin_rx_tx_gnd.jpg`).
 - **Caveat:** those words are the **silkscreen reading order along the board**, not a measured mapping of connector cavity pin 1→N. Do not probe by assumed pin numbers.
-- Continuity to rear `DEBUGUART_*` **confirmed by owner [O] 2026-11-06**. Idle levels / CPU owner remain **unmeasured [U]**.
+- Continuity to rear `DEBUGUART_*` **confirmed by owner [O]**. This is the A33 ttyS2 console at 115200 8N1 **[V]**.
 
 ### Rear DEBUGUART pad order [P]
 
@@ -385,7 +383,7 @@ Ten additional JPEGs (front/rear/edges/antenna). Shell could not always list has
 
 ### Still open after this set
 
-- UART voltage / which CPU owns DEBUGUART (continuity 3-pin↔DEBUGUART now **[O]**).
+- DEBUGUART ownership is settled (A33 ttyS2). Amass series and the rear SOIC-8 are not.
 - Amass exact series; rear SOIC-8 identity.
 - Whether Kapton covers only the coax joint or also an onboard antenna feature.
 - GD32 ↔ lower-SWD **chip-pin** continuity (header↔rear pads already **[O]**).
@@ -452,7 +450,7 @@ Possible explanations (none proven from photos):
 Power removed unless a step explicitly says otherwise. No speculative part buys until mating series and pitch are measured.
 
 1. **Calipers:** pitch of front 3-pin, front 5-pin, SWD header, yellow power inlet, and rear gold pad clusters.
-2. **Continuity:** front 3-pin <-> rear `DEBUGUART_*` — **done by owner [O]** (facing L→R TX,RX,GND). Still measure **voltage** before adapters.
+2. **Continuity:** front 3-pin <-> rear `DEBUGUART_*` — **done [O]** (facing L→R TX, RX, GND). This is ttyS2 at 115200; adapter VCC stays open. See [a33.md](a33.md).
 3. **Continuity:** front 5-pin <-> **CH340C** pins (`UD+/-`, `TXD`/`RXD`, `VCC`/`GND`, ...) - one net at a time.
 4. **Voltage (powered, careful):** idle levels on front 3-pin, rear debug UART, and 5-pin **before** attaching adapters or USB hosts.
 5. **Continuity:** SWD header <-> STM32 pins (LQFP100 pinout in [DS8626](https://www.st.com/resource/en/datasheet/stm32f407ve.pdf)), with steady fine tips - **do not drag** a probe across adjacent MCU pins.
@@ -474,14 +472,14 @@ Power removed unless a step explicitly says otherwise. No speculative part buys 
 1. Continuity mode with **fine tips**. Hold one probe on a labeled pad (e.g. `Z_UART_TX`) and touch **one** candidate STM32 pin at a time. Pin 1 is at the package dot. **Do not drag** the probe across the fine-pitch LQFP leads.
 2. Map pin number -> port with the STM32F407 datasheet LQFP100 pinout - [DS8626](https://www.st.com/resource/en/datasheet/stm32f407ve.pdf).
 3. Record: pad -> pin -> port -> peripheral. Include `F_*`, X/Y, `CHA`/`CHB`, `INP`/`INN`, `BEDTEMP`, limits, door, front 3-pin, front 5-pin <-> CH340C, rear `DEBUGUART_*`.
-4. Candidate console (`DEBUGUART_*` / front 3-pin): **measure levels first**. For a first listen, wire adapter **RX -> board TX** and **GND -> GND** only; leave adapter **TX and VCC disconnected**. Capture boot output. Only after the listen is understood, decide whether a return path (adapter TX) is needed - never as a substitute for voltage measurement.
+4. Console (`DEBUGUART_*` / front 3-pin): 3.3 V USB-TTL, VCC open, RX to board TX, TX to board RX, GND to GND, 115200 8N1, terminal open before power-on. On a board that has not been measured, check the idle level before connecting TX.
 5. Front 5-pin: identify nets via CH340C pin continuity before any host connection.
 
 
 ## 11. Open questions
 
 - Exact A33 ↔ STM32 interconnect and protocol beyond “serial G-code” **[F]** at the software layer.
-- Front 3-pin ↔ rear `DEBUGUART_*` continuous **[O]**; still measure levels and which CPU; CH340C 5-pin vs that UART path **[U]**.
+- Front 3-pin ↔ rear `DEBUGUART_*` is the A33 ttyS2 console **[V]**. CH340C 5-pin pinout **[U]**. The CH340 itself is the A33↔STM32 link (hub port 2, `ttyUSB0`).
 - Which side of the CH340C the 5-pin exposes; which CPU owns the UART.
 - micro-USB role (enum negative so far **[O]** — inconclusive); whether microSD or eMMC is the boot device.
 - STM32 RDP level; GD32 readout-protection / OpenOCD `gd32e23x` behaviour.
