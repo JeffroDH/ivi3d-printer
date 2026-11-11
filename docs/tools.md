@@ -43,9 +43,33 @@ There are **two** SWD-style headers — pick the target deliberately:
 
 - Vendor / ST software is **STM32-centric**; GD32 often needs **OpenOCD `gd32e23x`** (or vendor ISP) rather than assuming ST utilities.
 - Clone fidelity varies; treat as a cheap SWD adapter, not a guaranteed ST authentic probe.
-- **Readout protection:** inspect status only when that test is authorized. **Never unlock, and never mass-erase**, on either MCU. No reset, halt, program, or option-byte write.
+- **Readout protection:** this unit is level 0 (`FLASH_OPTCR` `0x0FFFAAED`). **Never unlock, and never mass-erase**, on either MCU. No reset, halt, program, or option-byte write.
 
-Software for macOS: `brew install stlink` / OpenOCD. A dump of the STM32, if it is ever authorized, is only meaningful at readout-protection level 0 and must cover all 512 KiB (bootloader and settings are not in `firmware.supx`). See [stm32.md](stm32.md) and [backups.md](backups.md).
+Software for macOS: `brew install stlink` / OpenOCD. The 2026-11-10 STM32 image (512 KB flash, system ROM, OTP, option bytes) is [firmware/stm32_dump/](../firmware/stm32_dump/README.md). Two flash reads matched. The read that produced it is [tools/stm32/openocd_readonly.cfg](../tools/stm32/openocd_readonly.cfg):
+
+```
+adapter driver st-link
+transport select dapdirect_swd
+reset_config none
+swd newdap …
+dap create …
+target create … mem_ap -ap-num 0
+init
+mdw / dump_image
+```
+
+That session created no `cortex_m` target, because `cortex_m` examine writes DHCSR, DEMCR and the FPB, and it did not reset or halt. A later session uses the same pattern. See [stm32.md](stm32.md) and [backups.md](backups.md).
+
+## USB-C bootloader check
+
+`tools/stm32/bootloader_probe.py` sends `M997\n`, checks for `C4 05 B0 19 A2`, then sends `A4 02 AA AA AA AA 9F BD` to start the app. It never sends A1, A2, or A3, so it does not erase or program. Verified on the printer 2026-11-10 over `/dev/cu.usbmodem*` **[V]**.
+
+Stop `ivi_bridge.py` first (LaunchAgent `com.ivi3d.bridge` on macOS). It holds the USB serial port while it runs, including when a print is going over Wi-Fi. Start it again after the probe exits.
+
+```
+python3 tools/stm32/bootloader_probe.py /dev/cu.usbmodem*          # prints the sequence
+python3 tools/stm32/bootloader_probe.py /dev/cu.usbmodem1234 --go  # sends it
+```
 
 ## USB-TTL on the debug UART
 

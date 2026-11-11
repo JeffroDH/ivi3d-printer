@@ -163,7 +163,7 @@ Evidence labels used throughout:
 
 | Path | Likely grants | Risk notes |
 |---|---|---|
-| STM32 **SWD** (`RST`/`GND`/`CLK`/`3V3`/`DIO`) | Inspect connection only, and only when that test is authorized | **No reset, halt, erase, program, or option-byte write.** Never clear readout protection (mass-erase). Never force 5 V onto `3V3`. |
+| STM32 **SWD** (`RST`/`GND`/`CLK`/`3V3`/`DIO`) | Read-only dump already taken 2026-11-10 (RDP level 0). A later session is the same | **No reset, halt, erase, program, or option-byte write.** Never clear readout protection (mass-erase). Never force 5 V onto `3V3`. Pattern: [tools.md](tools.md) |
 | Rear **`DEBUGUART_*`** and the front **3-pin** | A33 **ttyS2** root shell, 115200 8N1 **[V]** | USB-TTL at 3.3 V, **VCC open**, RX/TX crossed. Open the terminal before power-on. |
 | Front **5-pin** by **CH340C** | Unknown — may be USB or UART side of the bridge **[U]** | Trace to CH340C pins before use. CH340C ≠ automatic “TTL-safe header.” Measure first. |
 | USB-C CDC | Marlin G-code | Already used by the bridge; not a Linux shell |
@@ -222,7 +222,7 @@ Caveats: a soldered module does not prove the antenna path is intact, that Linux
 | Part | Observation | Tag |
 |---|---|---|
 | SOIC-16 by bottom-left 5-pin | **WCH CH340C** (see §6); polarized (`+`) caps nearby | Marking **[P]**; see §6 |
-| SOIC-8 near STM32 SWD pads | Present; marking poorly readable | **[P]**; role EEPROM/flash **[G]** (decompile shows bit-banged I²C EEPROM **[F]**) |
+| SOIC-8 near STM32 SWD pads | Present; marking poorly readable | **[P]**; the bootloader bit-bangs I²C on PB10/PB11 and keeps a 16-byte update record at address 0x20 **[V]**. Whether this SOIC-8 is that EEPROM is **[?]** |
 | SOT-89 `7133` near second SWD | 3.3 V LDO class | **[P]**; exact vendor **[G]** |
 | Large inductors | e.g. rear `1821 GFE`; front `220`, `4R7` | **[P]** values only where legible |
 | Electrolytics | e.g. `100` / `35V` near power input | **[P]** |
@@ -290,7 +290,7 @@ Caveats: a soldered module does not prove the antenna path is intact, that Linux
 - Three MAX endstops and a door switch **confirmed**.
 - Toolhead on CAN with its own 24 V supply **confirmed**; heater/fan/laser power are on the head side, so no hotend MOSFET on this board is expected.
 - All four drivers (X, Y, Z, F) wired with STEP/DIR/EN + UART **confirmed**.
-- SWD location found (front header + rear pads), so RDP check and flash backup are practical.
+- SWD location found (front header + rear pads). The STM32 read of 2026-11-10 found RDP level 0; the image is in `firmware/stm32_dump/`.
 
 ---
 
@@ -455,7 +455,7 @@ Power removed unless a step explicitly says otherwise. No speculative part buys 
 4. **Voltage (powered, careful):** idle levels on front 3-pin, rear debug UART, and 5-pin **before** attaching adapters or USB hosts.
 5. **Continuity:** SWD header <-> STM32 pins (LQFP100 pinout in [DS8626](https://www.st.com/resource/en/datasheet/stm32f407ve.pdf)), with steady fine tips - **do not drag** a probe across adjacent MCU pins.
 6. **Map** each `*_UART_TX/RX` pad to STM32 USART pins (resolves decompile §8).
-7. **ST-Link inspect only:** report RDP / connection status. **Never** unlock or disable readout protection (risk of mass erase). A full flash dump is only appropriate if RDP allows it.
+7. **ST-Link:** RDP on the dumped unit is level 0, and the 512 KB image is in the repo. A later session stays read-only. **Never** unlock or disable readout protection (mass erase). Pattern and limits: [tools.md](tools.md).
 8. **Console listen-first:** after measuring levels on the chosen UART, connect adapter **RX + GND only** (adapter **TX and VCC disconnected**). Capture boot text. Do not use baud guessing or TX/RX swapping as a substitute for measuring levels.
 9. **AP6236:** confirm antenna feed continuity; check Linux for wireless interface once console exists.
 10. **Thermistor / head connector:** resistance and wiring after the cold-hotend report.
@@ -482,7 +482,7 @@ Power removed unless a step explicitly says otherwise. No speculative part buys 
 - Front 3-pin ↔ rear `DEBUGUART_*` is the A33 ttyS2 console **[V]**. CH340C 5-pin pinout **[U]**. The CH340 itself is the A33↔STM32 link (hub port 2, `ttyUSB0`).
 - Which side of the CH340C the 5-pin exposes; which CPU owns the UART.
 - micro-USB role (enum negative so far **[O]** — inconclusive); whether microSD or eMMC is the boot device.
-- STM32 RDP level; GD32 readout-protection / OpenOCD `gd32e23x` behaviour.
+- GD32 readout-protection / OpenOCD `gd32e23x` behaviour. STM32 RDP on the dumped unit is level 0.
 - `CHA/CHB`, `INP`/`INN`, dual limit labels.
 - Confirm lower-SWD ↔ GD32 **chip-pin** continuity (pads already continuous with lower header **[O]**).
 - Fan 2-pin: switched vs always-on `FAN24V`.

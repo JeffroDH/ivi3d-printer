@@ -77,6 +77,8 @@ the same file replaces its earlier upload, as before. Files put on the printer b
 `"mode": "wifi"` sends both buttons over Wi-Fi; `"mode": "serial"` streams both over USB (Upload then only spools).
 
 **USB status + controls** (`"serial_monitor": true`, default): when the USB port is plugged in and free, the bridge holds it and polls `M105` + `M2007` every `monitor_interval_s` (and asks for `M2155 S<report_interval_s>` auto-reports). Orca's Device tab then shows live temps (`/api/printer`) and job state (`/api/job`; M2007 status 5 = paused). If the port is missing or owned by IVI 3licer, the bridge keeps retrying and the status page shows "USB: not connected (…)"; uploads are unaffected. Set `"serial_monitor": false` to leave the port free for IVI 3licer.
+
+Stop the bridge before a direct USB-C session (bootloader `M997`, `tools/stm32/bootloader_probe.py`, or a terminal on `/dev/cu.usbmodem*`). It keeps the port open while it runs, including during a Wi-Fi print. Start it again afterwards. The bootloader check itself is in [docs/stm32.md](../docs/stm32.md#recovery).
 Controls (USB only): `POST /api/printer/tool` (`target`, `flowrate`), `/api/printer/bed` (`target`), `/api/printer/printhead` (`feedrate`), `/api/printer/command` (whitelist: `M104/M140/M220/M221 S<n>`, `M105`, `M2007`, `M106/M107`, `M2410`, `M2411 S1/S3`; limits nozzle ≤300 °C, bed ≤120 °C, speed 10–300 %, flow 10–200 %). `/api/job` pause/resume/cancel also works for a touch-screen-started job (`M2410`, `M2411 S1`, `M2411 S3`).
 **`M104`/`M140`/`M220`/`M221` are standard Marlin and not yet verified on firmware V1.3.2-alpha.**
 **Notifications** for upload done / print started / finished / cancelled / errors (`"notify": false` to silence).

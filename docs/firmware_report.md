@@ -240,7 +240,7 @@ Extensions recognized: `.gcode`, `.nc`, `.cnc`.
 
 ### 3.3 Firmware update path (serial bootloader — not for print jobs)
 
-Settings → Update Firmware sends `M997`, then the `.supx` body as CRC-16 frames on `ttyUSB0`. Frame table and flash map: [stm32.md](stm32.md#update-protocol). Package rules: [a33.md](a33.md#update-package).
+Settings → Update Firmware sends `M997`, then the `.supx` body as CRC-16 frames on `ttyUSB0`. The bootloader answers `C4 05 B0 19 A2`, erases sectors 4–5 only, and checks the image CRC. The same entry works over USB-C (confirmed 2026-11-10). Frame table, brick protection, and recovery order: [stm32.md](stm32.md#update-protocol). Package rules: [a33.md](a33.md#update-package).
 
 ---
 

@@ -30,7 +30,7 @@ USB serial is the working control path: `M2411 S2` (+ `M1001 L` if fw ≥ 2.4.0)
 
 1. **`DEBUGUART` / front 3-pin** is the A33 console, ttyS2, 115200 8N1, root with no login. See [a33.md](a33.md) and [tools.md](tools.md).
 2. **sshd** is on the rootfs and is not started. The ephemeral `/tmp` procedure is [home_session/RUNBOOK.md](home_session/RUNBOOK.md). A login shell with no remote command starts a second copy of the UI.
-3. **STM32 SWD** is not a Linux shell. A full flash read is a separate authorized test and is limited to readout-protection level 0. No reset, halt, erase, program, or option-byte write. See [stm32.md](stm32.md).
+3. **STM32 SWD** is not a Linux shell. This unit is readout-protection level 0, and the 2026-11-10 read-only image is in [firmware/stm32_dump/](../firmware/stm32_dump/README.md). A later session is still no reset, halt, erase, program, or option-byte write. See [stm32.md](stm32.md).
 
 ## Related docs
 
