@@ -24,7 +24,7 @@ A redacted console log from the backup session and from earlier read-only UART s
 | UI binary damaged, Linux still boots | ttyS2 shell. Copy a known-good `firmware` onto `/userapp/app/IVI-Main-Controller` from a stick. Do not run the USB update package if the goal is only to replace that one file: the package copies `script/` and `printer_http_api/` before its checks |
 | Rootfs will not mount, console still reaches U-Boot or a rescue ramdisk | Restore individual partitions from the off-repo image. Do not `dd` p7 while it is the running root. Run `e2fsck` so the journal replays before relying on the copy |
 | No boot at all | [tools/a33_rescue/](../tools/a33_rescue/README.md). Safest is FEL plus a RAM boot, which writes nothing (risk **R1**). Read-only UMS and a rescue microSD are the next paths. A card the BootROM ignores falls through to a normal stock boot (**W2**). Partition restores and a full user-area write are **W3** / **W4** and stay unauthorized. Stock `work_mode=0` on a card does not burn. OTG gadget was disabled in the live capture (`enable=0`), and the micro-USB wiring is **[U]** |
-| Motion application damaged, bootloader intact, UI intact | Settings → Update Firmware with a stock package whose `firmware.supx` MD5 matches `config2.ini`. This rewrites `0x08010000` onward only. It does not restore the bootloader or the settings sectors. Entry depends on the bootloader answering `M997`, which needs a working app or a bootloader that waits on its own. The second case is **[U]**. See [stm32.md](stm32.md#update-protocol) |
+| Motion application damaged, bootloader intact | Gentlest routes, in order, are in [stm32.md](stm32.md#recovery). A same-version USB-stick package rewrites sectors 4–5 only and also works when an interrupted update has left the bootloader waiting. USB-C entry from a computer is confirmed (2026-11-10); the update stream itself has not been sent. `A4` starts the app and writes no flash. SWD is last |
 
 `saveenv`, partition restores, FEL writes, and SD/eMMC image writes need an explicit decision before anyone runs them.
 
@@ -36,9 +36,15 @@ Built binaries that fit are in `tools/a33_rescue/out/`, with checksums in `SHA25
 
 ## STM32
 
-`firmware.supx` is the application only. Sectors 0–1 (bootloader) and 2–3 (settings) are not in any file in this repo. A 512 KiB SWD read is the backup that would capture them. It is allowed only at readout-protection level 0, and only as its own authorized test: no reset, no halt, no erase, no program, no option-byte writes, and never clear readout protection (that mass-erases the chip). Compare the three regions separately. Settings sectors change on every M500.
+RDP on this unit is **level 0** (`FLASH_OPTCR` `0x0FFFAAED`), with no sector write protection. OTP is blank. The 2026-11-10 read-only SWD image is [firmware/stm32_dump/](../firmware/stm32_dump/README.md): 512 KB flash (two reads, one MD5), system ROM, OTP, and option bytes. `firmware.supx` is only the application, and those bytes match the dump from `0x08010000`. Sectors 0–1 are the bootloader. Sectors 2–3 are Marlin `V81` settings (sector 3 live, sector 2 an older copy, no serial number). A later M500 rewrites sector 3, so compare regions separately.
 
-ROM DFU on the USB-C port (BOOT0 high) would also see the whole flash at level 0. BOOT0 has not been found. Clearing level-1 protection is still a mass erase.
+Recovery, gentlest first. The mechanisms are in [stm32.md](stm32.md#recovery).
+
+1. **A33 package.** Settings → Update Firmware with a stock package whose `firmware.supx` MD5 matches `config2.ini`. Rewrites sectors 4–5 only. An interrupted update leaves an EEPROM "pending" record, and the bootloader then stays up for a re-send. Settings and the bootloader are not restored, and they are not erased by this path.
+2. **USB-C from a computer.** Confirmed reachable on 2026-11-10 **[V]**: `M997\n` to the running app (`/dev/cu.usbmodem*`, product `BLACK_F407VE CDC in FS Mode`) re-enumerated the bootloader as `STM32 Virtual ComPort` in about 0.9 s, and a second `M997\n` returned `C4 05 B0 19 A2`. The A1/A2/A3 stream has not been sent. Stop `ivi_bridge.py` first; it holds the USB port while it runs. Start it again afterwards. `tools/stm32/bootloader_probe.py` does the entry check and the return, and does not send a write frame.
+3. **`A4 02 AA AA AA AA 9F BD`** starts the app and writes no flash **[V]** on that USB-C session (no reply, app back within 4 s, touchscreen clean). Use this when the board is sitting in the bootloader.
+4. **SWD**, last. Program the dump, or one region, and read it back. Programming erases. Do not write option bytes. The read pattern is [tools/stm32/openocd_readonly.cfg](../tools/stm32/openocd_readonly.cfg): `mem_ap` only, no reset, no halt, no `cortex_m` examine.
+5. **ROM DFU** (BOOT0 high) remains a fallback. BOOT0 has not been found **[?]**. Clearing readout protection mass-erases the chip; this unit is already level 0, so that step does not belong in a restore.
 
 ## GD32
 

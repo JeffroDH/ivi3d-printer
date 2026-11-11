@@ -21,28 +21,24 @@ All checksums are **CRC-16/XMODEM** (poly 0x1021, init 0, no reflection, no xoro
 | 20 | 652 × 256-byte records: `A2 40`, u32 flash addr, 248 data bytes, u16 CRC of the first 254 bytes |
 | end | trailer: `A2 0B`, u32 end addr 0x080377A0, `00 00`, "ASCII" zero-padded to 42 B, u16 CRC(trailer[0:42]); then `A3 02 0A BA 00 00`, u16 CRC(trailer[0:50]) |
 
-(The earlier report mis-framed records by 2 bytes; the CRC sits at the end of each record.) All 652 record CRCs,
-the header CRC, trailer CRCs and whole-file CRC verify. `supx_pack.py supx_raw.bin out.supx --verify firmware.supx`
-rebuilds a **byte-identical** file. Meaning of `A1/A2/A3` second bytes (03/40/0B/02) and `0A BA` is not fully known
-[?] — they are reproduced literally; likely bootloader command codes (A1 = begin/erase, A2 = write, A3 = finish) [I].
+All 652 record CRCs, the header CRC, the trailer CRCs and the whole-file CRC verify. `docs/supx_pack.py` rebuilds a byte-identical file. The second byte is the frame length in 32-bit words (`03` = 12 B, `40` = 256 B, `0B` = 44 B, `02` = 8 B). `A1` erases, `A2` programs, `A3` checks CRC-16/XMODEM of the programmed range, and `0A BA 00 00` is that CRC (`0xBA0A`) for this image **[V]**. Handlers and replies: [stm32.md](stm32.md#update-protocol).
 
 ## 2. Bootloader / M997 / app layout
 
 Current layout is in [stm32.md](stm32.md). Short form:
 
-- Application at `0x08010000`–`0x0803779F` (161696 bytes). SystemInit sets **VTOR = 0x08010000** [V].
-- Sectors 2–3 (`0x08008000` and `0x0800C000`, 16 KiB each) are settings / EEPROM emulation. The app erases and programs them from M500 / M502 / M504 / M2050 [V].
-- The vendor bootloader occupies sectors 0–1 (`0x08000000`–`0x08007FFF`, 32 KiB). It is not in `.supx` [I].
+- Application at `0x08010000`–`0x0803779F` (161696 bytes), plus the 36-byte trailer through `0x080377C3`. SystemInit sets **VTOR = 0x08010000** [V]. The dumped flash matches these bytes [V].
+- Sectors 2–3 (`0x08008000` and `0x0800C000`, 16 KiB each) are Marlin `V81` settings. Sector 3 is live. The app erases and programs them from M500 / M502 / M504 / M2050 [V]. The bootloader does not [V].
+- The vendor bootloader occupies sectors 0–1 (`0x08000000`–`0x08007FFF`, 32 KiB; code ends at `0x08006933`). It is not in `.supx` [V]. Full note: [research/stm32/bootloader/REPORT.md](research/stm32/bootloader/REPORT.md).
 
 - **M997** (handler 0x080226E8): parses an optional numeric arg (discarded), then DSB + `AIRCR = 0x05FA0004`
-  (**NVIC_SystemReset**). No RAM magic word / flag is written before reset [V] → the bootloader decides on its own
-  (most likely waits briefly for the UI board on serial after every reset) [I].
+  (**NVIC_SystemReset**). No RAM magic word / flag is written before reset [V]. The bootloader stays up if an external EEPROM record at address 0x20 has a valid CRC, if `M997` arrives within 1 s, or if the reset was a software reset [V].
 - The UI board (firmware.bin) drives updates: sends `M997`, waits for "now in bootloader", checks the file
   (size, type, `file crc error %04x %04x` = the header CRC), "update start, erase flash", streams blocks, expects
   status bytes with high nibble `0xC?` (errors: command unknown, flash erase/write error, command crc error, data error,
   check update crc error; success "system update complete…", then `jumpToApp()`) [V strings / I sequence].
-- No signature or encryption anywhere; integrity is CRC-16 only [V]. Whether the bootloader checks the app's vector
-  table (SP in RAM range) before jumping is unknown [?] (bootloader not available).
+  The entry reply on the wire is `C4 05 B0 19 A2` [V]. USB-C does this without the A33 [V] (2026-11-10).
+- No signature or encryption anywhere; integrity is CRC-16 only [V]. The bootloader does not check the app stack pointer or vector table before jumping [V]. It also refuses to erase or program sectors 0–3 [V].
 
 ## 3. Buses
 | Function | Peripheral | Settings | Evidence |
@@ -147,10 +143,7 @@ serial at 115200, `VECT_TAB_OFFSET 0x10000` / `board_build.offset = 0x10000`, th
    machine, M2049 weights, exact response strings the Qt UI parses ("info:Head 3DP,0.4mm", "trigger work: ok", "ok",
    etc.). Without this the touchscreen/HTTP job path breaks. (No AA 55 needed on the STM32.)
 
-**Risks:** the update path only rewrites 0x08010000+; the bootloader stays, so a bad app is normally recoverable by
-re-sending a good .supx (if the bootloader enters update mode without a working app [?]). Worst case recovery =
-SWD (ST-Link, ~$10) to reflash, *if* RDP is not set — check RDP level first and **back up the full 512 KB flash incl.
-bootloader over SWD before any experiment**. Also: laser/spindle safety (the stock door check only prints a warning and leaves the beam on; a replacement has to decide the cut itself), thermal
+**Risks:** the update path only rewrites `0x08010000` onward; the bootloader and the settings sectors stay. A bad app is recoverable by re-sending a good `.supx` while the bootloader is waiting (pending EEPROM record, software reset, or the 1 s power-on window). RDP on the dumped unit is level 0, and the 512 KB image is in `firmware/stm32_dump/`. Order of recovery: [stm32.md](stm32.md#recovery). Also: laser/spindle safety (the stock door check only prints a warning and leaves the beam on; a replacement has to decide the cut itself), thermal
 runaway now depends on CAN temp reports (must fault on CAN loss), driver fault handling.
 
 **Effort (one experienced firmware dev):** FDM-only, UI-compatible, no laser/CNC: ~3–5 weeks. Full parity incl.
@@ -165,5 +158,4 @@ better from Orca/Luban — remains far cheaper.
 - Exact UART TX/RX pins (needs board photo/continuity), role of PB13/PB14/PD0/PD1/PC9/PD15/PE4/PD3.
 - Bed heater / `FAN24V` switching pins on the main board (hotend heater and head fan are on the toolhead over CAN); thermistor table type.
 - Full CAN head-frame field meanings (needs live CAN sniff); probe signal path.
-- Bootloader behaviour (entry window, app validity check, RDP level) — needs SWD read.
-- Meaning of the A1/A3 control-block bytes in the .supx (reproduced exactly, so not blocking).
+- Bootloader entry, the app jump, RDP level 0, and the A1/A3 bytes are in [stm32.md](stm32.md). Still open there: the external EEPROM on the bench, BOOT0, and what PD0 and the low GPIO outputs switch.

@@ -1,0 +1,7 @@
+M997 entry reply (C4 05 B0 + CRC over 3 bytes): c4 05 b0 19 a2
+  A1: load 0x08010000 len 0x277C4 -> erased sectors 4..5
+  A3: CRC16 over 0x08010000+0x277C4 = 0xBA0A, frame wants 0xBA0A
+replies: {'c105e0': 1, 'c205e0': 653, 'c305e0': 1}
+EEPROM pending flag after A3: False
+flash after model update == SWD dump: True
+sectors 0-3 untouched: True

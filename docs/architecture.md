@@ -4,7 +4,7 @@ The IVI 3D Printer is a delta (rod 357.50 mm, radius 160.31 mm, height 233.22 mm
 
 | Processor | Role | How you reach it |
 |---|---|---|
-| **STM32F407VET6** | Marlin-derived motion firmware, "V1.3.2-alpha" | USB-C CDC serial, 115200 8N1. SWD on the central 5-pin header **[O]** |
+| **STM32F407VET6** | Marlin-derived motion firmware, "V1.3.2-alpha". IDCODE `0x10076413`, RDP level 0, 512 KB. Dump: [firmware/stm32_dump/](../firmware/stm32_dump/README.md) | USB-C CDC serial, 115200 8N1. SWD on the central 5-pin header **[O]** |
 | **Allwinner A33** (Sinlinx-style module) | Linux 3.4.39, Qt 5.9.6 touchscreen UI, kore HTTP | Wi-Fi TCP 8080 and UDP 20050. Debug console on `DEBUGUART` / the front 3-pin, **ttyS2 at 115200 8N1** **[V]** |
 | **GD32E230F4** | Soft power button and rail sequencer. No serial link **[V]** | Lower SWD 5-pin is the likely target **[I]**; chip-pin continuity is **[U]** |
 
@@ -20,7 +20,7 @@ Wi-Fi  ── AP6236 ── A33 ── EHCI ── GL850G hub ── CH340C ─�
 ```
 
 - The A33 sees the motion controller as **`/dev/ttyUSB0`** (CH340, `1a86:7523`, hub port 2). Only `IVI-Main-Controller` holds that port while the UI is running **[V]**.
-- The PC's USB-C port enumerates the STM32's own CDC interface (`0483:5740`, product `BLACK_F407VE CDC in FS Mode`), not Linux **[V]**.
+- The PC's USB-C port enumerates the STM32's own CDC interface (`0483:5740`, product `BLACK_F407VE CDC in FS Mode`), not Linux **[V]**. `M997` on that port restarts into the bootloader, which enumerates as `STM32 Virtual ComPort` on the same node **[V]**. See [stm32.md](stm32.md#boot-decision).
 - G-code on both ports is plain lines. The A33 sends no line numbers and no checksums. The PC port uses Marlin line numbers and checksums **[V]**.
 - Toolheads sit on **CAN2** at 500 kbit/s, controller TX id `0x12`. Hotend heat, the head fans, the probe, the laser, and the spindle are on the head, not on mainboard MOSFETs **[V]**. See [stm32.md](stm32.md).
 
@@ -61,8 +61,8 @@ A PC job on the USB-C port uses the same `M2411` codes on that port. The screen 
 
 The STM32 on this board is irreplaceable.
 
-- Over SWD: no reset, no halt, no erase, no program, and no option-byte writes.
-- Never clear readout protection. Unprotecting mass-erases the chip.
+- Over SWD: no reset, no halt, no erase, no program, and no option-byte writes. The 2026-11-10 read (RDP level 0, `mem_ap` only) is already in [firmware/stm32_dump/](../firmware/stm32_dump/README.md).
+- Never clear readout protection. Unprotecting mass-erases the chip. This unit is level 0; leave the option bytes alone anyway.
 - Every hardware test is individually authorized. The same SWD limits apply to the GD32 until a separate decision says otherwise.
 - Do not write `ttyUSB0` while the Qt app is running.
 - Do not commit eMMC images, rootfs dumps, serial numbers, MAC addresses, SSIDs, or password hashes.

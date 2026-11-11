@@ -1,62 +1,118 @@
 # STM32F407 motion controller
 
-Stock application image: `firmware/Firmware/firmware.supx`, reported as Marlin **V1.3.2-alpha**. The container format and the Ghidra pin / driver-UART notes live in [supx_decompile_report.md](supx_decompile_report.md) and [supx_report.md](supx_report.md). This page is the current map of flash, the update protocol, fans, the laser head, CAN, and the serial ports.
+Stock application image: `firmware/Firmware/firmware.supx`, Marlin **V1.3.2-alpha**. The 2026-11-10 SWD dump of the whole 512 KB flash is [firmware/stm32_dump/](../firmware/stm32_dump/README.md). The container format and the Ghidra pin / driver-UART notes live in [supx_decompile_report.md](supx_decompile_report.md) and [supx_report.md](supx_report.md). The bootloader listing is [research/stm32/bootloader/REPORT.md](research/stm32/bootloader/REPORT.md). This page is the current map of the chip, flash, the bootloader, the update protocol, fans, the laser head, CAN, and the serial ports.
 
-Tags: **[V]** in the image or the A33 app · **[I]** inferred · **[U]** unknown · **[D]** datasheet.
+Tags: **[V]** in the image, the A33 app, or on the printer · **[I]** inferred · **[U]** / **[?]** not yet measured · **[D]** datasheet.
+
+## Chip, RDP, dump
+
+The part is in the **STM32F405/407/415/417** family, Cortex-M4, with **512 KB** of flash. The board marking is STM32F407VET6. Read on 2026-11-10 over the board's SWD pads with an ST-Link V2 clone **[V]**:
+
+| Register | Value | Meaning |
+|---|---|---|
+| DPIDR | `0x2BA01477` | SW-DP |
+| CPUID (`0xE000ED00`) | `0x410FC241` | Cortex-M4 |
+| DBGMCU_IDCODE (`0xE0042000`) | `0x10076413` | DEV_ID `0x413`, this family |
+| FLASH_OPTCR (`0x40023C14`) | `0x0FFFAAED` | RDP `0xAA` = **level 0**, `nWRP` `0xFFF` = no sector write protection |
+
+OTP (`0x1FFF7800`, 528 bytes) is all `0xFF`, lock bytes included **[V]**. The option-byte image at `0x1FFFC000` is the 16 bytes in `stm32_optbytes_20261110.bin`. ST system ROM at `0x1FFF0000` (30 KB) is in the dump; the bootloader does not call it **[V]**.
+
+The read used OpenOCD's `mem_ap` target only. The command pattern is [tools/stm32/openocd_readonly.cfg](../tools/stm32/openocd_readonly.cfg): `adapter driver st-link`, `transport select dapdirect_swd`, `reset_config none`, `swd newdap`, `dap create`, `target create … mem_ap -ap-num 0`, `init`, then `mdw` / `dump_image`. A `cortex_m` target was not created. Its examine writes DHCSR, DEMCR and the FPB. Two independent flash reads had the same MD5 (`f6ad34c24a230dd2e6337ea7ed14a127`).
+
+Neither the bootloader nor the application writes `OPTKEYR`, `OPTCR`, or the ST option keys **[V]**. RDP stays at level 0 because nothing in the stock images changes it. Writing option bytes, and clearing readout protection, stay off limits: unprotecting a level-1 chip mass-erases it.
 
 ## Flash map
 
-STM32F407VE is 512 KiB at `0x08000000` **[D]**.
+Sizes below are the dump, not only the datasheet **[V]**.
 
-| Range | Sector | Contents | Evidence |
-|---|---|---|---|
-| `0x08000000`–`0x08007FFF` | 0–1 (32 KiB) | Vendor bootloader. Not inside `.supx`. No dump exists in this repo | **[I]** (the app never executes there; update replies are not in the app) |
-| `0x08008000`–`0x0800FFFF` | 2–3 (16 KiB each) | Settings. The app erases and programs these (M500 / M502 / M504 / M2050). Default sector is 3 at `0x0800C000` | **[V]** |
-| `0x08010000`–`0x0803779F` | 4 onward | Application, 161696 bytes from `.supx`. VTOR = `0x08010000`. Reset vector `0x08016E2D`, SP `0x20020000` | **[V]** |
-| `0x08037800`–`0x0807FFFF` | rest | Expected blank `0xFF` | **[I]** |
+| Range | Sector | Contents |
+|---|---|---|
+| `0x08000000`–`0x08006933` | 0–1 (16 KB + 16 KB) | Vendor bootloader. The rest of the 32 KB is `0xFF`. Not inside `.supx` |
+| `0x08008000`–`0x0800BFFF` | 2 | Older Marlin `V81` settings copy |
+| `0x0800C000`–`0x0800FFFF` | 3 | Live Marlin `V81` settings. The app's default sector |
+| `0x08010000`–`0x080377C3` | 4–5 | Application. Byte-identical to the decoded `firmware.supx` (161696-byte image through `0x0803779F`, plus the 36-byte `A2 0B` trailer). VTOR = `0x08010000`. Reset `0x08016E2D`, SP `0x20020000` |
+| `0x080377C4`–`0x0807FFFF` | rest of 5, then 6–7 | `0xFF` |
 
-The application image contains no writes to `OPTKEYR` or `OPTCR` and no ST option-key constants **[V]**. Whether the bootloader sets readout protection is **[U]** (the bootloader image is not available).
+The application starts an 8-second independent watchdog and kicks it from the idle and thermal paths **[V]**. The bootloader does not start the IWDG **[V]**.
 
-An 8-second independent watchdog is started at boot and kicked from the idle and thermal paths **[V]**.
+## Boot decision
+
+`M997` in the application only executes `NVIC_SystemReset`. It writes no RAM or flash flag **[V]**. After reset the bootloader (sectors 0–1) decides, in this order **[V]**:
+
+1. **External I²C EEPROM, address 0x20, 16 bytes** (device `0xA0`/`0xA1`, bit-banged on PB10 SCL / PB11 SDA). CRC-16/XMODEM over the first 14 bytes must match the last two, little-endian. A match stays in the bootloader with no timeout. The pending record (`55 AA 63 … 6E`, CRC `C3 2B`) is written before an erase and replaced with `FF 00` × 15 only after a good A3.
+2. Otherwise it listens **1 second** for `M997` plus any one extra byte on USART2 or USB CDC.
+3. Otherwise, if the last reset was a software reset (`RCC_CSR.SFTRSTF`), it prints ` software reset, now in bootloader` and stays.
+4. Otherwise it jumps to `0x08010000`. The jump prints the stack pointer and does **no** SP check, vector check, or CRC **[V]**. VTOR is left at `0x08000000`; the app's `SystemInit` sets `0x08010000`.
+
+USART2 (PD5/PD6, 115200 8N1) and USB CDC run the same command loop, with no watchdog and no timeout **[V]**. The bootloader's USB device is `STM32 Virtual ComPort`, VID:PID `0483:5740`. USART1 and UART4 are initialized and unused **[V]**.
+
+On USB-C, 2026-11-10 **[V]**: `M997\n` to the running app (`BLACK_F407VE CDC in FS Mode`, `/dev/cu.usbmodem*`) brought up `STM32 Virtual ComPort` on the same port in about 0.9 s. A second `M997\n` returned `C4 05 B0 19 A2`.
 
 ## Update protocol
 
-Settings → Update Firmware on the touchscreen is the only trigger. The A33 app sends `M997` through the normal G-code sender, closes the port, then opens `/dev/ttyUSB0` itself at 115200 8N1 with RTS false and DTR true **[V]**.
+Two hosts speak it. Settings → Update Firmware on the touchscreen is the stock trigger: the A33 sends `M997` through the G-code sender, closes the port, then opens `/dev/ttyUSB0` at 115200 8N1 with RTS false and DTR true, and tries `M997\n` up to four times **[V]**. A computer on the USB-C port can do the same entry; that path was used on 2026-11-10 **[V]**. Stop `ivi_bridge.py` before a direct USB-C session. It holds the port while it runs. Start it again afterwards.
 
-`M997` in the application only executes `NVIC_SystemReset`. It writes no RAM or flash flag **[V]**. The bootloader's rule for staying in update mode is **[U]**.
+The host then writes the `.supx` body and waits for 5-byte replies. Checksums are CRC-16/XMODEM, little-endian. `tools/stm32/supx_stream.py` reproduces the frames. `tools/stm32/bl_protocol_model.py` runs them through the bootloader rules and checks that the result equals the dump. Both send nothing.
 
-The host then writes the `.supx` body as-is and waits for 5-byte replies. Checksums are CRC-16/XMODEM, little-endian. `tools/stm32/supx_stream.py` reproduces the frames and checks the CRCs. It sends nothing.
+After four bytes, if byte 0 is `A0`–`A4`, the frame is `byte1 × 4` bytes long **[V]**. `M997` plus one byte is the entry request. Anything else is `E1`. A bad frame CRC is answered `C0 05 E4`.
 
-| Step | Bytes | Success reply |
-|---|---|---|
-| Erase / header | 12 B from file offset 8: `A1 03`, load `0x08010000`, length `0x277C4`, CRC | `C1 ?? E0` (`E2` erase error) |
-| Records | 256 B × 652: `A2 40`, address, 248 data, CRC. 100 µs gap | `C2 ?? E0` (`E3` write error) |
-| Remainder | 44 B: `A2 0B`, end address `0x080377A0` | `C2 ?? E0` |
-| Check | 8 B: `A3 02 0A BA 00 00 DE 3A` (fixed bytes, not the image CRC) | `C3 ?? E0` (`E4` CRC error) |
-| Run | `A4 02 AA AA AA AA 9F BD`, sent twice, 300 ms apart | none |
+| Step | Bytes | Bootloader action | Success reply |
+|---|---|---|---|
+| Entry | `M997\n` | Stay in the command loop | `C4 05 B0 19 A2` |
+| Erase | 12 B, `A1 03`, load `0x08010000`, length `0x277C4` | Pending record, then erase sectors 4–5. Any other load address is `E6` | `C1 05 E0` (`E2` erase) |
+| Records | 256 B × 652: `A2 40`, address, 248 data. 100 µs gap on the A33 | Program only at `0x08010000`–`0x0807FFFF` | `C2 05 E0` (`E3` program) |
+| Remainder | 44 B: `A2 0B`, end address `0x080377A0`, 36 data bytes | Same program rule | `C2 05 E0` |
+| Check | 8 B: `A3 02 0A BA 00 00 DE 3A` | `0A BA 00 00` is CRC-16/XMODEM of the programmed range, **`0xBA0A`**, which matches the dump. A match clears the pending record | `C3 05 E0` (`E4` CRC) |
+| Run | `A4 02 AA AA AA AA 9F BD`. The A33 sends it twice, 300 ms apart | Jump to `0x08010000`. No reply | none |
 
-Other errors use `C0 ?? Ex` (E1 unknown command, E6 data). Bootloader entry itself is four tries of the ASCII line `M997\n`, expecting `C4 ?? B0 ?? ??` within about 0.6 s **[V]**.
+`C0 05 Ex` covers the other errors (`E1` unknown command, `E6` bad address or length). The CRC in a C1–C3 reply covers four bytes (status plus a `0x00`); the `C4` CRC covers three. The A33 does not appear to check that CRC **[I]**.
 
-This is not ST's ROM bootloader (no `0x7F` sync, no ACK `0x79`). The ROM UART bootloader is not reachable on USART2 **[D]**. ROM USB DFU on PA11/PA12 is possible only with BOOT0 high at reset; the BOOT0 pin has not been located **[U]**. With readout protection at level 1, DFU reads are refused, and clearing protection mass-erases the chip. Do not do that.
+The bootloader **cannot erase or program sectors 0–3** **[V]**. A1 requires load `0x08010000`, the erase wrapper refuses sector < 4, and the program wrapper refuses an address below `0x08010000`. An interrupted update (power or link lost after A1 and before a good A3) leaves the pending record set, so later boots stay in the bootloader and a full re-send works, provided the EEPROM write actually landed. The I²C ACK is ignored **[V]**.
 
-The `.supx` path rewrites the application only. It does not restore the bootloader or the settings sectors. A same-version controller re-flash is offered when `firmware.supx` and `config2.ini` MD5 match; the touchscreen half of a package is applied only when its version float is greater than the **1.222 compiled into the running UI binary** **[V]**. Package rules: [a33.md](a33.md#update-package).
+If that EEPROM write fails and power is lost mid-update, the next boot jumps to a blank app and sits in the bootloader HardFault loop. The 1 s window after power-on, or SWD, is the way back **[V]** mechanism, **[I]** likelihood. A missing EEPROM reads as zeros, the CRC of zeros matches, and **every boot stays in the bootloader** until `A4` or a re-flash **[V]**. Any software reset of a running app also stays in the bootloader until power-cycle or `A4` **[V]**.
+
+The frames are the vendor protocol. ST's ROM bootloader (sync `0x7F`, ACK `0x79`) is the image in system memory; this bootloader does not jump to it, and the ROM UART bootloader is not on USART2 **[D]**. ROM USB DFU on PA11/PA12 needs BOOT0 high at reset. BOOT0 has not been located **[?]**. Clearing readout protection mass-erases the chip. Leave the option bytes alone.
+
+The `.supx` path rewrites the application only. A same-version controller re-flash is offered when `firmware.supx` and `config2.ini` MD5 match; the touchscreen half of a package is applied only when its version float is greater than the **1.222 compiled into the running UI binary** **[V]**. Package rules: [a33.md](a33.md#update-package).
 
 Pack or check a file with `docs/supx_pack.py` (load address `0x08010000`).
 
-### SWD
+`tools/stm32/bootloader_probe.py` repeats the USB-C enter / `C4` check / `A4` return. It never sends A1, A2, or A3.
 
-A full 512 KiB read is the only way to capture the bootloader and the settings. It is allowed only when readout protection is level 0, and only under a separate authorization. Until then: no reset, no halt, no erase, no program, no option-byte writes. See [tools.md](tools.md).
+## Settings in sectors 2–3
+
+Each sector is one Marlin EEPROM-emulation image, version `V81`, at offset `0x64`. Both CRCs verify **[V]**. The app selects sector 3 by default and programs these from M500 / M502 / M504 / M2050 **[V]**. The bootloader never touches them **[V]**.
+
+**Sector 3 is the live copy** and matches [marlin_M503_settings.txt](marlin_M503_settings.txt) **[V]**: M92 800/800/800/1150, M203 500/500/500/100, M201 3000/3000/3000/1000, M204 P1000 R1000 T3000, M205 B20000 and jerks 10/10/10/5, M851 Z −14.29, delta H 233.22 / R 160.31 / L 357.5 / S 200, M666 −0.03/−0.13/0, tower trims 0.11/−0.07/−0.04, M301 P22.2 I1.08 D114, and the 7×7 mesh. **Sector 2 is older:** the same numbers except H = 233.32 and no mesh. Decode: [research/stm32/bootloader/settings_decode.txt](research/stm32/bootloader/settings_decode.txt).
+
+There is **no serial number, unit id, or MAC** in either sector. The only ASCII is `V81` **[V]**. What is unique to the machine is the calibration. A later M500 rewrites sector 3, so the dump is this unit on 2026-11-10. The factory UID at `0x1FFF7A10` is not in the dump files; the bootloader uses it only for the USB serial string **[V]**.
+
+## Recovery
+
+Gentlest first. None of the write routes is a standing authorization. Details and the failure cases: [research/stm32/bootloader/REPORT.md](research/stm32/bootloader/REPORT.md). The same order is in [backups.md](backups.md).
+
+1. **A33 USB-stick package, same version.** Settings → Update Firmware with a stock package whose `firmware.supx` MD5 matches `config2.ini`. Rewrites sectors 4–5 only. Also works after an interrupted update, because the pending record holds the bootloader. Settings and the bootloader stay **[V]** on the STM32 side.
+2. **USB-C from a computer, same frames, no A33.** Reachable **[V]** (2026-11-10): `M997\n` to the app, bootloader product `STM32 Virtual ComPort` in about 0.9 s, second `M997\n` → `C4 05 B0 19 A2`. The A1/A2/A3 stream itself has not been sent. Stop the Wi-Fi bridge first.
+3. **`A4` starts the app** and writes no flash. Verified on that USB-C session **[V]**: `A4 02 AA AA AA AA 9F BD` produced no reply, the app re-enumerated as `BLACK_F407VE CDC` within 4 s, and the touchscreen showed no errors. This is the exit when a software reset, or a stuck EEPROM record, has left the board in the bootloader.
+4. **SWD program of the dump**, or of one region (sectors 0–1, 2–3, or 4–5), then a read-back. Last, and a separate decision. Programming erases. Do not write option bytes.
+5. **ST ROM DFU** if BOOT0 is found **[?]**. This bootloader does not implement DFU.
+
+## SWD limits
+
+The dump above is the read that those limits allowed: no reset, no halt, no erase, no program, no option-byte write. The same limits still apply to any later session, and to the GD32. See [tools.md](tools.md).
 
 ## Serial ports and USB
 
 | Object | Peripheral | Pins | Baud | Role |
 |---|---|---|---|---|
-| `MYSERIAL0` | USB OTG FS | PA11 / PA12 | CDC | **PC port** (USB-C) **[V]** wiring to the connector **[I]** |
+| `MYSERIAL0` | USB OTG FS | PA11 / PA12 | CDC | **PC port** (USB-C). The connector reaches this device **[V]** |
 | `MYSERIAL1` | USART2 | TX PD5 / RX PD6 | 115200 8N1 | **Screen port**, CH340 → A33 `ttyUSB0` **[V]** pins, **[I]** wiring |
 | `Serial3` | USART3 | TX PD8 / RX PD9 | 115200 | X closed-loop driver |
 | `Serial4` | UART5 (pins) | TX PC12 / RX PD2 | 115200 | Y driver. The object is named UART4; the pin map selects UART5 |
 | `Serial5` | UART4 (pins) | TX PC10 / RX PC11 | 115200 | Z driver |
 | `Serial6` | USART6 | TX PC6 / RX PC7 | 115200 | Extruder (F) driver |
+
+The running app enumerates on USB-C as `BLACK_F407VE CDC in FS Mode` **[V]**. After `M997` the bootloader enumerates on that same port as `STM32 Virtual ComPort` **[V]**. Both USB descriptors use VID:PID `0483:5740` **[V]**. On a Mac the node is `/dev/cu.usbmodem*` (the bridge opens `/dev/tty.usbmodem*`, the same device).
 
 A second USART2 object exists and is never `begin()`'d **[V]**. Driver frames are the TMC-style UART protocol in [supx_decompile_report.md](supx_decompile_report.md) (CRC-8, registers `0x00`–`0x15`).
 
@@ -232,4 +288,4 @@ The dispatcher table for vendor M-codes (M2001, M2005–M2007, M2010, M2049, M20
 
 ## Related
 
-[architecture.md](architecture.md) · [a33.md](a33.md) · [laser_cnc_gcode.md](laser_cnc_gcode.md) · [tools.md](tools.md) · [research/stm32](research/stm32/README.md)
+[architecture.md](architecture.md) · [a33.md](a33.md) · [backups.md](backups.md) · [laser_cnc_gcode.md](laser_cnc_gcode.md) · [tools.md](tools.md) · [research/stm32/bootloader/REPORT.md](research/stm32/bootloader/REPORT.md)

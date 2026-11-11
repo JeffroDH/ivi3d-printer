@@ -24,7 +24,7 @@ Webcam (IP MJPEG/snapshot, or a USB camera via ffmpeg) with per-layer timelapse 
 ## Later features
 - Multi-tool support (FDM, laser, CNC), toolhead detection via CAN.
 - Diagnostics: CAN and driver logging.
-- Firmware backup/recovery helpers once SWD access is confirmed.
+- Firmware backup/recovery helpers in the bridge. The 2026-11-10 SWD image is already in `firmware/stm32_dump/`. The bridge does not flash, and a direct USB-C bootloader session has to wait until the bridge has released the port.
 
 ## Design goals
 - Local only; read-only and safe by default; never flash without explicit approval.
@@ -35,4 +35,4 @@ Webcam (IP MJPEG/snapshot, or a USB camera via ffmpeg) with per-layer timelapse 
 1. ~~Port 8080 API~~ tested 2026-11-01: upload only; start/pause/stop 404 → use USB serial. Laser/CNC header and power scale still unverified.
 2. Linux shell on the DEBUGUART / front 3-pin console (ttyS2, 115200, CP2102 with VCC unconnected). See [a33.md](a33.md).
 3. Toolhead CAN command map (CANable PRO capture).
-4. Full flash backup via SWD (ST-Link V2) before anything risky.
+4. ~~Full flash backup via SWD~~ done for this unit (2026-11-10, RDP level 0, `firmware/stm32_dump/`). Writes over SWD are still a separate decision.

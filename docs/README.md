@@ -2,7 +2,7 @@
 
 Current knowledge of the IVI 3D Printer. Photo evidence and older decompile notes stay in the files that already held them; the pages below are the place to start.
 
-Confidence tags used throughout: **[V]** read in firmware, a boot log, or a live capture · **[I]** inferred · **[O]** owner observation · **[U]** not yet measured · **[D]** datasheet.
+Confidence tags used throughout: **[V]** read in firmware, a boot log, or a live capture · **[I]** inferred · **[O]** owner observation · **[U]** / **[?]** not yet measured · **[D]** datasheet.
 
 ## System
 
@@ -18,7 +18,7 @@ Confidence tags used throughout: **[V]** read in firmware, a boot log, or a live
 
 | Doc | What it covers |
 |---|---|
-| [stm32.md](stm32.md) | Motion firmware: flash map, update protocol, fans, laser head, CAN toolhead, UARTs |
+| [stm32.md](stm32.md) | Motion firmware: chip ID, RDP, flash map, bootloader, update protocol, fans, laser head, CAN, UARTs |
 | [a33.md](a33.md) | Touchscreen board: Qt app, touch, sshd, kore upload, update package, boot |
 | [gd32.md](gd32.md) | GD32E230 soft-power controller |
 | [backups.md](backups.md) | What has been backed up, the restore routes, and the A33 rescue kit |
