@@ -17,11 +17,11 @@
 #   gcode "<G-code>"         POST /api/v1/execute_code, one line per request (use \n-separated or quote several)
 #   help                     Show this help
 #
-# Environment: IVI_IP (default 192.168.50.85), IVI_PORT (8080), IVI_TOKEN (default stock token).
+# Environment: IVI_IP (required except for discover/help), IVI_PORT (8080), IVI_TOKEN (default stock token).
 
 set -eu
 
-IVI_IP="${IVI_IP:-192.168.50.85}"
+IVI_IP="${IVI_IP:-}"
 IVI_PORT="${IVI_PORT:-8080}"
 IVI_TOKEN="${IVI_TOKEN:-e0cf19a3-e0a4-4740-825f-bdffb49e58b8}"
 BASE="http://${IVI_IP}:${IVI_PORT}/api/v1"
@@ -30,6 +30,13 @@ SMALL_LIMIT=$((20 * 1024 * 1024))
 
 die() { echo "error: $*" >&2; exit 1; }
 need_file() { [ -f "${1:-}" ] || die "file not found: ${1:-<none>}"; }
+need_ip() {
+  case "${IVI_IP:-}" in
+    ""|"<printer-ip>"|"PRINTER_IP"|"printer-ip")
+      die "IVI_IP is not set. export IVI_IP=<your printer's IP or hostname>"
+      ;;
+  esac
+}
 post() { local ep="$1"; shift; curl -sS -X POST "$BASE/$ep" "$@"; echo; }
 
 md5_of() {
@@ -96,16 +103,22 @@ cmd_gcode() {
 
 cmd_help() { sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; }
 
-case "${1:-help}" in
-  discover)   cmd_discover ;;
-  connect)    post connect -d "token=$IVI_TOKEN" ;;
-  disconnect) post disconnect -d "token=$IVI_TOKEN" ;;
-  status)     curl -sS "$BASE/status?token=$IVI_TOKEN"; echo ;;
-  prepare)    cmd_prepare "${2:-}" "${3:-3DP}" ;;
-  print)      cmd_prepare "${2:-}" "${3:-3DP}"; post start_print -d "token=$IVI_TOKEN" ;;
-  start|pause|resume|stop) post "${1}_print" -d "token=$IVI_TOKEN" ;;
-  upload)     cmd_upload "${2:-}" ;;
-  gcode)      cmd_gcode "${2:-}" ;;
-  help|-h|--help) cmd_help ;;
+cmd="${1:-help}"
+case "$cmd" in
+  discover)         cmd_discover ;;
+  help|-h|--help)   cmd_help ;;
+  connect|disconnect|status|prepare|print|start|pause|resume|stop|upload|gcode)
+    need_ip
+    case "$cmd" in
+      connect)    post connect -d "token=$IVI_TOKEN" ;;
+      disconnect) post disconnect -d "token=$IVI_TOKEN" ;;
+      status)     curl -sS "$BASE/status?token=$IVI_TOKEN"; echo ;;
+      prepare)    cmd_prepare "${2:-}" "${3:-3DP}" ;;
+      print)      cmd_prepare "${2:-}" "${3:-3DP}"; post start_print -d "token=$IVI_TOKEN" ;;
+      start|pause|resume|stop) post "${cmd}_print" -d "token=$IVI_TOKEN" ;;
+      upload)     cmd_upload "${2:-}" ;;
+      gcode)      cmd_gcode "${2:-}" ;;
+    esac
+    ;;
   *)          echo "unknown command: $1" >&2; cmd_help; exit 1 ;;
 esac

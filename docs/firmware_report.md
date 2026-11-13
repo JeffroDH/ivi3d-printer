@@ -76,7 +76,7 @@ sent to the subnet broadcast address on port **20050**.
 **Reply (printer → PC):** built in `readPendingDatagrams` @ `0x49208` when payload contains `"discover"`. Wire format (matches user capture and slicer parser):
 
 ```
-IVI3D@192.168.50.85|Model:IVI 3D Printer|status:IDLE
+IVI3D@<printer-ip>|Model:IVI 3D Printer|status:IDLE
 ```
 
 Field rules:

@@ -12,7 +12,7 @@ Bundle: `IVI 3licer.app/Contents/Resources/app/` (unpacked Electron app, no asar
 ## 2. Wi-Fi protocol (Snapmaker 2.0 HTTP API, unchanged)
 ### Discovery (server/index.js, module `lib:deviceManager`)
 - Opens a UDP4 socket on an ephemeral port with broadcast enabled. It sends the ASCII `discover` to each interface's **directed broadcast address on UDP port 20050**.
-- Replies are parsed as `name@ip|Key:Val|Key:Val`. Keys are lowercased, e.g. `IVI3D@192.168.50.85|Model:IVI 3D Printer|status:IDLE` becomes `{name:"IVI3D",address:"192.168.50.85",model:"IVI 3D Printer",status:"IDLE"}`.
+- Replies are parsed as `name@ip|Key:Val|Key:Val`. Keys are lowercased, e.g. `IVI3D@<printer-ip>|Model:IVI 3D Printer|status:IDLE` becomes `{name:"IVI3D",address:"<printer-ip>",model:"IVI 3D Printer",status:"IDLE"}`.
 - Results are emitted as `http:discover`. Discovery runs for a 3 s window.
 ### Control (app bundle, `t.Server`)
 - `this.port = a || 8080`, so the base URL is **`http://<ip>:8080`**. Requests use form-urlencoded bodies (superagent `.send("k=v")`) or multipart forms.

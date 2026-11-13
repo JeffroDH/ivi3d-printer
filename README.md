@@ -69,7 +69,7 @@ Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/mar
 Requires `curl` (and `python3` for `discover`). Set the printer address and token with environment variables:
 
 ```bash
-export IVI_IP=192.168.50.85          # your printer's IP (default shown)
+export IVI_IP=<printer-ip>           # your printer's IP or hostname (required)
 export IVI_TOKEN=e0cf19a3-e0a4-4740-825f-bdffb49e58b8   # stock default token
 ./ivi-control.sh discover            # find printers on the LAN
 ./ivi-control.sh connect             # confirm on the printer screen if asked

@@ -39,6 +39,8 @@ If macOS asks, allow Python under **Privacy & Security → Local Network**.
 and key; it just re-copies the core files and reloads. Your existing `"serial_port": "/dev/tty.usbmodem*"` keeps working.
 
 ## Install (Linux)
+**Untested:** this Linux build has not yet been run on real Linux hardware with the printer; only the Mac version has been hardware-tested.
+
 `bridge/install/linux/install.sh` (re-runnable; keeps config + key). Options: `--system` (system service, sudo), `--no-service`, `--new-key`, `--no-orca`.
 - needs `python3` (3.8+); makes a venv in `~/.local/share/ivi-bridge/venv` with pyserial (optional on Linux; falls back to system python3);
 - copies the core files to `~/.local/share/ivi-bridge/app`, writes `~/.config/ivi-bridge/config.json` if missing (port 5001, filtering off);
@@ -49,6 +51,8 @@ and key; it just re-copies the core files and reloads. Your existing `"serial_po
 Uninstall: `~/.local/share/ivi-bridge/uninstall.sh [--purge]`.
 
 ## Install (Windows)
+**Untested:** this Windows build has not yet been run on real Windows hardware with the printer; only the Mac version has been hardware-tested.
+
 Double-click `bridge\install\windows\Install IVI Bridge.bat` (runs `install.ps1` with `-ExecutionPolicy Bypass`; no admin). Options: `-NewKey`, `-NoTask`, `-NoOrca`.
 - needs Python 3.8+ from python.org (`py` launcher; the Store stub is skipped); makes a venv and installs **pyserial** (required on Windows);
 - copies everything to `%LOCALAPPDATA%\IVI3D Bridge` (`app\`, `venv\`, `config.json`, jobs/history under `data\`);
