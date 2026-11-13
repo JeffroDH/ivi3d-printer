@@ -20,7 +20,7 @@ A small local Python service that looks like an **OctoPrint** server to the slic
 ## Install (macOS) — one time, no Terminal
 Double-click **`install/macos/Install IVI Bridge.command`** (first time: right-click → Open if Gatekeeper complains). It:
 - copies the bridge to `~/Library/Application Support/ivi-bridge/app`, no extra packages (built-in termios serial, no pyserial);
-- writes `~/.config/ivi-bridge/config.json` (mode 600) if missing: `mode: auto`, printer `192.168.50.85:8080`, stock token, random API key;
+- writes `~/.config/ivi-bridge/config.json` (mode 600) if missing: `mode: auto`, printer host `<printer-ip>:8080` (set this to your printer's address before a Wi-Fi upload), stock token, random API key;
 - installs/loads the LaunchAgent `com.ivi3d.bridge` (starts at login, restarts on crash; log `~/Library/Logs/ivi-bridge.log`);
 - writes the API key into OrcaSlicer for you (`ivi_setup_keys.py`): the IVI3D printer presets (`printhost_apikey`),
   the Device tab's saved connection (`OrcaSlicer.conf` → `local_machines` → `127.0.0.1:5001`) and the IVI3D Bridge

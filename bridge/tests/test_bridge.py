@@ -630,3 +630,18 @@ def test_finish_job_can_be_disabled():
     ser=Ser(); j=b.SerialJob(ser, [], "t", finish_job=False)
     j._finish_printer()
     assert ser.out == []
+
+class PrinterHostTests(unittest.TestCase):
+    def test_placeholder_and_empty_rejected(self):
+        for host in ("<printer-ip>", "PRINTER_IP", "printer-ip", "", None, "  "):
+            with self.assertRaises(ValueError) as ctx:
+                B.WifiPrinter(host, 8080, "tok")
+            self.assertIn("printer_host is not set", str(ctx.exception))
+        self.assertFalse(B.printer_host_ok(B.DEFAULT_CONFIG["printer_host"]))
+        self.assertEqual(B.DEFAULT_CONFIG["printer_host"], B.PRINTER_HOST_PLACEHOLDER)
+
+    def test_config_override_accepted(self):
+        w = B.WifiPrinter("192.168.1.10", 8080, "tok")
+        self.assertEqual(w.base, "http://192.168.1.10:8080/api/v1")
+        self.assertTrue(B.printer_host_ok("192.168.1.10"))
+

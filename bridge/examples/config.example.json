@@ -1,6 +1,6 @@
 {
   "mode": "wifi",
-  "printer_host": "192.168.50.85",
+  "printer_host": "<printer-ip>",
   "printer_port": 8080,
   "printer_token": "PUT-YOUR-PRINTER-TOKEN-HERE",
   "serial_port": "auto",

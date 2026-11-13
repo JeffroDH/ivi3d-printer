@@ -39,6 +39,23 @@ def default_serial_pattern(platform=None):
     return "/dev/ttyACM*,/dev/ttyUSB*"
 
 VERSION = "0.1.0"
+PRINTER_HOST_PLACEHOLDER = "<printer-ip>"  # default until the user sets their printer's address
+
+def printer_host_ok(host):
+    """False when host is missing or still the placeholder (do not try to connect)."""
+    h = (host or "").strip()
+    if not h:
+        return False
+    return h.casefold() not in {PRINTER_HOST_PLACEHOLDER.casefold(), "printer_ip", "printer-ip"}
+
+def require_printer_host(host):
+    if not printer_host_ok(host):
+        raise ValueError(
+            "printer_host is not set. In the config, replace "
+            f"{PRINTER_HOST_PLACEHOLDER} with your printer's IP or hostname."
+        )
+    return (host or "").strip()
+
 DEFAULT_CONFIG = {
     "mode": "auto",                     # "auto" (default): Upload = Wi-Fi to printer storage, Upload and Print = USB stream;
                                         # "wifi": both go over Wi-Fi; "serial": both stream over USB
@@ -57,7 +74,7 @@ DEFAULT_CONFIG = {
     "jog_extrude_temp": 235,            # Extrude/Retract on a cold nozzle (<170 °C target or below target) heat to this first
     "notify": True,                     # macOS notifications via osascript
     "caffeinate": True,                 # keep the Mac awake during USB jobs
-    "printer_host": "192.168.50.85",
+    "printer_host": PRINTER_HOST_PLACEHOLDER,
     "printer_port": 8080,
     "printer_token": "",                # kore API token (keep out of git)
     "serial_port": default_serial_pattern(),  # glob(s), comma-separated; macOS tty.usbmodem*, Linux ttyACM*/ttyUSB*, Windows COM*
@@ -287,6 +304,7 @@ class WifiPrinter:
     def __init__(self, host, port, token, retries=3, timeout=30, sleep=time.sleep):
         if not token:
             raise ValueError("printer_token is not set (config file or IVI_PRINTER_TOKEN)")
+        host = require_printer_host(host)
         self.base = f"http://{host}:{port}/api/v1"
         self.token, self.retries, self.timeout, self.sleep = token, retries, timeout, sleep
 
@@ -2427,7 +2445,8 @@ def serve(cfg, bridge=None, start_monitor=True):
         # addresses still work: serve on 127.0.0.1 (Orca) + the LAN address (OctoApp) instead.
         if e.errno not in (48, 98) or cfg["listen_host"] not in ("0.0.0.0", ""): raise
         srv = ThreadingHTTPServer(("127.0.0.1", cfg["listen_port"]), handler)
-        ip = lan_ip(cfg.get("printer_host") or "192.168.1.1")
+        probe = cfg.get("printer_host")
+        ip = lan_ip(probe if printer_host_ok(probe) else "192.168.1.1")
         log(f"port {cfg['listen_port']} is taken on all addresses (AirPlay Receiver?); serving on 127.0.0.1 and {ip or 'no LAN address'}")
         if ip and not ip.startswith("127."):
             try:
