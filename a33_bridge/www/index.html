@@ -1,0 +1,516 @@
+<!doctype html>
+<html>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>IVI3D (A33 bridge)</title>
+<meta name=theme-color content="#0F35E7">
+<style>
+:root{--b:#1a5cf0;--lb:#dbe8fb;--sel:#a9c8f5;--t:#1a3d8f}
+*{box-sizing:border-box}body{font:15px -apple-system,Helvetica,sans-serif;margin:0;background:#fff;color:#223}
+.top{background:var(--lb);color:#123;text-align:center;font-size:22px;padding:.55em;border-bottom:1px solid #b8cdee;position:relative}
+.top a{position:absolute;right:.8em;top:.45em;font-size:14px;color:var(--t);text-decoration:none}
+.info{display:flex;flex-wrap:wrap;gap:.4em 1.4em;padding:.5em 1em;font-size:13px;color:#456;background:#f4f8fe}
+.info b{color:#123}.bar{height:6px;background:#e3ebf7}.bar>div{height:100%;background:var(--b);width:0}
+.panels{padding:1em;max-width:1500px;margin:0 auto}.panel{display:none}.panel.on{display:block}
+button{font:inherit;cursor:pointer;border:0}button:disabled{opacity:.4;cursor:default}
+.big{background:var(--b);color:#fff;border-radius:999px;padding:.6em 1em;font-size:17px;width:100%}
+.lite{background:var(--lb);color:var(--t);border-radius:999px;padding:.6em 1em;font-size:17px;width:100%}
+.btn{background:var(--b);color:#fff;border-radius:999px;padding:.55em 1.2em;font-size:16px;min-width:8em}
+.opts{display:flex;background:#eef4fd;border-radius:6px;overflow:hidden}.opts button{flex:1;background:none;color:#334;padding:.6em .3em;font-size:16px}
+.opts button.sel{background:var(--sel);color:#012;font-weight:600}.opts button.pm{background:#c9dbf6;color:var(--t);font-size:18px}
+.lbl{font-size:12px;color:#567}.val{font-size:17px;font-weight:600;color:#123}
+.fgrid{display:grid;grid-template-columns:7.5em 1fr 10em;gap:.7em 1em;align-items:center}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:1.2em;margin-bottom:1em}
+.side{display:flex;flex-direction:column;gap:.7em;grid-row:span 4}
+.fan{display:flex;align-items:center;justify-content:space-between;color:var(--t)}
+.tog{width:3.4em;height:1.8em;border-radius:999px;background:#c9d3e2;position:relative}.tog:after{content:"";position:absolute;top:.2em;left:.2em;width:1.4em;height:1.4em;border-radius:50%;background:#fff;transition:.15s}
+.tog.on{background:var(--b)}.tog.on:after{left:1.8em}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:1em 1.5em;align-items:start;grid-template-areas:"pos jog" "sel jog"}.tpos{grid-area:pos}.tsel{grid-area:sel}.tjog{grid-area:jog}
+.pos{border:1px solid #c9d7ee;border-radius:6px;padding:.7em 1em;display:flex;justify-content:space-between;color:#345}
+.pad{display:grid;grid-template-columns:repeat(3,4.2em) 1.2em 4.2em;grid-template-rows:repeat(3,3.4em);gap:.35em;justify-content:center}
+.tjog .pad{margin-top:14px}
+.pad button{background:var(--lb);color:var(--t);border-radius:6px;font-size:16px}
+.compact{display:flex;flex-wrap:wrap;gap:.6em;align-items:center;margin-top:1.2em;padding-top:.9em;border-top:1px solid #e0e8f5;font-size:14px}
+.compact input{width:4.2em;font:inherit;padding:.3em;border:1px solid #bcd;border-radius:6px}
+.compact button{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .9em}
+h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
+.tabs{display:flex;position:sticky;bottom:0;background:#fff;border-top:1px solid #c9d7ee}
+.tabs button{flex:1;background:#fff;color:var(--b);font-size:20px;padding:.6em}.tabs button.on{background:var(--sel)}
+.note{font-size:12px;color:#789;padding:0 1em 1em}
+.dlg{position:fixed;inset:0;background:rgba(20,40,80,.35);align-items:center;justify-content:center;z-index:9}
+.box{background:#fff;border-radius:12px;width:min(560px,92vw);box-shadow:0 10px 40px rgba(0,0,40,.3)}
+.fgrid2{display:grid;grid-template-columns:repeat(3,1fr);gap:.6em}.fbtn{background:var(--lb);color:var(--t);border-radius:10px;padding:.8em;display:flex;flex-direction:column;align-items:center;font-size:17px}
+.fbtn span{font-size:14px;color:#456}.fbtn:hover{background:var(--sel)}
+.hs{text-align:center;font-size:22px;color:var(--t);margin-bottom:.8em}.hs.done{color:#1a8a3a}.hs.error{color:#c22}
+.hbar{height:14px;background:#e3ebf7;border-radius:7px;overflow:hidden;margin-bottom:.6em}.hbar>div{height:100%;background:var(--b);width:0;transition:width .5s}
+.ban{display:none;margin:.8em 1em 0;padding:.8em 1em;border-radius:10px;background:#fff4d6;border:1px solid #e8b84a;color:#5a3d00;align-items:center;gap:1em}
+.ban b{color:#3d2900}.ban button{background:#e8b84a;color:#2a1c00;border-radius:999px;padding:.5em 1em;white-space:nowrap}
+.job{display:none;margin:.8em 1em 0;padding:.8em 1em;border-radius:10px;background:#eaf2ff;border:1px solid #b8cdee}
+.job .hbar{margin:.5em 0}.job .row{display:flex;flex-wrap:wrap;gap:.4em 1.4em;font-size:13px;color:#456}.job button{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .9em}
+.flist{display:flex;flex-direction:column;gap:.5em;max-height:420px;overflow:auto}.fi{display:flex;gap:.7em;align-items:center;border:1px solid #e0e8f5;border-radius:8px;padding:.4em}
+.fi img,.fi .nt{width:72px;height:72px;object-fit:contain;background:#f4f8fe;border-radius:6px;flex:none}.fi .nt{display:flex;align-items:center;justify-content:center;font-size:11px;color:#89a}
+.fi b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fa{display:flex;gap:.4em;margin-top:.3em}.fa button,.mb{background:var(--lb);color:var(--t);border-radius:999px;padding:.35em .9em;font-size:13px}
+.mlist{display:flex;flex-wrap:wrap;gap:.5em}.mb{font-size:15px;padding:.5em 1em}
+.ht{width:100%;border-collapse:collapse;font-size:12px;margin:.4em 0}.ht th{text-align:left;color:#567;font-weight:600;border-bottom:1px solid #d3e0f3}.ht td{padding:.25em .3em;border-bottom:1px solid #eef3fa}.ht .ok{color:#1a8a3a}.ht .bad{color:#c22}
+.con{height:260px;overflow:auto;background:#15171c;color:#cfd6e2;font:12px Menlo,monospace;border-radius:8px;padding:.5em}.con .cs{color:#7fc8ff}.con .ce{color:#ff8a7a}
+.wtabs{display:none;gap:.5em;margin:.8em 1em 0;max-width:1500px}.wtabs button{background:var(--lb);color:var(--t);border-radius:999px;padding:.5em 1.4em;font-size:16px}.wtabs button.on{background:var(--b);color:#fff}
+.cambtns{display:flex;gap:.4em;margin-top:.45em;flex-wrap:wrap;align-items:center}.cambtn{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .95em;font-size:13px;min-height:2.2em;touch-action:manipulation}.cambtn.on{background:var(--b);color:#fff}@media (max-width:560px){.tabs button{font-size:15px;padding:.6em .15em}#tpzw{display:none}}@media (max-width:600px) and (orientation:portrait){body{overflow-x:hidden}.panels{padding:.75em;max-width:100%}.tgrid{grid-template-columns:1fr;grid-template-areas:"pos" "jog" "sel";justify-items:stretch;gap:1em}.tpos,.tsel,.tjog{width:100%;max-width:100%}.tjog{display:flex;flex-direction:column;align-items:center}.tjog .lite{max-width:16em}.pad{justify-content:center}#p_tool .compact{justify-content:center}.fgrid{grid-template-columns:5.2em minmax(0,1fr) 7.2em;gap:.35em .45em}.fgrid .lbl{margin:0;padding:0;line-height:1.2}.fgrid .opts{min-width:0}.fgrid .opts button{padding:.45em .1em;font-size:13px}.fgrid .side{gap:.45em}.fgrid .side .btn{padding:.4em .5em;font-size:14px;min-width:0;width:100%}.fgrid .side .fan{font-size:14px}.two{gap:.7em;margin-bottom:.8em}.opts{max-width:100%}}
+@media (min-width:1100px){.tabs{display:none}.panels{display:grid;grid-template-columns:1fr 1fr;gap:2em}
+.panel{display:block;border:1px solid #d3e0f3;border-radius:10px;padding:1em}
+.panels{grid-template-areas:"tool fil" "con files" "cam files";align-items:start}
+#p_tool{grid-area:tool}#p_fil{grid-area:fil}#p_con{grid-area:con}#p_cam{grid-area:cam}#p_files{grid-area:files}
+.wtabs{display:flex}#p_tp{display:none}body.wtp .panels>.panel{display:none}body.wtp #p_tp{display:block;grid-column:1/-1}}#camimg{cursor:zoom-in}#camfs{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:rgba(10,14,22,.94);padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0)}#camfs.on{display:flex;flex-direction:column}#camfs.on #camimg{max-width:100%;max-height:100%;width:auto;height:auto;flex:1;object-fit:contain;background:#000;border-radius:0;cursor:zoom-out}#camfsx{position:absolute;top:max(.6em,env(safe-area-inset-top));right:max(.6em,env(safe-area-inset-right));z-index:41;background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:999px;padding:.55em 1em;font:600 15px -apple-system,Helvetica,sans-serif;cursor:pointer}body.camfs-on{overflow:hidden}#camframe:fullscreen,#camframe:-webkit-full-screen{width:100%;height:100%;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:.5em;box-sizing:border-box}#camframe:fullscreen #camimg,#camframe:-webkit-full-screen #camimg{max-height:calc(100% - 3.2em);max-width:100%;width:auto;height:auto;border-radius:0;cursor:zoom-out}#camframe:fullscreen .cambtns,#camframe:-webkit-full-screen .cambtns{margin-top:.5em}
+</style>
+</head>
+<body>
+<div id=kf style="display:none;padding:1.2em;max-width:32em;margin:0 auto">
+  <h2>IVI3D printer</h2>
+  <p id=km></p>
+  <p><label>API key <input type=password id=ak autocomplete=off onkeydown="if(event.key==='Enter')saveK()"></label>
+  <button type=button class=btn onclick="saveK()">Save</button></p>
+</div>
+<div id=st>
+<div class=top>IVI3D Control</div>
+<div class=info>
+  <span>State: <b id=stt>–</b></span>
+  <span>File: <b id=fn>–</b></span>
+  <span>Progress: <b id=pc></b></span>
+  <span>Link: <b id=usb>–</b></span>
+</div>
+<div class=bar><div id=pb></div></div>
+<div class=ban id=ban style="display:none"><div style="flex:1">The touchscreen is printing <b id=banf></b>. Jog and file start are paused until it finishes. Pause, Resume and Stop stay on the printer.</div></div>
+<div class=job id=jobp>
+  <div><b id=jn></b> · <span id=js2></span> · <span id=jpc></span></div>
+  <div class=hbar><div id=jb></div></div>
+  <div class=row><span>Lines <b id=jl></b></span><span>Elapsed <b id=je></b></span><span>Left <b id=jt></b></span></div>
+  <div class=compact style="border:0;padding:.4em 0 0">
+    <button onclick="job('pause','pause')">Pause</button>
+    <button onclick="job('pause','resume')">Resume</button>
+    <button onclick="if(confirm('Stop the job?'))job('cancel')">Stop</button>
+    <button onclick="jobClear()">Clear</button>
+  </div>
+</div>
+
+<div class=panels>
+<div class=panel on id=p_tool>
+  <h3>Toolhead</h3>
+  <div class=tgrid>
+    <div class=tpos>
+      <div class=pos><span id=px>X: –</span><span id=py>Y: –</span><span id=pz>Z: –</span></div>
+    </div>
+    <div class=tsel>
+      <p class=lbl>Jog Speed(mm/min)</p>
+      <div class=opts data-g=tspd><button>200</button><button class=sel>500</button><button>1500</button><button>3000</button></div>
+      <p class=lbl>Jog Distance (mm)</p>
+      <div class=opts data-g=tdst><button>0.05</button><button class=sel>1</button><button>10</button><button>50</button></div>
+      <p class=lbl>Speed %</p>
+      <div class=opts data-g=sp data-c=M220><button>50</button><button class=sel>100</button><button>150</button><button>200</button></div>
+      <p class=lbl>Flow %</p>
+      <div class=opts data-g=fl data-c=M221><button>80</button><button class=sel>100</button><button>110</button><button>120</button></div>
+    </div>
+    <div class=tjog>
+      <button class="lite u" onclick="home()">Home</button>
+      <div class=pad>
+        <span></span><button class=u onclick="jog('Y',1)">Y+</button><span></span><span></span><button class=u onclick="jog('Z',1)">Z+</button>
+        <button class=u onclick="jog('X',-1)">X-</button><button class=u title="Move to X0 Y0" onclick="g(['G90','G1 X0 Y0 F'+sel('tspd')]);posSoon()">X/Y</button><button class=u onclick="jog('X',1)">X+</button><span></span><button class=u title="Home (G28)" onclick="home()">Z</button>
+        <span></span><button class=u onclick="jog('Y',-1)">Y-</button><span></span><span></span><button class=u onclick="jog('Z',-1)">Z-</button>
+      </div>
+    </div>
+  </div>
+  <div class=compact>
+    <button class=u onclick="job('pause','pause')">Pause</button>
+    <button class=u onclick="job('pause','resume')">Resume</button>
+    <button class=u onclick="if(confirm('Stop the job?'))job('cancel')">Stop</button>
+    <button class=u onclick="jobClear()">Clear</button>
+  </div>
+</div>
+
+<div class=panel id=p_fil>
+  <h3>Filament</h3>
+  <div class=two>
+    <button class="big u" onclick="pick('load')">Load Filament</button>
+    <button class="big u" onclick="pick('unload')">Unload Filament</button>
+  </div>
+  <div class=fgrid>
+    <div class=lbl>Nozzle<br><span class=val id=nzv>–</span></div>
+    <div class=opts data-g=nz data-c=M104><button>210°C</button><button>240°C</button><button>270°C</button><button class=pm data-d=-5>-</button><button class=pm data-d=5>+</button></div>
+    <div class=side>
+      <div class=fan><span>Fan</span><button type=button class=tog id=fan onclick="fans()"></button></div>
+      <button class="btn u" onclick="g(['M104 S0','M140 S0','M107'])">Cooldown</button>
+      <button class="btn u" onclick="ext(1)">Extrude</button>
+      <button class="btn u" onclick="ext(-1)">Retract</button>
+    </div>
+    <div class=lbl>Bed<br><span class=val id=bdv>–</span></div>
+    <div class=opts data-g=bd data-c=M140><button>60°C</button><button>80°C</button><button>100°C</button><button class=pm data-d=-5>-</button><button class=pm data-d=5>+</button></div>
+    <div class=lbl>Extrude speed<br>(mm/min)</div>
+    <div class=opts data-g=fspd><button class=sel>100</button><button>200</button><button>500</button><button>1000</button></div>
+    <div class=lbl>Extrude distance<br>(mm)</div>
+    <div class=opts data-g=fdst><button class=sel>10</button><button>20</button><button>50</button><button>100</button></div>
+  </div>
+</div>
+
+<div class=panel id=p_cam>
+  <h3>Webcam</h3>
+  <div id=camoff class=lbl>No camera URL yet. This printer's built-in OV5640 is not used (it is CSI/YUV, not MJPEG). Paste a snapshot or MJPEG URL from a separate camera. Snapshot view refreshes at 5 frames/sec in this browser, not on the printer.</div>
+  <div class=compact style="border:0;padding:0 0 .8em">
+    <label class=lbl>Snapshot URL <input id=camsnap style="width:16em" placeholder="http://camera/shot.jpg"></label>
+    <label class=lbl>Stream URL <input id=camstream style="width:16em" placeholder="http://camera/video.mjpg"></label>
+    <button type=button onclick="camSave()">Save</button>
+  </div>
+  <div id=camframe style="display:none">
+    <img id=camimg alt="webcam" style="width:100%;max-height:420px;object-fit:contain;background:#15171c;border-radius:8px" title="Tap for full screen" onclick="camToggleFs()">
+    <div class=cambtns>
+      <button type=button class=cambtn data-m=live onclick="camSetMode('live')">Live</button>
+      <button type=button class=cambtn data-m=snap onclick="camSetMode('snap')">Snapshot</button>
+      <button type=button class=cambtn onclick="camRetry()">Retry</button>
+      <button type=button class=cambtn id=camfsbtn onclick="camToggleFs()">Full Screen</button>
+    </div>
+    <div class=lbl id=caminfo style="margin-top:.4em"></div>
+  </div>
+  <div id=camfs aria-hidden=true><button type=button id=camfsx onclick="camExitFs()" title="Close">Close</button></div>
+</div>
+
+<div class=panel id=p_files>
+  <h3>Files <span class=lbl>jobs stored on the printer</span></h3>
+  <div id=flist class=flist></div>
+  <h3 style="margin-top:1em">Queue</h3>
+  <div id=qlist class=lbl>Empty.</div>
+  <div class=compact style="margin-top:.4em;border:0;padding:0">
+    <button class=u onclick="qact('start_next')">Start next</button>
+    <button onclick="qact('clear')">Clear queue</button>
+    <span class=lbl>Queued jobs never start on their own: remove the finished part first, then press Start next.</span>
+  </div>
+</div>
+
+<div class=panel id=p_con>
+  <h3>Macros</h3>
+  <div id=mlist class=mlist></div>
+  <p class=lbl>These are the usual defaults, sent as G-code from this page. They are not stored on the printer.</p>
+  <h3 style="margin-top:1em">Console</h3>
+  <div id=con class=con></div>
+  <div style="display:flex;gap:.5em;margin-top:.5em">
+    <input id=cin placeholder="G-code, e.g. M105" style="flex:1;font:14px Menlo,monospace;padding:.45em;border:1px solid #bcd;border-radius:6px" onkeydown="if(event.key==='Enter')csend()">
+    <button id=cbtn class="btn u" style="min-width:5em" onclick="csend()">Send</button>
+  </div>
+  <div class=lbl id=cnote style="margin-top:.3em">Only commands on the bridge's safety list are sent. During a print only temperature, fan, speed, flow and status commands are allowed.</div>
+</div>
+</div>
+
+<div class=tabs>
+  <button class=on id=t_tool onclick="tab('tool')">Toolhead</button>
+  <button id=t_fil onclick="tab('fil')">Filament</button>
+  <button id=t_cam onclick="tab('cam')">Camera</button>
+  <button id=t_files onclick="tab('files')">Files</button>
+  <button id=t_con onclick="tab('con')">Console</button>
+</div>
+<p class=note id=msg></p>
+<p style="padding:0 1em 1em"><a id=fk href="#" onclick="forgetK();return false">Forget key</a></p>
+</div>
+
+<div class=dlg id=dlg style="display:none">
+  <div class=box style="padding:1.1em 1.2em">
+    <h3 id=mt style="margin-top:0">Filament</h3>
+    <div id=v_pick>
+      <div class=fgrid2 id=fp></div>
+      <p class=lbl style="margin-top:.8em">Custom °C</p>
+      <div style="display:flex;gap:.5em"><input id=fcu type=number min=170 max=300 step=1 style="width:6em;font:inherit;padding:.4em;border:1px solid #bcd;border-radius:6px"><button class=btn onclick="run(+document.getElementById('fcu').value)">Heat</button></div>
+      <div class=compact style="border:0"><button onclick="fclose()">Cancel</button></div>
+    </div>
+    <div id=v_heat style="display:none">
+      <div class=hs id=hs>Heating…</div>
+      <div class=hbar><div id=hb></div></div>
+      <div class=lbl id=ht style="text-align:center">–</div>
+      <div id=v_prompt style="display:none;text-align:center;margin-top:.8em">
+        <p>Filament coming out of the nozzle?</p>
+        <button class=btn onclick="fanswer(1)">Yes, done</button>
+        <button class=lite onclick="fanswer(0)">No, extrude more</button>
+      </div>
+      <div class=compact style="border:0"><button id=fc onclick="fcancel()">Cancel</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+var LS='ivi.apikey';
+var FIL=[["PLA",210],["PETG",240],["ABS",250],["TPU",225],["PCTG",250]];
+var MAC=[{name:"Preheat PLA",commands:["M104 S210","M140 S60"]},{name:"Preheat PETG",commands:["M104 S240","M140 S80"]},{name:"Cooldown",commands:["M104 S0","M140 S0","M107"]},{name:"Park (home)",commands:["G28"]},{name:"Load filament",commands:["@load"]},{name:"Unload filament",commands:["@unload"]}];
+var LOAD_MM=100, RETRY_MM=20, TOL=3, HEAT_TO=900, JOG_TEMP=235, COLD=170;
+function loadK(){
+  var q=new URLSearchParams(location.search).get('apikey');
+  if(q){try{localStorage.setItem(LS,q)}catch(e){}return q}
+  try{return localStorage.getItem(LS)||''}catch(e){return ''}
+}
+var k=loadK(), w=0, T={}, fanOn=false, fanClick=0, lastPos=0, FA=null, FT=null, Fstate=null, prevT=0, CSEQ=0, snapTimer=null, camMode='snap';
+function H(){var h={'Content-Type':'application/json'}; if(k)h['X-Api-Key']=k; return h}
+function setForm(on,bad){w=on; kf.style.display=on?'block':'none'; st.style.display=on?'none':'block';
+  if(bad)km.textContent='Invalid API key. Enter the key to save it in this browser.';
+  else if(on)km.textContent='Enter the API key to use this page from outside your home network.';
+  else km.textContent='';
+}
+function saveK(){var i=document.getElementById('ak'); k=i?i.value.trim():''; if(i)i.value='';
+  try{k?localStorage.setItem(LS,k):localStorage.removeItem(LS)}catch(e){} tick(1)}
+function forgetK(){k=''; try{localStorage.removeItem(LS)}catch(e){} setForm(true,false)}
+function say(m){msg.textContent=m}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function hms(s){s=Math.round(+s||0); if(s<=0)return '–'; var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;
+  return (h?h+'h ':'')+(h||m?m+'m ':'')+sec+'s'}
+function fmtG(f){if(f&&f.filament_g!=null)return (+f.filament_g).toFixed(1)+' g';
+  if(f&&f.filament_mm!=null)return ((+f.filament_mm)/1000).toFixed(2)+' m'; return '–'}
+function tab(t){for(const n of['tool','fil','cam','files','con']){
+  document.getElementById('t_'+n).classList.toggle('on',n==t);
+  document.getElementById('p_'+n).classList.toggle('on',n==t)}
+  if(t==='cam')camApply();
+}
+function sel(gr){const b=document.querySelector('[data-g='+gr+'] .sel'); return b?b.textContent:''}
+document.querySelectorAll('.opts').forEach(o=>o.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+  const c=o.dataset.c;
+  if(b.dataset.d){const cur=(T[o.dataset.g]||0)+(+b.dataset.d); return g([c+' S'+Math.max(0,cur)])}
+  o.querySelectorAll('button').forEach(x=>x.classList.toggle('sel',x==b));
+  if(c)g([c+' S'+parseInt(b.textContent)]);
+}));
+async function J(url, body){
+  const opt={headers:H()};
+  if(body!==undefined){opt.method='POST'; opt.body=JSON.stringify(body)}
+  const r=await fetch(url,opt);
+  const t=await r.text(); let j=null; try{j=t?JSON.parse(t):{}}catch(e){j={}}
+  if(r.status===403){setForm(true,true); throw new Error('Invalid API key')}
+  if(!r.ok) throw new Error((j&&j.error)||('HTTP '+r.status));
+  return j;
+}
+async function g(cs, quiet, auto){
+  try{
+    const r=await fetch('/api/printer/command',{method:'POST',headers:H(),body:JSON.stringify(auto?{commands:cs,quiet:true}:{commands:cs})});
+    if(r.status===403){setForm(true,true); return false}
+    if(!quiet) say(r.ok?'Sent '+cs.join(' · '):'Failed: '+((await r.json().catch(()=>({}))).error||r.status));
+    if(!r.ok) return false;
+    if(!quiet) setTimeout(()=>tick(1),300);
+    return true;
+  }catch(e){if(!quiet)say('Failed: '+e.message); return false}
+}
+function jog(a,s){g(['G91','G1 '+a+(s*sel('tdst'))+' F'+sel('tspd'),'G90']); posSoon()}
+function home(){g(['G28']); posSoon(1)}
+/* automatic position poll (M114, marked quiet: the bridge keeps it out of the console) */
+function posPoll(){if(document.getElementById('p_tool').offsetParent===null)return; lastPos=Date.now(); g(['M114'],true,true).then(ok=>{if(ok)setTimeout(()=>tick(1),400)})}
+function posSoon(long){[800,1800,3000].concat(long?[8000,15000]:[]).forEach(t=>setTimeout(posPoll,t))}
+function job(c,a){fetch('/api/job',{method:'POST',headers:H(),body:JSON.stringify({command:c,action:a})}).then(async r=>{
+  if(r.status===403){setForm(true,true);return}
+  say(r.ok?'OK':('Failed: '+((await r.json().catch(()=>({}))).error||r.status))); setTimeout(()=>tick(1),300)
+})}
+function jobClear(){J('/api/ivi/clear',{}).then(j=>say(j.message||'Cleared')).catch(e=>say('Failed: '+e.message))}
+function fans(){fanOn=!fanOn; fanClick=Date.now(); fan.classList.toggle('on',fanOn); g([fanOn?'M106 S255':'M107'])}
+
+function fv(v){v_pick.style.display=v==='pick'?'block':'none'; v_heat.style.display=v==='heat'?'block':'none'}
+function pick(a){FA=a; Fstate=null; mt.textContent=(a==='load'?'Load':'Unload')+' Filament'; fp.innerHTML='';
+  FIL.forEach(([n,t])=>{const b=document.createElement('button'); b.className='fbtn'; b.innerHTML='<b>'+n+'</b><span>'+t+'°C</span>'; b.onclick=()=>run(t); fp.appendChild(b)});
+  fv('pick'); dlg.style.display='flex'}
+function fclose(){if(FT){clearInterval(FT);clearTimeout(FT)} FT=null; Fstate=null; dlg.style.display='none'}
+async function fcancel(){
+  if(FT){clearInterval(FT);clearTimeout(FT)} FT=null;
+  if(Fstate&&Fstate.cancelled!==undefined)Fstate.cancelled=true;
+  if(Fstate&&Fstate.jog){if(prevT!=null) await g(['M104 S'+prevT],true); say('Cancelled; nozzle restored')}
+  else {await g(['M104 S0'],true); say('Cancelled')}
+  fclose();
+}
+function showHeat(a,t,label){
+  const pct=a==null||!t?0:Math.max(0,Math.min(100,100*a/t));
+  hb.style.width=pct+'%'; ht.textContent=(a==null?'–':Math.round(a))+'°C / '+t+'°C';
+  hs.textContent=label; hs.className='hs';
+}
+async function waitHeat(target){
+  const end=Date.now()+HEAT_TO*1000;
+  return await new Promise((resolve,reject)=>{
+    async function once(){
+      if(Fstate&&Fstate.cancelled){reject(new Error('cancelled'));return}
+      try{
+        const p=await J('/api/printer');
+        const a=p.temperature&&p.temperature.tool0?p.temperature.tool0.actual:null;
+        showHeat(a,target,'Heating…');
+        if(a!=null && a>=target-TOL){resolve(a);return}
+        if(Date.now()>end){reject(new Error('heat timeout'));return}
+        FT=setTimeout(once,1000);
+      }catch(e){reject(e)}
+    }
+    once();
+  });
+}
+async function run(t){
+  if(!t||t<170||t>300){say('Enter a temperature between 170 and 300');return}
+  Fstate={action:FA,temp:+t,cancelled:false,jog:false}; fv('heat'); document.getElementById('v_prompt').style.display='none';
+  try{
+    if(!await g(['M104 S'+t],true))throw new Error('M104 failed');
+    await waitHeat(+t);
+    hs.textContent=FA==='unload'?'Unloading…':'Loading…';
+    if(FA==='unload'){if(!await g(['M83','G1 E10 F300','G1 E-'+LOAD_MM+' F1500','M82'],true))throw new Error('move failed')}
+    else {if(!await g(['M83','G1 E'+LOAD_MM+' F300','M82'],true))throw new Error('move failed')}
+    hs.textContent='Filament coming out of the nozzle?'; hs.className='hs';
+    document.getElementById('v_prompt').style.display='block';
+  }catch(e){if(e.message!=='cancelled'){hs.textContent='Error: '+e.message; hs.className='hs error'}}
+}
+async function fanswer(ok){
+  if(ok){await g(['M104 S0'],true); hs.textContent='Done'; hs.className='hs done'; document.getElementById('v_prompt').style.display='none'; setTimeout(fclose,800)}
+  else {hs.textContent='Extruding more…'; document.getElementById('v_prompt').style.display='none';
+    await g(['M83','G1 E'+RETRY_MM+' F300','M82'],true);
+    hs.textContent='Filament coming out of the nozzle?'; document.getElementById('v_prompt').style.display='block'}
+}
+async function ext(s){
+  FA=s>0?'extrude':'retract';
+  let p; try{p=await J('/api/printer')}catch(e){say('Failed: '+e.message);return}
+  const tt=p.temperature&&p.temperature.tool0?p.temperature.tool0:{actual:0,target:0};
+  const need=!(tt.target>=COLD && (tt.actual==null || tt.actual>=tt.target-TOL));
+  const dist=+sel('fdst'), feed=+sel('fspd');
+  const move=async()=>{await g(['M83','G1 E'+(s>0?dist:-dist)+' F'+feed,'M82'],true);
+    say((s>0?'Extruding ':'Retracting ')+dist+' mm. Nozzle left at '+(need?JOG_TEMP:Math.round(tt.target))+'°C – Cooldown to turn off')}
+  if(!need){await move();return}
+  prevT=+tt.target||0; Fstate={action:FA,temp:JOG_TEMP,cancelled:false,jog:true};
+  mt.textContent=s>0?'Extrude':'Retract'; fv('heat'); document.getElementById('v_prompt').style.display='none'; dlg.style.display='flex';
+  try{
+    if(!await g(['M104 S'+JOG_TEMP],true))throw new Error('M104 failed');
+    await waitHeat(JOG_TEMP);
+    hs.textContent=s>0?'Extruding…':'Retracting…';
+    await move();
+    hs.textContent='Nozzle left at '+JOG_TEMP+'°C – Cooldown to turn off'; hs.className='hs done';
+    setTimeout(fclose,1000);
+  }catch(e){if(e.message!=='cancelled'){hs.textContent='Error: '+e.message; hs.className='hs error'}}
+}
+
+function camUrls(){let snap='',stream=''; try{snap=localStorage.getItem('ivi.cam.snap')||''; stream=localStorage.getItem('ivi.cam.stream')||''}catch(e){} return {snap,stream}}
+function camSave(){
+  const snap=document.getElementById('camsnap').value.trim(), stream=document.getElementById('camstream').value.trim();
+  try{localStorage.setItem('ivi.cam.snap',snap); localStorage.setItem('ivi.cam.stream',stream)}catch(e){}
+  camApply();
+}
+function camHighlight(){document.querySelectorAll('.cambtn[data-m]').forEach(b=>b.classList.toggle('on',b.dataset.m===camMode))}
+function camSetMode(m){camMode=m; try{localStorage.setItem('ivi_cam_mode',m)}catch(e){} camHighlight(); camApply()}
+function camRetry(){camApply()}
+function camSnapTick(){
+  const u=camUrls(); if(camMode!=='snap'||!u.snap)return;
+  if(document.getElementById('p_cam').offsetParent===null && !camFsOpen())return;
+  camimg.src=u.snap+(u.snap.indexOf('?')>=0?'&':'?')+'t='+Date.now();
+}
+function camApply(){
+  const u=camUrls(); document.getElementById('camsnap').value=u.snap; document.getElementById('camstream').value=u.stream;
+  try{camMode=localStorage.getItem('ivi_cam_mode')|| (u.stream?'live':'snap')}catch(e){}
+  if(!u.snap&&!u.stream){camoff.style.display='block'; camframe.style.display='none'; if(snapTimer){clearInterval(snapTimer);snapTimer=null} return}
+  camoff.style.display='none'; camframe.style.display='block'; camHighlight();
+  if(snapTimer){clearInterval(snapTimer);snapTimer=null}
+  if(camMode==='live'&&u.stream){camimg.src=u.stream; caminfo.textContent='Live stream (camera sets the frame rate). Use Snapshot for a 5 fps cap.'}
+  else if(u.snap){camMode='snap'; camHighlight(); camSnapTick(); snapTimer=setInterval(camSnapTick,200); caminfo.textContent='Snapshot at 5 frames/sec, loaded by this browser.'}
+  else {camimg.src=u.stream; caminfo.textContent='No snapshot URL; showing the stream.'}
+}
+function camInit(){const u=camUrls(); document.getElementById('camsnap').value=u.snap; document.getElementById('camstream').value=u.stream; camApply()}
+function camNativeFs(){const el=camframe;return !!(el&&(el.requestFullscreen||el.webkitRequestFullscreen))}
+function camFsOpen(){return !!(document.fullscreenElement||document.webkitFullscreenElement)||camfs.classList.contains('on')}
+function camPlaceImg(inOverlay){if(inOverlay){if(camimg.parentElement!==camfs)camfs.appendChild(camimg)}
+ else if(camimg.parentElement!==camframe)camframe.insertBefore(camimg,camframe.firstChild)}
+function camOverlayFs(on){camPlaceImg(!!on);camfs.classList.toggle('on',!!on);camfs.setAttribute('aria-hidden',on?'false':'true');
+ document.body.classList.toggle('camfs-on',!!on)}
+function camEnterFs(){if(camframe.style.display==='none')return;
+ if(camNativeFs()){const req=camframe.requestFullscreen||camframe.webkitRequestFullscreen;
+  try{const p=req.call(camframe);if(p&&p.catch)p.catch(()=>camOverlayFs(true));return}catch(e){}}
+ camOverlayFs(true)}
+function camExitFs(){const fs=document.fullscreenElement||document.webkitFullscreenElement;
+ if(fs){const x=document.exitFullscreen||document.webkitExitFullscreen;try{x.call(document)}catch(e){}}
+ camOverlayFs(false)}
+function camToggleFs(){camFsOpen()?camExitFs():camEnterFs()}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&camFsOpen()){e.preventDefault();camExitFs()}});
+document.addEventListener('fullscreenchange',()=>{if(!(document.fullscreenElement||document.webkitFullscreenElement))camOverlayFs(false)});
+document.addEventListener('webkitfullscreenchange',()=>{if(!(document.fullscreenElement||document.webkitFullscreenElement))camOverlayFs(false)});
+camfs.addEventListener('click',e=>{if(e.target===camfs)camExitFs()});
+
+function thumbUrl(name){
+  var u='/api/ivi/files/thumb?name='+encodeURIComponent(name);
+  if(k)u+='&apikey='+encodeURIComponent(k);
+  return u;
+}
+async function filesLoad(){
+  let d; try{d=await J('/api/ivi/files')}catch(e){return}
+  const files=d.files||[];
+  flist.innerHTML=files.length?files.map(f=>'<div class=fi>'+(f.thumbnail?'<img src="'+thumbUrl(f.name)+'" alt="">':'<div class=nt>no preview</div>')+'<div style="flex:1;min-width:0"><b>'+esc(f.name)+'</b><div class=lbl>'+hms(f.time_s)+' · '+fmtG(f)+' · '+((f.size||0)/1048576).toFixed(1)+' MB · '+new Date((f.mtime||f.date||0)*1000).toLocaleString()+'</div>'
+    +'<div class=fa><button class=u data-a=print data-n="'+esc(f.name)+'">Print</button><button class=u data-a=queue data-n="'+esc(f.name)+'">Queue</button><button data-a=delete data-n="'+esc(f.name)+'">Delete</button></div></div></div>').join(''):'<div class=lbl>No uploaded jobs yet.</div>';
+  flist.querySelectorAll('button').forEach(b=>b.onclick=()=>fact(b.dataset.a,b.dataset.n));
+  const q=d.queue||[];
+  qlist.innerHTML=q.length?q.map((n,i)=>(i+1)+'. '+esc(n)+' <a href=# data-n="'+esc(n)+'">remove</a>').join('<br>'):'Empty.';
+  qlist.querySelectorAll('a').forEach(a=>a.onclick=e=>{e.preventDefault();fact('unqueue',a.dataset.n)});
+}
+async function fact(a,n){
+  if(a==='delete'&&!confirm('Delete '+n+' from the printer?'))return;
+  if(a==='print'&&!confirm('Print '+n+' now? Make sure the bed is clear.'))return;
+  try{const j=await J('/api/ivi/files',{action:a,name:n}); say(j.message||(a+': '+n))}catch(e){say('Failed: '+e.message)}
+  filesLoad(); tick(1);
+}
+async function qact(a){
+  if(a==='start_next'&&!confirm('Start the next queued job? Make sure the bed is clear.'))return;
+  try{const j=await J('/api/ivi/queue',{action:a}); say(j.message||'Queue updated')}catch(e){say('Failed: '+e.message)}
+  filesLoad();
+}
+
+function mLoad(){
+  mlist.innerHTML=MAC.map((m,i)=>'<button class="mb u" data-i='+i+' title="'+esc(m.commands.join('; '))+'">'+esc(m.name)+'</button>').join('');
+  mlist.querySelectorAll('button').forEach(b=>b.onclick=()=>mrun(MAC[+b.dataset.i]));
+}
+function mrun(m){
+  if(!m)return;
+  if(m.commands.length===1&&m.commands[0]==='@load')return pick('load');
+  if(m.commands.length===1&&m.commands[0]==='@unload')return pick('unload');
+  g(m.commands);
+}
+async function conPoll(){
+  try{
+    const d=await J('/api/ivi/console?since='+CSEQ);
+    (d.lines||[]).forEach(l=>{
+      CSEQ=l.seq; const x=document.createElement('div');
+      x.className=l.dir==='<'||l.dir==='x'?'ce':(l.dir==='>'?'cs':'');
+      x.textContent=(l.dir||'')+' '+l.text; con.appendChild(x);
+    });
+    if((d.lines||[]).length) con.scrollTop=con.scrollHeight;
+  }catch(e){}
+}
+async function csend(){
+  const c=cin.value.trim(); if(!c)return;
+  try{await g([c],true); cin.value=''; say('Sent '+c)}catch(e){const x=document.createElement('div');x.className='ce';x.textContent='! '+e.message;con.appendChild(x)}
+  conPoll();
+}
+
+async function tick(f){
+  if(w&&!f)return;
+  try{
+    const rs=await Promise.all([fetch('/api/printer',{headers:H()}),fetch('/api/job',{headers:H()})]);
+    if(rs[0].status===403||rs[1].status===403){setForm(true,true);return}
+    setForm(false,false);
+    const p=await rs[0].json(), j=await rs[1].json();
+    const stname=(p.state&&p.state.text)||j.state||'–';
+    stt.textContent=stname; fn.textContent=(j.job&&j.job.file&&j.job.file.name)||'–';
+    const c=j.progress&&j.progress.completion; pb.style.width=(c||0)+'%'; pc.textContent=c==null?'':c.toFixed(1)+'%';
+    const t=p.temperature||{}, ftmp=v=>v?Math.round(v.actual)+'°C/'+Math.round(v.target)+'°C':'–';
+    nzv.textContent=ftmp(t.tool0); bdv.textContent=ftmp(t.bed);
+    T.nz=t.tool0?t.tool0.target:0; T.bd=t.bed?t.bed.target:0;
+    for(const[g2,v]of[['nz',T.nz],['bd',T.bd]])document.querySelectorAll('[data-g='+g2+'] button:not(.pm)').forEach(b=>b.classList.toggle('sel',parseInt(b.textContent)==v));
+    const q=p.position; px.textContent='X: '+(q?q.x.toFixed(2):'–'); py.textContent='Y: '+(q?q.y.toFixed(2):'–'); pz.textContent='Z: '+(q?q.z.toFixed(2):'–');
+    const ivi=p.ivi||{}, link=!!ivi.link, ts=!!ivi.touchscreen_job;
+    if(ivi.fan!=null && Date.now()-fanClick>4000){fanOn=ivi.fan>0; fan.classList.toggle('on',fanOn); fan.title='Fan '+ivi.fan+'%'}
+    usb.textContent=link?(ts?'up (touchscreen job)':'up'):'down';
+    ban.style.display=ts?'flex':'none'; banf.textContent=(j.job&&j.job.file&&j.job.file.name)||'';
+    const ji=j.ivi||{};
+    const net=ji.source&&String(ji.source).indexOf('network')>=0&&!/^(Operational|Cancelled|Done)/.test(j.state);
+    jobp.style.display=(net||(j.state&&j.state!=='Operational'&&j.job&&j.job.file&&j.job.file.name))?'block':'none';
+    if(jobp.style.display==='block'){
+      jn.textContent=(j.job&&j.job.file&&j.job.file.name)||''; js2.textContent=j.state||'';
+      const c2=c||0; jb.style.width=c2+'%'; jpc.textContent=c==null?'':c2.toFixed(1)+'%';
+      jl.textContent=(ji.sent||0)+' / '+(ji.total||0);
+      je.textContent=hms(j.progress&&j.progress.printTime); jt.textContent=hms(j.progress&&j.progress.printTimeLeft);
+    }
+    const busy=ts||!link;
+    document.querySelectorAll('.u,.opts[data-c] button').forEach(b=>{
+      if(b.closest('#jobp')) return;
+      const keep=/\b(Pause|Resume|Stop|Clear)\b/.test(b.textContent);
+      b.disabled=busy&&!keep;
+    });
+    if(link && !ts && Date.now()-lastPos>=10000) posPoll();
+  }catch(e){stt.textContent='bridge offline'; document.querySelectorAll('.u').forEach(b=>b.disabled=true)}
+}
+mLoad(); camInit(); filesLoad(); conPoll();
+tick(1); setInterval(()=>tick(),3000);
+setInterval(conPoll,3000); setInterval(filesLoad,15000);
+</script>
+</body></html>

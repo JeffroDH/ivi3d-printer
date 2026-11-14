@@ -1,0 +1,10 @@
+# build outputs (never commit the ARM binary, tars, or a generated key)
+bin/
+*.tar
+*.tar.sha256
+ivibridge-armv7-static
+ivibridge
+apikey
+__pycache__/
+*.pyc
+*.o

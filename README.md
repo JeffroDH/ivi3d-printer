@@ -43,6 +43,7 @@ Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/mar
 | `fusion/` | Autodesk Fusion post processors for the laser and CNC heads + header checker ([fusion/README.md](fusion/README.md)) |
 | `docs/laser_cnc_gcode.md` | Laser (line/point) and CNC G-code + header format from IVI 3licer test files |
 | `bridge/` | Orca Slicer / Anycubic Next bridge: OctoPrint-compatible service, Wi-Fi upload + USB serial streaming, tests; installers for macOS (launchd), Linux (systemd) and Windows (Task Scheduler) in `bridge/install/` |
+| `a33_bridge/` | On-printer Wi-Fi bridge (ivibridge 0.1.7-a33): static C daemon on the A33, OctoPrint-compatible API and web UI on port 5001, no computer in the middle ([a33_bridge/README.md](a33_bridge/README.md)) |
 | `ivi-control.sh` | Command-line client for the HTTP API (discover, status, print, pause, G-code, …) |
 | `docs/README.md` | Index of the topic docs |
 | `docs/architecture.md` | Three processors, ports, and how a job starts |
@@ -150,10 +151,17 @@ python3 docs/supx_pack.py raw.bin out.supx --verify firmware.supx   # check byte
 
 The 512 KB backup for this unit is [firmware/stm32_dump/](firmware/stm32_dump/README.md) (RDP level 0). A later SWD session is still no reset, halt, erase, program, or option-byte write. Recovery order, gentlest first: [docs/stm32.md](docs/stm32.md#recovery) and [docs/backups.md](docs/backups.md).
 
+## On-printer A33 bridge
+
+The service in [`bridge/`](bridge/README.md) is the **Mac/PC bridge**. It runs on a computer, looks like OctoPrint to Orca Slicer, and streams jobs over USB serial (it can also upload a file over the stock Wi-Fi API for starting from the touchscreen).
+
+The **A33 bridge** in [`a33_bridge/`](a33_bridge/README.md) is a separate program. It runs on the printer's own Linux board, shares the STM32 serial link with the touchscreen app, and serves an OctoPrint-compatible API and web UI on port 5001. Orca can print and monitor over the LAN with no cable and no computer in the middle. The current version in this tree is 0.1.7-a33; see that folder's README for setup and [a33_bridge/CHANGELOG.md](a33_bridge/CHANGELOG.md) for what each release added.
+
 ## Status and roadmap
 
 - ✅ Discovery, serial link, and update format documented. Wi-Fi API tested: upload/execute_code work; print control is 404 on current firmware (USB serial works).
 - ✅ **Orca Slicer / Anycubic Next bridge (v0.1, [`bridge/`](bridge/README.md), untested on hardware):** a small local service that looks like an OctoPrint server to Orca and streams jobs over **USB serial** (`M2411 S2` + line-by-line G-code); Wi-Fi can only upload until firmware enables print control. Orca would use a delta profile built from the M665 values above. Snapmaker Luban can't be used directly: it only connects to Snapmaker machines.
+- ✅ **On-printer A33 bridge (v0.1.7, [`a33_bridge/`](a33_bridge/README.md)):** OctoPrint-compatible API and web UI on the printer at port 5001, sharing the serial link with the touchscreen. This is the path for cable-free Orca printing and the Device tab over the LAN.
 - 🔍 **Modern Marlin:** feasible but a big job. The delta motion, pins and endstops port directly; the smart-driver UART link, CAN tool-head link (including hotend temperature control via the head) and touchscreen compatibility must be written. Estimate **~3–5 weeks for FDM-only, ~2–3 months** for full laser/CNC/UI parity. Open items need hardware: mapping driver UART pads to STM32 pins (multimeter), bed/`FAN24V` switching, full CAN frame meanings (CANable capture). The bootloader and the SWD backup are documented.
 - ✅ A33 console (ttyS2), boot chain, kore upload rules, and the GD32 power sequencer are documented ([docs/a33.md](docs/a33.md), [docs/gd32.md](docs/gd32.md)). sshd is present and not started. Touch injection is `tools/ivi_touch_nav` (offline tests only so far); the hardware session is [docs/home_session/RUNBOOK.md](docs/home_session/RUNBOOK.md).
 
@@ -172,3 +180,4 @@ Original work in this repo (documentation, scripts, `supx_pack.py`) is licensed 
 because the company no longer exists.
 
 - Orca Slicer bridge: [bridge/README.md](bridge/README.md), plan [docs/orca_bridge.md](docs/orca_bridge.md)
+- On-printer A33 bridge: [a33_bridge/README.md](a33_bridge/README.md), changelog [a33_bridge/CHANGELOG.md](a33_bridge/CHANGELOG.md)
