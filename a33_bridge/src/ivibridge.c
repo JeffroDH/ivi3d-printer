@@ -3,16 +3,21 @@
  *
  * Owns the real STM32 link (CH340 ttyUSB0), gives the stock touchscreen app a pty in its place
  * (the app's /dev/ttyUSB0 becomes a symlink to the pty slave), and lets the network side read
- * status and, when the app is idle, stream G-code and send start/pause/resume/stop.
+ * status and, when the app is idle, ask the touchscreen to start a native job
+ * (print=true writes the file and a print_request; the app opens StatusPageNew).
  *
  * Rules (see DESIGN.md):
  *  - Pass-through: while the network side has nothing in flight, every byte from the STM32 goes to
  *    the app unchanged and every app line goes to the STM32 unchanged.
  *  - One owner at a time: the network side only transmits when the app has no command awaiting
  *    its 'ok'; app lines that arrive while a network command is in flight are queued.
- *  - Never two G-code streams: network jobs are refused while the app prints; while a network job
- *    runs, app lines other than read-only queries are held (the app is shown the stock
- *    "printing via IVI 3licer" lock page through a rewritten Working Status line).
+ *  - Never two G-code streams: print=true does not start a network stream (no WORKING_PC);
+ *    it posts a print_request for the touchscreen app. Network-stream job_start remains only
+ *    when IVIB_NET_STREAM=1 (tests/debug). Network jobs are refused while the app prints;
+ *    while a network job runs, the app is shown the stock lock page (WORKING_PC rewrite).
+ *    During a touchscreen job the API may pause/resume/cancel and change temp/speed/flow via
+ *    the same request route (the app's own handlers). Manual moves, homing, and arbitrary
+ *    console G-code stay blocked.
  *  - Laser safety: jobs or commands containing M3/M4 with S>100 are refused.
  *  - Clean exit (SIGTERM/SIGINT) restores the original /dev/ttyUSB0 device node.
  *
@@ -44,8 +49,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <limits.h>
+#include "ivi_icons.h"
 
-#define VERSION "0.1.7-a33"
+#define VERSION "0.1.18-a33"
 #define LINEMAX 1024
 #define MAXCLI 8
 #define APPQ 64
@@ -56,6 +62,7 @@
 static const char *g_serial = "/dev/ivi-stm32";   /* real link (node created by the start script) */
 static const char *g_link = "/dev/ttyUSB0";       /* path the app opens; becomes a symlink to our pty */
 static int g_port = 5001;
+static int g_port2 = 80;       /* extra HTTP port; 0 = off. bind failure is non-fatal */
 static const char *g_bind = "0.0.0.0";
 static char g_apikey[128] = "";
 static const char *g_updir = "/userdata/WifiFile";
@@ -75,7 +82,7 @@ static int g_qn;
 
 /* ------------------------------------------------------------------ util */
 static FILE *g_log, *g_plog;
-static char g_p1root[256], g_jobs_persist[512], g_logs_persist[512], g_persist_logpath[576];
+static char g_p1root[256], g_jobs_persist[512], g_jobs_legacy[512], g_logs_persist[512], g_persist_logpath[576];
 static int g_p1_ready;
 static long long g_p1_last_check, g_log_max = 1048576;
 static long long now_ms(void) {
@@ -87,6 +94,24 @@ static const char *ivib_dir(void) {
     return (d && *d) ? d : "/tmp/ivibridge";
 }
 
+static int g_autostart;                 /* persistent; default off */
+struct sb;
+static void settings_load(void);
+static int settings_save(void);
+static void zoff_parse_fw(const char *l);
+static void zoff_track_cmd(const char *n);
+static void zoff_json(struct sb *s);
+static void zoff_tick(void);
+static void zoff_want_probe(void);
+static int zoff_queue_save(char *err, size_t en);
+static void cal_tick(void);
+static void cal_on_line(const char *l);
+static int cal_busy(void);
+static void cal_json(struct sb *s);
+static void cal_cmd_done(int timed_out, int failed, const char *fail);
+static void cal_settings_write(FILE *f);
+static void cal_settings_read(const char *line);
+static void cal_init(void);
 /* compact SHA-256, used to verify job-file copies to p1 */
 static uint32_t rotr32(uint32_t x, int n) { return (x >> n) | (x << (32 - n)); }
 static void sha256_block(uint32_t h[8], const unsigned char blk[64]) {
@@ -255,6 +280,8 @@ static void parse_status(const char *l) {
         p += 9; while (*p == ' ' || *p == ':') p++;
         snprintf(S.head, sizeof S.head, "%s", p);
     } else if (istrstr(l, "No Print Head")) snprintf(S.head, sizeof S.head, "none");
+    zoff_parse_fw(l);
+    cal_on_line(l);
 }
 /* fan state, tracked from every M106/M107 written to the STM32 (app, page, job stream). The firmware never
    reports fan state, so this is the bridge's record of the last commands sent: P0/P1, 0..255, -1 = unknown */
@@ -290,7 +317,7 @@ static int head_is_laser(void) {
 }
 
 /* ------------------------------------------------------------------ fds */
-static int g_ser = -1, g_ptm = -1, g_pts_keep = -1, g_lfd = -1;
+static int g_ser = -1, g_ptm = -1, g_pts_keep = -1, g_lfd = -1, g_lfd2 = -1;
 static char g_ptsname[64];
 static struct stat g_orig; static int g_have_orig;     /* original /dev/ttyUSB0 node */
 static long long g_ser_retry_ms;
@@ -321,7 +348,7 @@ static struct {
     int quiet;                                         /* automatic page poll (M114): kept out of the console view */
 } W;
 static int g_next_quiet;                               /* set just before net_send for a quiet queued command */
-enum { P_QUERY, P_JOBLINE, P_JOBCTL, P_START, P_POLL };
+enum { P_QUERY, P_JOBLINE, P_JOBCTL, P_START, P_POLL, P_CAL };
 
 /* network console queue (validated commands from HTTP) */
 static char g_netq[16][96]; static int g_netq_h, g_netq_n;
@@ -360,7 +387,12 @@ static int copy_verify_unlink(const char *src, const char *dst) {
     struct stat ss, ds;
     if (stat(src, &ss)) return -1;
     int in = open(src, O_RDONLY); if (in < 0) return -1;
-    char tmp[1100]; snprintf(tmp, sizeof tmp, "%s.part", dst);
+    char tmp[1100];
+    {
+        const char *slash = strrchr(dst, '/');
+        if (slash) snprintf(tmp, sizeof tmp, "%.*s/.%s.part", (int)(slash - dst), dst, slash + 1);
+        else snprintf(tmp, sizeof tmp, ".%s.part", dst);
+    }
     int out = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (out < 0) { close(in); return -1; }
     char buf[8192]; ssize_t n; int ok = 1;
@@ -415,9 +447,10 @@ static void refresh_p1(void) {
     if (!root[0]) return;
     if (!g_p1_ready) {
         snprintf(g_p1root, sizeof g_p1root, "%s", root);
-        snprintf(g_jobs_persist, sizeof g_jobs_persist, "%s/ivibridge_jobs", root);
+        snprintf(g_jobs_persist, sizeof g_jobs_persist, "%s", root);
+        snprintf(g_jobs_legacy, sizeof g_jobs_legacy, "%s/ivibridge_jobs", root);
         snprintf(g_logs_persist, sizeof g_logs_persist, "%s/ivibridge_logs", root);
-        mkdir(g_jobs_persist, 0755); mkdir(g_logs_persist, 0755);
+        mkdir(g_logs_persist, 0755);
         snprintf(g_persist_logpath, sizeof g_persist_logpath, "%s/ivibridge.log", g_logs_persist);
         seed_persist_log();
         if (!g_plog) g_plog = fopen(g_persist_logpath, "a");
@@ -439,6 +472,10 @@ static int find_job_file(const char *name, char *out, size_t on) {
     if (g_p1_ready) {
         snprintf(out, on, "%s/%s", g_jobs_persist, name);
         if (!access(out, R_OK)) return 0;
+        if (g_jobs_legacy[0]) {
+            snprintf(out, on, "%s/%s", g_jobs_legacy, name);
+            if (!access(out, R_OK)) return 0;
+        }
     }
     snprintf(out, on, "%s/%s", g_updir, name);
     return access(out, R_OK) ? -1 : 0;
@@ -544,7 +581,7 @@ static int nook_cmd(const char *n) { return cmd_is(n, "M2410") || cmd_word(n, "M
 static void app_forward(const char *raw) {
     char n[LINEMAX]; norm_cmd(raw, n, sizeof n);
     if (g_ser < 0 || write_all(g_ser, raw, strlen(raw), 1000) < 0) { logf_("serial write (app) failed"); return; }
-    g_app_lines++; g_last_app_tx = now_ms(); g_owner = OWN_APP; fan_track(n);
+    g_app_lines++; g_last_app_tx = now_ms(); g_owner = OWN_APP; fan_track(n); zoff_track_cmd(n);
     if (nook_cmd(n)) g_app_settle_until = now_ms() + 1500; else g_app_pending++;
     if (n[0]) con_add('a', n);
 }
@@ -559,6 +596,7 @@ static void net_send(const char *line, int kind, int purpose, int timeout_ms, co
     g_owner = OWN_NET;
     if (purpose != P_QUERY || g_netq_n == 0) g_net_want_since = 0;   /* queued console commands go as one burst */
     if (to_ser_line(line) < 0) { W.failed = 1; snprintf(W.fail, sizeof W.fail, "serial write failed"); }
+    else zoff_track_cmd(line);
     g_net_lines++; if (!W.quiet) con_add('>', line);
 }
 
@@ -612,6 +650,7 @@ static int prescan(const char *path, long *bytes, long *lines, char *err, size_t
 
 static int job_start(const char *path, const char *name, char *err, size_t en) {
     if (job_active()) { snprintf(err, en, "a network job is already running"); return 409; }
+    if (cal_busy()) { snprintf(err, en, "calibration is running; jobs are blocked until it finishes"); return 409; }
     if (AJ.active) { snprintf(err, en, "the touchscreen is printing; network jobs are blocked until it finishes"); return 409; }
     if (g_ser < 0) { snprintf(err, en, "printer link is down"); return 409; }
     if (S.working[0] && starts(S.working, "WORKING")) { snprintf(err, en, "printer reports %s; finish or stop that job first", S.working); return 409; }
@@ -626,6 +665,8 @@ static int job_start(const char *path, const char *name, char *err, size_t en) {
     logi_("job %s: queued (%ld lines, %ld bytes)", keep, l, b);
     return 0;
 }
+
+#include "ivi_request.inc"
 
 static unsigned cks(const char *s) { unsigned c = 0; while (*s) c ^= (unsigned char)*s++; return c & 0xff; }
 
@@ -696,6 +737,7 @@ static void net_done(void) {
     snprintf(fail, sizeof fail, "%s", W.fail); snprintf(cmd, sizeof cmd, "%s", W.cmd);
     if (W.kind == NW_EXPECT) g_net_settle_until = now_ms() + 700;
     W.kind = NW_NONE; g_owner = OWN_NONE;
+    if (p == P_CAL) { cal_cmd_done(to, failed, fail); return; }
     if (!job_active() || p == P_QUERY || p == P_POLL) return;
     if (failed) { job_end(J_ERROR, fail); return; }
     if (p == P_JOBLINE) {                 /* line accounting is independent of pause state (firmware may pause mid-line) */
@@ -827,7 +869,8 @@ static void ser_line(char *raw, int rawlen) {
         else if (is_async(lp)) to_app(raw, rawlen);          /* reports the app normally sees */
         if (lp[0] && !is_async(lp) && !W.quiet) con_add('<', lp);
         if (strstr(lp, "echo:busy")) {
-            W.deadline = now_ms() + (W.purpose == P_JOBLINE ? 600000 : 30000);
+            W.deadline = now_ms() + (W.purpose == P_JOBLINE ? 600000 : (W.purpose == P_CAL ? 120000 : 30000));
+            if (W.purpose == P_CAL && W.matched) W.settle_until = now_ms() + 8000;
             if (W.stall_at && W.stall_at < now_ms() + 2 * g_stall_ms) W.stall_at = now_ms() + 2 * g_stall_ms;
         }
         if (W.purpose == P_JOBLINE && (istarts(lp, "Resend:") || istarts(lp, "rs "))) {
@@ -839,7 +882,17 @@ static void ser_line(char *raw, int rawlen) {
             W.failed = 1; snprintf(W.fail, sizeof W.fail, "printer refused to start: %s", lp);
         }
         if (W.kind == NW_EXPECT) {
-            for (int i = 0; i < W.nexp; i++) if (!W.matched && istrstr(lp, W.expect[i])) { W.matched = 1; W.settle_until = now_ms() + 300; }
+            for (int i = 0; i < W.nexp; i++) if (!W.matched && istrstr(lp, W.expect[i])) {
+                W.matched = 1;
+                int settle = 300;
+                if (W.purpose == P_CAL) {
+                    const char *e = getenv("IVIB_CAL_SETTLE_MS");
+                    settle = (e && *e) ? atoi(e) : 45000;
+                    if (settle < 100) settle = 100;
+                    if (settle > 120000) settle = 120000;
+                }
+                W.settle_until = now_ms() + settle;
+            }
             if (!W.matched && W.ack[0] && !W.acked && istrstr(lp, W.ack)) {
                 W.acked = 1; long long g = now_ms() + W.ack_grace_ms; if (g < W.deadline) W.deadline = g;
             }
@@ -894,7 +947,7 @@ static int allowed_during_net_job(const char *n) {
 static void app_line(char *raw) {
     char n[LINEMAX]; norm_cmd(raw, n, sizeof n);
     if (cmd_is(n, "M2411 S2") && !job_active()) {
-        memset(&AJ, 0, sizeof AJ); AJ.active = 1; AJ.started_ms = now_ms(); AJ.m73_pct = -1; logf_("touchscreen job started");
+        memset(&AJ, 0, sizeof AJ); AJ.active = 1; AJ.started_ms = now_ms(); AJ.m73_pct = -1; g_assist_open = 0; logf_("touchscreen job started");
     }
     if (AJ.active) {
         AJ.last_ms = now_ms();
@@ -919,6 +972,9 @@ static void app_line(char *raw) {
 /* ------------------------------------------------------------------ periodic */
 static void tick(void) {
     long long t = now_ms();
+    req_tick();
+    zoff_tick();
+    cal_tick();
     /* cancel is never blocked behind an in-flight wait: give the reply a moment, then abandon it */
     if (W.kind != NW_NONE && job_active() && J.want_cancel && J.st != J_CANCELLING && J.st != J_COOLDOWN) {
         if (!W.cancel_at) W.cancel_at = t + g_cancel_grace_ms;
@@ -954,7 +1010,7 @@ static void tick(void) {
         if (g_owner == OWN_APP && g_app_pending) break;
         char line[LINEMAX + 4]; snprintf(line, sizeof line, "%s", g_appq[g_appq_h]); g_appq_h = (g_appq_h + 1) % APPQ; g_appq_n--;
         char n[LINEMAX]; norm_cmd(line, n, sizeof n);
-        if (job_active() && !allowed_during_net_job(n)) { g_app_dropped++; g_app_dropped_total++; continue; }
+        if ((job_active() || cal_busy()) && !allowed_during_net_job(n)) { g_app_dropped++; g_app_dropped_total++; continue; }
         app_forward(line);
     }
     /* touchscreen job end: an end word then quiet, or firmware idle + quiet */
@@ -963,7 +1019,7 @@ static void tick(void) {
         if ((AJ.end_seen && t - AJ.last_ms > 3000) || (idle && t - AJ.last_ms > 15000)) { AJ.active = 0; logf_("touchscreen job ended (%ld lines)", AJ.lines); }
     }
     job_tick();
-    if (g_netq_n && net_ready() && !AJ.active && (!job_active() || J.st == J_PRINTING || J.st == J_PAUSED)) {
+    if (g_netq_n && net_ready() && !AJ.active && !cal_busy() && (!job_active() || J.st == J_PRINTING || J.st == J_PAUSED)) {
         char c[96]; snprintf(c, sizeof c, "%s", g_netq[g_netq_h]);
         int qq = g_netq_quiet[g_netq_h]; g_netq_quiet[g_netq_h] = 0; g_netq_h = (g_netq_h + 1) % 16; g_netq_n--;
         g_next_quiet = qq;
@@ -971,7 +1027,7 @@ static void tick(void) {
         else net_send(c, NW_OK, P_QUERY, 10000, NULL, NULL, NULL);
     }
     /* idle temperature poll, only if the firmware's own reports stopped */
-    if (g_poll_s > 0 && !job_active() && !AJ.active && net_ready() && t - g_last_app_tx > 2000 &&
+    if (g_poll_s > 0 && !job_active() && !AJ.active && !cal_busy() && net_ready() && t - g_last_app_tx > 2000 &&
         t - S.t_ms > g_poll_s * 1000LL && t - g_last_ser_rx > 1000) {
         S.t_ms = t;
         net_send("M105", NW_OK, P_POLL, 5000, NULL, NULL, NULL);
@@ -981,7 +1037,8 @@ static void tick(void) {
 /* ------------------------------------------------------------------ HTTP */
 struct cli {
     int fd; char hdr[16384]; int hn; int hdone; long clen, got; char *body; int up_fd; char up_tmp[600];
-    char method[8], path[512], query[512], ctype[256], key[160]; long long t0; int lan;
+    char method[8], path[512], query[512], ctype[256], key[160]; long long t0; int lan, loop;
+    int await_id, await_kind; char await_name[256];
 };
 static struct cli C[MAXCLI];
 
@@ -1008,14 +1065,35 @@ static void sb_str(struct sb *s, const char *v) {
     }
     sb_add(s, "\"");
 }
-static void reply(struct cli *c, int code, const char *ctype, const char *body, size_t n) {
+#include "ivi_settings.inc"
+
+static void reply_full(struct cli *c, int code, const char *ctype, const char *cache, const char *body, size_t n) {
     const char *msg = code == 200 ? "OK" : code == 201 ? "Created" : code == 204 ? "No Content" : code == 400 ? "Bad Request" :
         code == 403 ? "Forbidden" : code == 404 ? "Not Found" : code == 409 ? "Conflict" : code == 413 ? "Payload Too Large" : "Error";
     char h[512]; int k = snprintf(h, sizeof h, "HTTP/1.1 %d %s\r\nServer: ivibridge/%s\r\nContent-Type: %s\r\nContent-Length: %zu\r\n"
-        "Cache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: X-Api-Key, Content-Type\r\nConnection: close\r\n\r\n",
-        code, msg, VERSION, ctype, n);
+        "Cache-Control: %s\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: X-Api-Key, Content-Type\r\nConnection: close\r\n\r\n",
+        code, msg, VERSION, ctype, n, cache);
     if (write_all(c->fd, h, k, 5000) < 0) return;
     if (n) write_all(c->fd, body, n, 5000);
+}
+static void reply(struct cli *c, int code, const char *ctype, const char *body, size_t n) {
+    reply_full(c, code, ctype, "no-store", body, n);
+}
+static int serve_public_asset(struct cli *c, const char *p) {
+    if (!strcmp(p, "/apple-touch-icon-precomposed.png")) p = "/apple-touch-icon.png";
+    for (size_t i = 0; i < sizeof ivi_icons / sizeof ivi_icons[0]; i++) {
+        if (!strcmp(p, ivi_icons[i].path)) {
+            reply_full(c, 200, ivi_icons[i].ctype, "public, max-age=86400",
+                       (const char *)ivi_icons[i].data, ivi_icons[i].size);
+            return 1;
+        }
+    }
+    if (!strcmp(p, "/manifest.webmanifest") || !strcmp(p, "/manifest.json")) {
+        reply_full(c, 200, "application/manifest+json", "public, max-age=86400",
+                   icon_manifest, sizeof icon_manifest - 1);
+        return 1;
+    }
+    return 0;
 }
 static void jreply(struct cli *c, int code, struct sb *s) { reply(c, code, "application/json", s->b ? s->b : "{}", s->b ? s->n : 2); free(s->b); }
 static void jerr(struct cli *c, int code, const char *msg) { struct sb s = {0}; sb_add(&s, "{\"error\":"); sb_str(&s, msg); sb_add(&s, "}"); jreply(c, code, &s); }
@@ -1031,6 +1109,7 @@ static int jget_str(const char *j, const char *k, char *out, size_t on) {
     out[i] = 0; return i > 0;
 }
 static int jget_bool(const char *j, const char *k) { char v[16]; return jget_str(j, k, v, sizeof v) && (!strcmp(v, "true") || !strcmp(v, "1")); }
+#include "ivi_cal.inc"
 
 /* console allowlist, same limits as ivi_bridge.py check_command (no M3/M4 at all) */
 static int check_command(const char *in, char *out, size_t on, char *err, size_t en) {
@@ -1063,6 +1142,11 @@ static int check_command(const char *in, char *out, size_t on, char *err, size_t
             snprintf(out, on, "%s", n); return 0;
         }
     }
+    {
+        int h = 0, rc = parse_m290(n, &h);
+        if (rc == 0) { snprintf(out, on, "%s", n); return 0; }
+        if (rc == 1) { snprintf(err, en, "M290 Z only allows +/-0.01, +/-0.02, or +/-0.05 mm"); return -1; }
+    }
     if (cmd_word(n, "G1")) {
         double cap[128] = {0}; cap['X'] = 150; cap['Y'] = 150; cap['Z'] = 300; cap['E'] = 150; cap['F'] = 6000;
         int seen[128] = {0}; char tmp[160]; snprintf(tmp, sizeof tmp, "%s", n + 2);
@@ -1094,6 +1178,7 @@ static int authed(struct cli *c) {
 static const char *state_text(char *buf, size_t n) {
     if (g_ser < 0) return "Offline";
     if (job_active()) return jstate_name[J.st];
+    if (cal_busy()) return "Calibrating";
     if (AJ.active) return "Printing";
     if (S.working[0] && starts(S.working, "WORKING")) return (S.systat == 5 || S.systat == 4) ? "Paused" : "Printing";
     if (J.st == J_ERROR && J.err[0] && now_ms() - J.ended_ms < 60000) { snprintf(buf, n, "Error: %s", J.err); return buf; }
@@ -1108,7 +1193,7 @@ static void api_printer(struct cli *c) {
     sb_add(&s, ",\"flags\":{\"operational\":%s,\"printing\":%s,\"paused\":%s,\"pausing\":%s,\"cancelling\":%s,\"ready\":%s,\"error\":%s,\"closedOrError\":%s}},",
         g_ser >= 0 ? "true" : "false", printing ? "true" : "false", paused ? "true" : "false", !strcmp(st, "Pausing") ? "true" : "false",
         !strcmp(st, "Cancelling") ? "true" : "false",
-        (!job_active() && !AJ.active && g_ser >= 0 && !printing && !paused) ? "true" : "false", starts(st, "Error") ? "true" : "false",
+        (!job_active() && !AJ.active && !cal_busy() && g_ser >= 0 && !printing && !paused) ? "true" : "false", starts(st, "Error") ? "true" : "false",
         (g_ser < 0 || starts(st, "Error")) ? "true" : "false");
     if (S.have_t) sb_add(&s, "\"temperature\":{\"tool0\":{\"actual\":%.1f,\"target\":%.1f,\"offset\":0},\"bed\":{\"actual\":%.1f,\"target\":%.1f,\"offset\":0}},",
         S.t_act, S.t_tgt, S.b_act, S.b_tgt);
@@ -1126,8 +1211,189 @@ static void api_printer(struct cli *c) {
         if (f0 < 0) sb_add(&s, "null,"); else sb_add(&s, "%d,", f0);
         if (f1 < 0) sb_add(&s, "null]"); else sb_add(&s, "%d]", f1);
     }
+    sb_add(&s, ",\"autostart\":%s,\"zoffset\":", g_autostart ? "true" : "false");
+    zoff_json(&s);
+    zoff_want_probe();
+    sb_add(&s, ",\"cal\":");
+    cal_json(&s);
     sb_add(&s, ",\"report_age_s\":%.1f}}", S.t_ms ? (now_ms() - S.t_ms) / 1000.0 : -1.0);
     jreply(c, 200, &s);
+}
+
+
+static void api_ivi_settings_get(struct cli *c) {
+    struct sb s = {0};
+    sb_add(&s, "{\"autostart\":%s,\"zoffset\":", g_autostart ? "true" : "false");
+    zoff_json(&s);
+    zoff_want_probe();
+    sb_add(&s, "}");
+    jreply(c, 200, &s);
+}
+
+static void api_ivi_settings_post(struct cli *c, const char *body) {
+    char err[192];
+    int changed = 0;
+    char av[16];
+    if (jget_str(body, "autostart", av, sizeof av)) {
+        g_autostart = jget_bool(body, "autostart") ? 1 : 0;
+        if (settings_save()) { jerr(c, 500, "could not persist settings"); return; }
+        changed = 1;
+        logi_("settings: autostart=%d", g_autostart);
+    }
+    if (jget_bool(body, "set_zero") || jget_bool(body, "zero")) {
+        int rc = zoff_set_zero(err, sizeof err);
+        if (rc) { jerr(c, rc, err); return; }
+        struct sb s = {0};
+        sb_add(&s, "{\"ok\":true,\"autostart\":%s,\"message\":", g_autostart ? "true" : "false");
+        sb_str(&s, err);
+        sb_add(&s, ",\"zoffset\":"); zoff_json(&s); sb_add(&s, "}");
+        jreply(c, 200, &s);
+        return;
+    }
+    if (jget_bool(body, "save_zoffset") || jget_bool(body, "save")) {
+        int rc = zoff_queue_save(err, sizeof err);
+        if (rc) { jerr(c, rc, err); return; }
+        struct sb s = {0};
+        sb_add(&s, "{\"ok\":true,\"autostart\":%s,\"message\":", g_autostart ? "true" : "false");
+        sb_str(&s, err);
+        sb_add(&s, ",\"zoffset\":"); zoff_json(&s); sb_add(&s, "}");
+        jreply(c, 200, &s);
+        return;
+    }
+    if (!changed) { jerr(c, 400, "expected autostart, set_zero, and/or save_zoffset"); return; }
+    api_ivi_settings_get(c);
+}
+
+static void api_ivi_zsave(struct cli *c) {
+    char err[192];
+    int rc = zoff_queue_save(err, sizeof err);
+    if (rc) { jerr(c, rc, err); return; }
+    struct sb s = {0};
+    sb_add(&s, "{\"ok\":true,\"message\":"); sb_str(&s, err);
+    sb_add(&s, ",\"zoffset\":"); zoff_json(&s); sb_add(&s, "}");
+    jreply(c, 200, &s);
+}
+
+static void api_ivi_zzero(struct cli *c) {
+    char err[192];
+    int rc = zoff_set_zero(err, sizeof err);
+    if (rc) { jerr(c, rc, err); return; }
+    struct sb s = {0};
+    sb_add(&s, "{\"ok\":true,\"message\":"); sb_str(&s, err);
+    sb_add(&s, ",\"zoffset\":"); zoff_json(&s); sb_add(&s, "}");
+    jreply(c, 200, &s);
+}
+
+/* GET /api/fan: read-only fan state for the touchscreen's Fan toggle (polled from 127.0.0.1, no key).
+   "on" = any fan above 0, "fan" = highest fan in %, "fans" = P0/P1 in %; all null until a fan command is seen */
+static void api_fan(struct cli *c) {
+    struct sb s = {0};
+    int f0 = fan_pct(g_fan[0]), f1 = fan_pct(g_fan[1]), fm = f0 > f1 ? f0 : f1;
+    if (fm < 0) { sb_add(&s, "{\"on\":null,\"fan\":null,\"fans\":[null,null]}"); jreply(c, 200, &s); return; }
+    sb_add(&s, "{\"on\":%s,\"fan\":%d,\"fans\":[", fm > 0 ? "true" : "false", fm);
+    if (f0 < 0) sb_add(&s, "null,"); else sb_add(&s, "%d,", f0);
+    if (f1 < 0) sb_add(&s, "null]}"); else sb_add(&s, "%d]}", f1);
+    jreply(c, 200, &s);
+}
+
+static int qget(const char *q, const char *k, char *out, size_t on);
+
+static void req_json(struct sb *s) {
+    if (R.st != R_PENDING) { sb_add(s, "{\"pending\":false}"); return; }
+    sb_add(s, "{\"pending\":true,\"id\":%d,\"cmd\":", R.id); sb_str(s, R.cmd);
+    if (R.file[0]) { sb_add(s, ",\"file\":"); sb_str(s, R.file); }
+    if (!strcmp(R.cmd, "start")) sb_add(s, ",\"autostart\":%s", R.autostart ? "true" : "false");
+    if (R.nozzle != INT_MIN) sb_add(s, ",\"nozzle\":%d", R.nozzle);
+    if (R.bed != INT_MIN) sb_add(s, ",\"bed\":%d", R.bed);
+    if (R.speed != INT_MIN) {
+        sb_add(s, ",\"speed\":%d", R.speed);
+        if (!strcmp(R.cmd, "speed")) sb_add(s, ",\"value\":%d", R.speed);
+    }
+    if (R.flow != INT_MIN) {
+        sb_add(s, ",\"flow\":%d", R.flow);
+        if (!strcmp(R.cmd, "flow")) sb_add(s, ",\"value\":%d", R.flow);
+    }
+    if (R.zoff != INT_MIN) {
+        char zb[16]; zoff_fmt(R.zoff, zb, sizeof zb);
+        sb_add(s, ",\"zoffset\":%s", zb);
+        if (!strcmp(R.cmd, "zoffset")) sb_add(s, ",\"value\":%s", zb);
+    }
+    sb_add(s, "}");
+}
+
+static int req_path(const char *p) {
+    return !strcmp(p, "/api/ivi/r") || !strcmp(p, "/api/ivi/request")
+        || !strcmp(p, "/api/ivi/a") || !strcmp(p, "/api/ivi/request/ack");
+}
+
+static unsigned g_hook_polls;
+static long long g_hook_poll_log_ms;
+static void api_request_get(struct cli *c) {
+    if (c->loop) {
+        g_hook_polls++;
+        long long t = now_ms();
+        if (g_hook_polls == 1 || t - g_hook_poll_log_ms >= 30000) {
+            g_hook_poll_log_ms = t;
+            logi_("qml hook poll n=%u pending=%d", g_hook_polls, R.st == R_PENDING);
+        }
+    }
+    struct sb s = {0}; req_json(&s); jreply(c, 200, &s);
+}
+
+static void api_request_ack(struct cli *c) {
+    char idv[32] = "", okv[16] = "1", res[80] = "";
+    qget(c->query, "id", idv, sizeof idv);
+    qget(c->query, "ok", okv, sizeof okv);
+    qget(c->query, "result", res, sizeof res);
+    int id = atoi(idv);
+    if (R.st != R_PENDING || id != R.id) { jerr(c, 409, "no matching pending request"); return; }
+    int ok = strcmp(okv, "0") && strcasecmp(okv, "false");
+    if (!res[0]) snprintf(res, sizeof res, ok ? "ok" : "error");
+    req_finish(ok, res);
+    struct sb s = {0}; sb_add(&s, "{\"ok\":%s,\"id\":%d,\"result\":", ok ? "true" : "false", id); sb_str(&s, res); sb_add(&s, "}");
+    jreply(c, 200, &s);
+}
+
+static void req_complete_http(int ok, const char *result) {
+    for (int i = 0; i < MAXCLI; i++) {
+        struct cli *c = &C[i];
+        if (c->fd < 0 || !c->await_id || c->await_id != R.id) continue;
+        int kind = c->await_kind; char name[256];
+        snprintf(name, sizeof name, "%s", c->await_name);
+        c->await_id = 0; c->await_kind = 0;
+        if (kind == AWAIT_UPLOAD) {
+            struct sb s = {0};
+            sb_add(&s, "{\"done\":true,\"files\":{\"local\":{\"name\":"); sb_str(&s, name);
+            sb_add(&s, ",\"origin\":\"local\"}},\"effectivePrint\":%s,\"effectiveSelect\":true,\"ivi\":{\"mode\":\"assist\",\"request_id\":%d,\"result\":",
+                ok ? "true" : "false", R.id);
+            sb_str(&s, result);
+            sb_add(&s, "}}");
+            jreply(c, 201, &s);
+        } else if (kind == AWAIT_NOCONTENT) {
+            if (ok) reply(c, 204, "text/plain", "", 0);
+            else jerr(c, 409, result);
+        } else {
+            if (ok) {
+                struct sb s = {0}; sb_add(&s, "{\"result\":"); sb_str(&s, result); sb_add(&s, "}"); jreply(c, 200, &s);
+            } else jerr(c, 409, result);
+        }
+        cli_close(c);
+    }
+}
+
+static int launch_start(struct cli *c, const char *path, const char *name, char *err, size_t en, int kind) {
+    int rc = native_start(path, name, err, en);
+    if (!rc && !g_net_stream) {
+        c->await_id = R.id; c->await_kind = kind;
+        snprintf(c->await_name, sizeof c->await_name, "%s", name ? name : "");
+    }
+    return rc;
+}
+
+static int launch_req(struct cli *c, const char *cmd, const char *file, int timeout_ms, char *err, size_t en, int kind) {
+    int rc = req_begin(cmd, file ? file : "", timeout_ms, err, en);
+    if (!rc) { c->await_id = R.id; c->await_kind = kind; }
+    return rc;
 }
 
 static void api_job(struct cli *c) {
@@ -1450,10 +1716,11 @@ static int delete_job(const char *name, char *err, size_t en) {
     return 0;
 }
 
+static int print_named(const char *name, char *err, size_t en) __attribute__((unused));
 static int print_named(const char *name, char *err, size_t en) {
     char path[1024];
     if (find_job_file(name, path, sizeof path)) { snprintf(err, en, "no such file"); return 404; }
-    return job_start(path, name, err, en);
+    return native_start(path, name, err, en);
 }
 
 static void api_thumb(struct cli *c, const char *name) {
@@ -1473,7 +1740,7 @@ static void api_files_dir(struct sb *s, const char *dir, int *first, char seen[]
         if (e->d_name[0] == '.' || l < 7 || strcasecmp(e->d_name + l - 6, ".gcode")) continue;
         int dup = 0; for (int i = 0; i < *nseen; i++) if (!strcmp(seen[i], e->d_name)) { dup = 1; break; }
         if (dup) continue;
-        char p[1024]; snprintf(p, sizeof p, "%s/%s", dir, e->d_name); struct stat st; if (stat(p, &st)) continue;
+        char p[1024]; snprintf(p, sizeof p, "%s/%s", dir, e->d_name); struct stat st; if (stat(p, &st) || !S_ISREG(st.st_mode)) continue;
         sb_add(s, "%s{\"name\":", *first ? "" : ","); sb_str(s, e->d_name);
         sb_add(s, ",\"origin\":\"local\",\"type\":\"machinecode\",\"size\":%lld,\"date\":%lld,\"mtime\":%lld",
             (long long)st.st_size, (long long)st.st_mtime, (long long)st.st_mtime);
@@ -1491,7 +1758,10 @@ static void api_files(struct cli *c) {
     struct sb s = {0}; sb_add(&s, "{\"files\":[");
     int first = 1; char seen[64][256]; int nseen = 0;
     refresh_p1();
-    if (g_p1_ready) api_files_dir(&s, g_jobs_persist, &first, seen, &nseen, 64);
+    if (g_p1_ready) {
+        api_files_dir(&s, g_jobs_persist, &first, seen, &nseen, 64);
+        if (g_jobs_legacy[0]) api_files_dir(&s, g_jobs_legacy, &first, seen, &nseen, 64);
+    }
     api_files_dir(&s, g_updir, &first, seen, &nseen, 64);
     const char *frd = updir_now();
     struct statvfs v; long long fr = statvfs(frd, &v) == 0 ? (long long)v.f_bavail * v.f_frsize : 0;
@@ -1550,8 +1820,9 @@ static void finish_upload(struct cli *c) {
     logi_("upload stored %s (%zu bytes)", dst, outlen);
     int start = !strcasecmp(printv, "true");
     if (start) {
-        char err[256]; int rc = job_start(dst, safe, err, sizeof err);
+        char err[256]; int rc = launch_start(c, dst, safe, err, sizeof err, AWAIT_UPLOAD);
         if (rc) { jerr(c, rc, err); return; }
+        if (!g_net_stream) return;
     } else snprintf(J.last_name, sizeof J.last_name, "%s", safe);
     struct sb s = {0}; sb_add(&s, "{\"done\":true,\"files\":{\"local\":{\"name\":"); sb_str(&s, safe);
     sb_add(&s, ",\"origin\":\"local\"}},\"effectivePrint\":%s,\"effectiveSelect\":true}", start ? "true" : "false");
@@ -1585,6 +1856,22 @@ static void handle(struct cli *c) {
     const char *p = c->path; int get = !strcmp(c->method, "GET"), post = !strcmp(c->method, "POST");
     if (!strcmp(c->method, "OPTIONS")) { reply(c, 204, "text/plain", "", 0); return; }
     if (get && (!strcmp(p, "/") || !strcmp(p, "/index.html"))) { serve_www(c, "index.html"); return; }
+    if (get && serve_public_asset(c, p)) return;
+    if (get && !strcmp(p, "/api/fan")) { api_fan(c); return; }       /* public, read-only: no writes possible */
+    if (get && !strcmp(p, "/api/ivi/settings")) {
+        if (!c->loop) {
+            if (g_apikey[0] && !authed(c)) { jerr(c, 403, "Invalid API key"); return; }
+            if (!g_apikey[0]) { jerr(c, 403, "Invalid API key"); return; }
+        }
+        api_ivi_settings_get(c); return;
+    }
+    if (get && req_path(p)) {   /* loopback is enough (QML, no key), others need the key */
+        if (!c->loop && g_apikey[0] && !authed(c)) { jerr(c, 403, "Invalid API key"); return; }
+        if (!c->loop && !g_apikey[0]) { jerr(c, 403, "Invalid API key"); return; }
+        if (!strcmp(p, "/api/ivi/r") || !strcmp(p, "/api/ivi/request")) { api_request_get(c); return; }
+        if (!strcmp(p, "/api/ivi/a") || !strcmp(p, "/api/ivi/request/ack")) { api_request_ack(c); return; }
+        jerr(c, 404, "not found"); return;
+    }
     if (g_apikey[0] && !authed(c)) { jerr(c, 403, "Invalid API key"); return; }
     if (get) {
         if (!strcmp(p, "/api/version")) { struct sb s = {0}; sb_add(&s, "{\"api\":\"0.1\",\"server\":\"1.9.0\",\"text\":\"OctoPrint (ivi-bridge %s)\"}", VERSION); jreply(c, 200, &s); return; }
@@ -1606,6 +1893,8 @@ static void handle(struct cli *c) {
         if (starts(p, "/api/files")) { api_files(c); return; }
         if (!strcmp(p, "/api/ivi/console")) { api_console(c); return; }
         if (!strcmp(p, "/api/ivi/link")) { api_link(c); return; }
+        if (!strcmp(p, "/api/ivi/settings")) { api_ivi_settings_get(c); return; }
+        if (!strcmp(p, "/api/ivi/cal")) { api_ivi_cal_get(c); return; }
         jerr(c, 404, "not found"); return;
     }
     if (!strcmp(c->method, "DELETE") && starts(p, "/api/files/local/")) {
@@ -1623,8 +1912,11 @@ static void handle(struct cli *c) {
         jget_str(body, "command", cmd, sizeof cmd);
         if (strcmp(cmd, "select") || safe_name(p + 17, safe, sizeof safe) < 0) { jerr(c, 400, "unsupported"); return; }
         char path[1024]; if (find_job_file(safe, path, sizeof path)) { jerr(c, 404, "no such file"); return; }
-        if (jget_bool(body, "print")) { int rc = job_start(path, safe, err, sizeof err); if (rc) { jerr(c, rc, err); return; } }
-        else snprintf(J.last_name, sizeof J.last_name, "%s", safe);
+        if (jget_bool(body, "print")) {
+            int rc = launch_start(c, path, safe, err, sizeof err, AWAIT_NOCONTENT);
+            if (rc) { jerr(c, rc, err); return; }
+            if (!g_net_stream) return;
+        } else snprintf(J.last_name, sizeof J.last_name, "%s", safe);
         reply(c, 204, "text/plain", "", 0); return;
     }
     if (!strcmp(p, "/api/ivi/files") || !strcmp(p, "/api/ivi/queue")) {
@@ -1636,7 +1928,15 @@ static void handle(struct cli *c) {
             if (!g_qn) { jerr(c, 409, "queue is empty"); return; }
             snprintf(safe, sizeof safe, "%s", g_queue[0]);
             memmove(g_queue[0], g_queue[1], (size_t)(g_qn - 1) * sizeof g_queue[0]); g_qn--;
-            int rc = print_named(safe, err, sizeof err);
+            char path[1024];
+            if (find_job_file(safe, path, sizeof path)) {
+                if (g_qn < QMAX) {
+                    memmove(g_queue[1], g_queue[0], (size_t)g_qn * sizeof g_queue[0]);
+                    snprintf(g_queue[0], sizeof g_queue[0], "%s", safe); g_qn++;
+                }
+                jerr(c, 404, "no such file"); return;
+            }
+            int rc = launch_start(c, path, safe, err, sizeof err, AWAIT_JSON);
             if (rc) {
                 if (g_qn < QMAX) {
                     memmove(g_queue[1], g_queue[0], (size_t)g_qn * sizeof g_queue[0]);
@@ -1644,12 +1944,17 @@ static void handle(struct cli *c) {
                 }
                 jerr(c, rc, err); return;
             }
+            if (!g_net_stream) return;
             struct sb s = {0}; sb_add(&s, "{\"message\":\"started %s\"}", safe);
             jreply(c, 200, &s); return;
         }
         if (safe_name(name, safe, sizeof safe) < 0) { jerr(c, 400, "bad file name"); return; }
         if (!strcmp(act, "print") || !strcmp(act, "select")) {
-            int rc = print_named(safe, err, sizeof err); if (rc) { jerr(c, rc, err); return; }
+            char path[1024];
+            if (find_job_file(safe, path, sizeof path)) { jerr(c, 404, "no such file"); return; }
+            int rc = launch_start(c, path, safe, err, sizeof err, AWAIT_JSON);
+            if (rc) { jerr(c, rc, err); return; }
+            if (!g_net_stream) return;
             struct sb s = {0}; sb_add(&s, "{\"message\":\"printing\"}"); jreply(c, 200, &s); return;
         }
         if (!strcmp(act, "delete")) {
@@ -1667,8 +1972,13 @@ static void handle(struct cli *c) {
         }
         jerr(c, 400, "unsupported action"); return;
     }
+    if (!strcmp(p, "/api/ivi/settings")) { api_ivi_settings_post(c, body); return; }
+    if (!strcmp(p, "/api/ivi/zoffset/save")) { api_ivi_zsave(c); return; }
+    if (!strcmp(p, "/api/ivi/zoffset/zero")) { api_ivi_zzero(c); return; }
+    if (!strcmp(p, "/api/ivi/cal") || starts(p, "/api/ivi/cal/")) { api_ivi_cal_post(c, body, p); return; }
     if (!strcmp(p, "/api/ivi/clear")) {   /* Orca plugin "clear": drop a stale PC job state (M2411 S3), as ivi_bridge.py */
         if (job_active()) { jerr(c, 409, "a job is running; use Cancel"); return; }
+        if (cal_busy()) { jerr(c, 409, "calibration is running"); return; }
         if (AJ.active || (S.working[0] && starts(S.working, "WORKING_SCREEN"))) { jerr(c, 409, "the touchscreen is printing; stop it on the printer"); return; }
         if (g_netq_n + 2 > 16) { jerr(c, 409, "command queue full"); return; }
         snprintf(g_netq[(g_netq_h + g_netq_n) % 16], 96, "M2411 S3"); g_netq_n++;
@@ -1678,12 +1988,27 @@ static void handle(struct cli *c) {
     }
     if (!strcmp(p, "/api/job")) {
         char cmd[32] = "", act[32] = "toggle"; jget_str(body, "command", cmd, sizeof cmd); jget_str(body, "action", act, sizeof act);
-        if (AJ.active && !job_active()) { jerr(c, 409, "the touchscreen owns this job; pause or stop it on the printer"); return; }
+        if (AJ.active && !job_active()) {
+            char err[256]; const char *rcmd = NULL;
+            if (!strcmp(cmd, "start")) { jerr(c, 409, "the touchscreen is already printing"); return; }
+            if (!strcmp(cmd, "pause")) {
+                char sbuf[256]; const char *st = state_text(sbuf, sizeof sbuf);
+                int paused = !strcmp(st, "Paused") || !strcmp(st, "Pausing");
+                if (!strcmp(act, "resume") || (!strcmp(act, "toggle") && paused)) rcmd = "resume";
+                else if (!strcmp(act, "toggle")) rcmd = "toggle";
+                else rcmd = "pause";
+            } else if (!strcmp(cmd, "cancel")) rcmd = "cancel";
+            else { jerr(c, 400, "unsupported command"); return; }
+            int rc = launch_req(c, rcmd, "", REQ_CTL_MS, err, sizeof err, AWAIT_JSON);
+            if (rc) { jerr(c, rc, err); return; }
+            return;
+        }
         if (!strcmp(cmd, "start")) {
             char path[1024], err[256], nm[256];
             if (!J.last_name[0]) { jerr(c, 409, "no file selected"); return; }
             snprintf(nm, sizeof nm, "%s", J.last_name); if (find_job_file(nm, path, sizeof path)) { jerr(c, 404, "no such file"); return; }
-            int rc = job_start(path, nm, err, sizeof err); if (rc) { jerr(c, rc, err); return; }
+            int rc = launch_start(c, path, nm, err, sizeof err, AWAIT_NOCONTENT); if (rc) { jerr(c, rc, err); return; }
+            if (!g_net_stream) return;
             reply(c, 204, "text/plain", "", 0); return;
         }
         if (!job_active()) { jerr(c, 409, "no active job"); return; }
@@ -1695,7 +2020,7 @@ static void handle(struct cli *c) {
         else { jerr(c, 400, "unsupported command"); return; }
         struct sb s = {0}; sb_add(&s, "{\"state\":\"%s\"}", jstate_name[J.st]); jreply(c, 200, &s); return;
     }
-    if (starts(p, "/api/printer/")) {
+        if (starts(p, "/api/printer/")) {
         char list[8][96]; int nl = 0; char v[64], err[200];
         if (!strcmp(p, "/api/printer/command")) {
             char one[96]; if (jget_str(body, "command", one, sizeof one)) snprintf(list[nl++], 96, "%s", one);
@@ -1714,13 +2039,44 @@ static void handle(struct cli *c) {
         else if (!strcmp(p, "/api/printer/tool") && jget_str(body, "factor", v, sizeof v)) snprintf(list[nl++], 96, "M221 S%d", atoi(v));
         else if (!strcmp(p, "/api/printer/printhead") && jget_str(body, "factor", v, sizeof v)) snprintf(list[nl++], 96, "M220 S%d", atoi(v));
         if (!nl) { jerr(c, 400, "no command"); return; }
-        if (AJ.active) { jerr(c, 409, "the touchscreen is printing; controls are read-only"); return; }
+        if (cal_busy()) { jerr(c, 409, "calibration is running; use the Calibration tab"); return; }
+        if (AJ.active || (g_assist_open && now_ms() < g_assist_until)) {
+            int all_adj = 1;
+            for (int i = 0; i < nl; i++) {
+                char out[96], e2[200];
+                if (check_command(list[i], out, sizeof out, e2, sizeof e2)) { jerr(c, 400, e2); return; }
+                snprintf(list[i], 96, "%s", out);
+                if (!is_adjust_cmd(out)) all_adj = 0;
+            }
+            if (!all_adj) { jerr(c, 409, "manual moves, homing, and console G-code are blocked while a touchscreen job runs"); return; }
+            int nozzle = INT_MIN, bed = INT_MIN, speed = INT_MIN, flow = INT_MIN, zoff = INT_MIN, nset = 0;
+            for (int i = 0; i < nl; i++) {
+                if (cmd_word(list[i], "M104")) { nozzle = parse_sval(list[i]); nset++; }
+                else if (cmd_word(list[i], "M140")) { bed = parse_sval(list[i]); nset++; }
+                else if (cmd_word(list[i], "M220")) { speed = parse_sval(list[i]); nset++; }
+                else if (cmd_word(list[i], "M221")) { flow = parse_sval(list[i]); nset++; }
+                else if (cmd_word(list[i], "M290")) { int h = 0; if (parse_m290(list[i], &h) == 0) { zoff = h; nset++; } }
+            }
+            const char *rcmd = "adjust";
+            if (nset == 1) {
+                if (nozzle != INT_MIN || bed != INT_MIN) rcmd = "temp";
+                else if (speed != INT_MIN) rcmd = "speed";
+                else if (flow != INT_MIN) rcmd = "flow";
+                else rcmd = "zoffset";
+            }
+            char err2[200];
+            int rc = req_begin_adjust(rcmd, nozzle, bed, speed, flow, zoff, REQ_CTL_MS, err2, sizeof err2);
+            if (rc) { jerr(c, rc, err2); return; }
+            c->await_id = R.id; c->await_kind = AWAIT_NOCONTENT;
+            return;
+        }
         for (int i = 0; i < nl; i++) {
             char out[96];
             if (check_command(list[i], out, sizeof out, err, sizeof err)) { jerr(c, 400, err); return; }
             if (job_active() && !(cmd_word(out, "M104") || cmd_word(out, "M140") || cmd_word(out, "M220") || cmd_word(out, "M221") ||
+                                  cmd_word(out, "M290") ||
                                   cmd_word(out, "M106") || cmd_word(out, "M107") || cmd_word(out, "M105") || cmd_word(out, "M114"))) {
-                jerr(c, 409, "only temperature/fan/speed/flow commands while a job runs"); return;
+                jerr(c, 409, "only temperature/fan/speed/flow/Z-offset commands while a job runs"); return;
             }
             snprintf(list[i], 96, "%s", out);
         }
@@ -1785,7 +2141,30 @@ static void cli_read(struct cli *c) {
         else if (c->body) memcpy(c->body + c->got, data, n);
         c->got += n;
     }
-    if (c->got >= c->clen) { handle(c); cli_close(c); }
+    if (c->got >= c->clen) { handle(c); if (!c->await_id) cli_close(c); }
+}
+
+
+static int http_listen(int port) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return -1;
+    int one = 1; setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+    struct sockaddr_in a = { .sin_family = AF_INET, .sin_port = htons((unsigned short)port) };
+    inet_pton(AF_INET, g_bind, &a.sin_addr);
+    if (bind(fd, (void *)&a, sizeof a) || listen(fd, 8)) {
+        int e = errno; close(fd); errno = e; return -1;
+    }
+    set_nonblock(fd);
+    return fd;
+}
+
+static void http_accept(int lfd) {
+    struct sockaddr_in pa; socklen_t pl = sizeof pa; memset(&pa, 0, sizeof pa);
+    int fd = accept(lfd, (struct sockaddr *)&pa, &pl);
+    if (fd < 0) return;
+    int slot = -1; for (int i = 0; i < MAXCLI; i++) if (C[i].fd < 0) { slot = i; break; }
+    if (slot < 0) close(fd);
+    else { memset(&C[slot], 0, sizeof C[slot]); C[slot].fd = fd; C[slot].up_fd = -1; C[slot].t0 = now_ms(); C[slot].lan = is_lan(&pa); C[slot].loop = (ntohl(pa.sin_addr.s_addr) >> 24) == 127; set_nonblock(fd); }
 }
 
 /* ------------------------------------------------------------------ main */
@@ -1793,11 +2172,12 @@ static void on_sig(int s) { (void)s; g_quit = 1; }
 
 static void usage(void) {
     fprintf(stderr, "ivibridge %s\n  -s real_serial (%s)  -L app_link (%s)  -p port (%d)  -b bind (%s)\n"
+        "  -2 extra_http_port (%d, 0 = off; bind failure is non-fatal)\n"
         "  -k apikey | -K keyfile   -u upload_dir (%s)  -l logfile  -c (no line numbers)\n"
         "  -n (do not recreate the original device node on exit)  -P idle_poll_s (%d)\n"
         "  -w www_dir             status page directory (or IVIB_WWW / <bindir>/www)\n"
         "  -W line_stall_ms (%d, 0 = no stall probe)  -R resume_complete_wait_ms (%d)\n"
-        "  --add-header IN OUT [--nozzle 0.3] [--date YYYY-MM-DD HH:MM:SS]\n", VERSION, g_serial, g_link, g_port, g_bind, g_updir, g_poll_s,
+        "  --add-header IN OUT [--nozzle 0.3] [--date YYYY-MM-DD HH:MM:SS]\n", VERSION, g_serial, g_link, g_port, g_bind, g_port2, g_updir, g_poll_s,
         g_stall_ms, g_resume_ms);
 }
 
@@ -1805,10 +2185,11 @@ int main(int argc, char **argv) {
     int o; g_log = stderr;
     if (argc >= 2 && !strcmp(argv[1], "--add-header")) return ivi_add_header_main(argc, argv);
     { const char *lm = getenv("IVIB_LOG_MAX"); if (lm && *lm) { long long v = atoll(lm); if (v >= 256) g_log_max = v; } }
-    while ((o = getopt(argc, argv, "s:L:p:b:k:K:u:l:cnP:W:R:w:hV")) != -1) switch (o) {
+    while ((o = getopt(argc, argv, "s:L:p:2:b:k:K:u:l:cnP:W:R:w:hV")) != -1) switch (o) {
         case 's': g_serial = optarg; break;
         case 'L': g_link = optarg; break;
         case 'p': g_port = atoi(optarg); break;
+        case '2': g_port2 = atoi(optarg); break;
         case 'b': g_bind = optarg; break;
         case 'k': snprintf(g_apikey, sizeof g_apikey, "%s", optarg); break;
         case 'K': { FILE *f = fopen(optarg, "r"); if (f) { if (fgets(g_apikey, sizeof g_apikey, f)) rstrip(g_apikey); fclose(f); } break; }
@@ -1825,6 +2206,9 @@ int main(int argc, char **argv) {
     }
     if (g_logpath) { FILE *f = fopen(g_logpath, "a"); if (f) g_log = f; }
     resolve_www(argv[0]);
+    req_init();
+    cal_init();
+    settings_load();
     for (int i = 0; i < MAXCLI; i++) { C[i].fd = -1; C[i].up_fd = -1; }
     signal(SIGPIPE, SIG_IGN); signal(SIGTERM, on_sig); signal(SIGINT, on_sig); if (signal(SIGHUP, SIG_IGN) != SIG_IGN) signal(SIGHUP, on_sig);   /* keep nohup's ignore */
     logi_("ivibridge %s starting: serial %s, app link %s, http %s:%d, api key %s", VERSION, g_serial, g_link, g_bind, g_port,
@@ -1835,18 +2219,23 @@ int main(int argc, char **argv) {
     g_ptm = make_pty(); if (g_ptm < 0) return 1;
     if (point_link() < 0) { restore_link(); return 1; }
 
-    g_lfd = socket(AF_INET, SOCK_STREAM, 0); int one = 1; setsockopt(g_lfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
-    struct sockaddr_in a = { .sin_family = AF_INET, .sin_port = htons(g_port) }; inet_pton(AF_INET, g_bind, &a.sin_addr);
-    if (bind(g_lfd, (void *)&a, sizeof a) || listen(g_lfd, 8)) { logi_("http bind %s:%d: %s (continuing without HTTP)", g_bind, g_port, strerror(errno)); close(g_lfd); g_lfd = -1; }
-    else set_nonblock(g_lfd);
+    g_lfd = http_listen(g_port);
+    if (g_lfd < 0) logi_("http bind %s:%d: %s (continuing without HTTP)", g_bind, g_port, strerror(errno));
+    else logi_("http listening on %s:%d", g_bind, g_port);
+    if (g_port2 > 0 && g_port2 != g_port) {
+        g_lfd2 = http_listen(g_port2);
+        if (g_lfd2 < 0) logi_("http bind %s:%d: %s (continuing on %d only)", g_bind, g_port2, strerror(errno), g_port);
+        else logi_("http also listening on %s:%d", g_bind, g_port2);
+    }
     g_last_ser_rx = g_last_app_tx = now_ms() - 10000;
     long long last_link_check = now_ms();
 
     while (!g_quit) {
-        struct pollfd pf[3 + MAXCLI]; int np = 0, iser = -1, iptm, ilfd = -1, ic[MAXCLI];
+        struct pollfd pf[4 + MAXCLI]; int np = 0, iser = -1, iptm, ilfd = -1, ilfd2 = -1, ic[MAXCLI];
         if (g_ser >= 0) { iser = np; pf[np++] = (struct pollfd){ g_ser, POLLIN, 0 }; }
         iptm = np; pf[np++] = (struct pollfd){ g_ptm, POLLIN, 0 };
         if (g_lfd >= 0) { ilfd = np; pf[np++] = (struct pollfd){ g_lfd, POLLIN, 0 }; }
+        if (g_lfd2 >= 0) { ilfd2 = np; pf[np++] = (struct pollfd){ g_lfd2, POLLIN, 0 }; }
         for (int i = 0; i < MAXCLI; i++) { ic[i] = -1; if (C[i].fd >= 0) { ic[i] = np; pf[np++] = (struct pollfd){ C[i].fd, POLLIN, 0 }; } }
         int r = poll(pf, np, 20);
         if (r < 0 && errno != EINTR) break;
@@ -1871,15 +2260,8 @@ int main(int argc, char **argv) {
                 if (b[i] == '\n' || L->n >= LINEMAX) { L->b[L->n] = 0; if (g_ser >= 0) app_line(L->b); else g_app_dropped++; L->n = 0; }
             }
         }
-        if (ilfd >= 0 && (pf[ilfd].revents & POLLIN)) {
-            struct sockaddr_in pa; socklen_t pl = sizeof pa; memset(&pa, 0, sizeof pa);
-            int fd = accept(g_lfd, (struct sockaddr *)&pa, &pl);
-            if (fd >= 0) {
-                int slot = -1; for (int i = 0; i < MAXCLI; i++) if (C[i].fd < 0) { slot = i; break; }
-                if (slot < 0) close(fd);
-                else { memset(&C[slot], 0, sizeof C[slot]); C[slot].fd = fd; C[slot].up_fd = -1; C[slot].t0 = now_ms(); C[slot].lan = is_lan(&pa); set_nonblock(fd); }
-            }
-        }
+        if (ilfd >= 0 && (pf[ilfd].revents & POLLIN)) http_accept(g_lfd);
+        if (ilfd2 >= 0 && (pf[ilfd2].revents & POLLIN)) http_accept(g_lfd2);
         for (int i = 0; i < MAXCLI; i++) if (ic[i] >= 0 && C[i].fd >= 0 && (pf[ic[i]].revents & (POLLIN | POLLHUP | POLLERR))) cli_read(&C[i]);
         for (int i = 0; i < MAXCLI; i++) if (C[i].fd >= 0 && !C[i].hdone && now_ms() - C[i].t0 > 15000) cli_close(&C[i]);
         if (g_ser < 0 && now_ms() >= g_ser_retry_ms) {

@@ -37,6 +37,20 @@ class FakeSTM32:
         self.violations = []
         self.lock = threading.Lock()
         self.ws = "IDLE"; self.systat = 1; self.t = 21.0; self.tt = 0.0; self.b = 22.0; self.bt = 0.0
+        self.x, self.y, self.z = 1.00, 2.00, 3.00
+        self.abs_mode = True
+        self.probe_present = True
+        self.g33_result = "ok"
+        self.g29_result = "ok"
+        self.H, self.R, self.L, self.S = 233.22, 160.31, 357.50, 200.00
+        self.ang = [0.11, -0.07, -0.04]
+        self.endst = [-0.03, -0.13, 0.00]
+        self.abl = 0
+        self.fade = 0.0
+        self.mesh = [[0.02 * ((i-3)**2 + (j-3)**2) / 18.0 for i in range(7)] for j in range(7)]
+        self.have_mesh = True
+        self.saved = []
+        self.m211 = 1
         self.report_s = 0; self.next_report = 0; self.last_n = 0
         self.stop = False
         threading.Thread(target=self._rx, daemon=True).start()
@@ -75,6 +89,12 @@ class FakeSTM32:
                 if raw:
                     self.received.append((time.time(), raw)); self._handle(raw)
 
+    def _axis(self, c, letter, cur):
+        m = re.search(r"\b%s(-?[\d.]+)" % letter, c)
+        if not m: return cur
+        v = float(m.group(1))
+        return v if self.abs_mode else cur + v
+
     def _handle(self, raw):
         m = re.match(r"^N(\d+) (.*)\*(\d+)$", raw)
         cmd = raw
@@ -106,7 +126,7 @@ class FakeSTM32:
         if c.startswith("M110"): self.last_n = 0; self.out("ok")
         elif c == "M105": self.out("ok T:%.1f /%.1f B:%.1f /%.1f @:0 B@:0" % (self.t, self.tt, self.b, self.bt))
         elif c in ("M2007", "M114") and self.noise: self.out("ok")
-        elif c == "M114": self.out("X:1.00 Y:2.00 Z:3.00 E:0.00 Count A:0 B:0 C:0", "ok")
+        elif c == "M114": self.out("X:%.2f Y:%.2f Z:%.2f E:0.00 Count A:0 B:0 C:0" % (self.x, self.y, self.z), "ok")
         elif c == "M2007": self.out("X:0.00 Y:0.00 Z:237.51 E:0.00 Count A:0 B:0 C:0", "Working Status: " + self.ws, "job status: %d" % self.systat, "ok")
         elif c.startswith("M2155 S"): self.report_s = int(c[7:]); self.next_report = time.time() + self.report_s; self.out("ok")
         elif c == "M2051": self.out(self.head, "ok")
@@ -146,7 +166,78 @@ class FakeSTM32:
         elif c.startswith("M104 S"): self.tt = float(c[6:]); self.out("ok")
         elif c.startswith("M140 S"): self.bt = float(c[6:]); self.out("ok")
         elif c.startswith("M109") or c.startswith("G28"):
+            if c.startswith("G28"):
+                self.x, self.y, self.z = 0.0, 0.0, 237.65
+                self.abs_mode = True
             self.out("echo:busy: processing"); time.sleep(0.3); self.out("echo:busy: processing", "ok")
+        elif c in ("G90", "G90 "):
+            self.abs_mode = True; self.out("ok")
+        elif c in ("G91", "G91 "):
+            self.abs_mode = False; self.out("ok")
+        elif c == "G53" or c.startswith("G53 "):
+            self.out("ok")
+        elif c.startswith("G0") or c.startswith("G1"):
+            self.x = self._axis(c, "X", self.x)
+            self.y = self._axis(c, "Y", self.y)
+            self.z = self._axis(c, "Z", self.z)
+            self.out("ok")
+        elif c == "M119" or c.startswith("M119 "):
+            lines = ["Reporting endstop status", "x_min: open", "x_max: open", "y_min: open", "y_max: open"]
+            if self.probe_present:
+                lines.append("z_min: open")
+            lines += ["z_max: open", "ok"]
+            self.out(*lines)
+        elif c == "G33" or c.startswith("G33 "):
+            if self.g33_result == "hang":
+                return
+            if self.g33_result == "no_convergence":
+                self.out("G33 Auto Calibrate", "No convergence", "ok")
+            elif self.g33_result == "probing_failed":
+                self.out("G33 Auto Calibrate", "Probing Failed", "ok")
+            else:
+                self.have_mesh = False
+                self.abl = 0
+                self.H = round(self.H + 0.04, 2)
+                self.endst = [-0.02, -0.11, 0.00]
+                self.out("G33 Auto Calibrate", "Checking... AC", "Calibration OK",
+                         "Calibration sd:0.01234", "Save with M500 and/or copy to Configuration.h", "ok")
+        elif c == "G29" or c.startswith("G29 "):
+            if self.g29_result == "fail":
+                self.out("G29 Auto Bed Leveling", "Probing Failed", "ok")
+            elif self.g29_result == "warning":
+                self.out("G29 Auto Bed Leveling", "warning:Not probe", "ok")
+            else:
+                self.have_mesh = True
+                self.abl = 1
+                self.out("G29 Auto Bed Leveling", "Probing mesh point 1/49",
+                         "Bilinear Leveling Grid:", "echo:busy: processing", "ok")
+        elif c.startswith("M665"):
+            m = re.search(r"\bH(-?[\d.]+)", c)
+            if m: self.H = float(m.group(1))
+            self.out("ok")
+        elif c.startswith("M666"):
+            self.out("ok")
+        elif c.startswith("M211"):
+            if re.search(r"\bS0\b", c): self.m211 = 0
+            if re.search(r"\bS1\b", c): self.m211 = 1
+            self.out("ok")
+        elif c == "M500" or c.startswith("M500 "):
+            self.saved.append(("M500", time.time(), {"H": self.H, "have_mesh": self.have_mesh, "abl": self.abl}))
+            self.out("Settings Stored", "ok")
+        elif c == "M503" or c.startswith("M503 "):
+            lines = [
+                "echo:  M665 L%.2f R%.2f H%.2f S%.2f X%.2f Y%.2f Z%.2f A0.00 B0.00 C0.00" % (
+                    self.L, self.R, self.H, self.S, self.ang[0], self.ang[1], self.ang[2]),
+                "echo:  M666 X%.2f Y%.2f Z%.2f" % (self.endst[0], self.endst[1], self.endst[2]),
+                "echo:  M851 X0.00 Y0.00 Z-14.29",
+                "echo:  M420 S%d Z%.2f" % (1 if self.abl else 0, self.fade),
+            ]
+            if self.have_mesh:
+                for j in range(7):
+                    for i in range(7):
+                        lines.append("echo:  G29 W I%d J%d Z%.5f" % (i, j, self.mesh[j][i]))
+            lines.append("ok")
+            self.out(*lines)
         else: self.out("ok")
         self._noise()
 

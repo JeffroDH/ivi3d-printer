@@ -1,5 +1,5 @@
 #!/bin/sh
-# ivibridge-ram.sh {start|stop|status|watchdog}   (for ivibridge 0.1.7-a33)
+# ivibridge-ram.sh {start|stop|status|watchdog}   (for ivibridge 0.1.18-a33)
 # RAM-only run of the A33 Wi-Fi bridge (busybox 1.18 ash). Writes only to /tmp (tmpfs) and /dev (devtmpfs);
 # nothing on the eMMC changes, and a reboot always returns the printer to stock.
 #   start : save the app's env/cwd/stdout, stop IVI-Main-Controller, make /dev/ivi-stm32 (same major:minor as
@@ -12,7 +12,7 @@
 #           present. Never start a second copy if one is already running.
 #   stop  : stop watchdog + daemon (the daemon stops a running network job first), put the real /dev/ttyUSB0
 #           node back, remove /dev/ivi-stm32, restart the app on the real port.
-#   status: pids, device nodes and whether the HTTP port is listening (read from /proc/net/tcp). It never opens a
+#   status: pids, device nodes and whether the HTTP ports are listening (read from /proc/net/tcp). It never opens a
 #           network connection (the printer's loopback interface is down), so it cannot hang.
 #   watchdog (internal): if the daemon dies, fail safe to stock (restore node, restart app) and exit. No restart loop.
 # Every background process gets stdin/stdout/stderr redirected, so 'ssh printer sh ivibridge-ram.sh start' returns at once.
@@ -25,6 +25,7 @@ SYSDEV=${IVIB_SYSDEV:-/sys/class/tty/ttyUSB0/dev}
 APP=${IVIB_APP:-/userapp/app/IVI-Main-Controller}
 UPDIR=${IVIB_UPDIR:-/tmp/ivi_jobs}
 PORT=${IVIB_PORT:-5001}
+PORT2=${IVIB_PORT2:-80}
 KEYFILE=${IVIB_KEYFILE:-$D/apikey}
 EXTRA=${IVIB_ARGS:-}
 MKNOD=${IVIB_MKNOD:-mknod}
@@ -196,7 +197,7 @@ start)
     fi
     if [ "$app_was_running" = 1 ]; then say "stopping $APPNAME"; stop_app; fi
     rm -f "$REAL"; $MKNOD "$REAL" c "${mm%%:*}" "${mm##*:}" || { [ "$app_was_running" = 1 ] && start_app; die "mknod $REAL failed"; }
-    nohup $BIN -s "$REAL" -L "$LINK" -p "$PORT" -u "$UPDIR" -l "$LOG" -K "$KEYFILE" $EXTRA \
+    nohup $BIN -s "$REAL" -L "$LINK" -p "$PORT" -2 "$PORT2" -u "$UPDIR" -l "$LOG" -K "$KEYFILE" $EXTRA \
         > "$D/ivibridge.out" 2>&1 < /dev/null &
     echo $! > "$D/ivibridge.pid"
     n=0; while ! [ -L "$LINK" ] && [ $n -lt 100 ]; do usleep 100000; n=$((n+1)); done
@@ -211,7 +212,11 @@ start)
     # persist logs/jobs and the bootfail health reset run in the background; they must not delay start
     nohup sh "$SELF" persist > /dev/null 2>&1 < /dev/null &
     echo $! > "$D/persist.pid"
-    say "running: daemon pid $(cat "$D/ivibridge.pid"), http port $PORT, log $LOG"
+    if [ -n "$PORT2" ] && [ "$PORT2" != 0 ] && [ "$PORT2" != "$PORT" ]; then
+        say "running: daemon pid $(cat "$D/ivibridge.pid"), http ports $PORT and $PORT2, log $LOG"
+    else
+        say "running: daemon pid $(cat "$D/ivibridge.pid"), http port $PORT, log $LOG"
+    fi
     ;;
 stop)
     touch "$D/stopping"
@@ -235,6 +240,9 @@ status)
     else echo "link: $LINK missing"; fi
     if [ -c "$REAL" ] || [ -L "$REAL" ]; then echo "real: $REAL present"; else echo "real: $REAL absent"; fi
     port_listening "$PORT" && echo "http: listening on port $PORT" || echo "http: port $PORT not listening"
+    if [ -n "$PORT2" ] && [ "$PORT2" != 0 ] && [ "$PORT2" != "$PORT" ]; then
+        port_listening "$PORT2" && echo "http: listening on port $PORT2" || echo "http: port $PORT2 not listening"
+    fi
     v=$($BIN -V 2>/dev/null < /dev/null); echo "version: ${v:-unknown}"
     ;;
 watchdog)
@@ -269,7 +277,7 @@ persist)
     }
     migrate_jobs() {
         ram=${IVIB_UPDIR:-/tmp/ivi_jobs}
-        dest="$P1/ivibridge_jobs"
+        dest="$P1"
         mkdir -p "$dest" || return 1
         cur=""; [ -f "$D/current_job" ] && cur=$(cat "$D/current_job" 2>/dev/null)
         for f in "$ram"/*; do
@@ -318,7 +326,7 @@ persist)
         sh "$SELF" stop
         exit 0
     fi
-    mkdir -p "$P1/ivibridge_logs" "$P1/ivibridge_jobs" || { say "persist: cannot create p1 dirs"; wait; exit 0; }
+    mkdir -p "$P1/ivibridge_logs" || { say "persist: cannot create p1 dirs"; wait; exit 0; }
     seed_log "$D/boot.log" "$P1/ivibridge_logs/boot.log"
     seed_log "$D/ram.log" "$P1/ivibridge_logs/ram.log"
     seed_log "$LOG" "$P1/ivibridge_logs/ivibridge.log"

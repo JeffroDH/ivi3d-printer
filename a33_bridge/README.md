@@ -1,20 +1,20 @@
 # A33 ivibridge — on-printer Wi-Fi control
 
-`ivibridge` is a static C daemon that runs on the IVI 3D printer's Allwinner A33 (Linux 3.4). It owns the real STM32 serial link, gives the stock touchscreen app a pty in place of `/dev/ttyUSB0`, and serves an OctoPrint-compatible HTTP API plus a web UI on TCP port 5001.
+`ivibridge` is a static C daemon that runs on the IVI 3D printer's Allwinner A33 (Linux 3.4). It owns the real STM32 serial link, gives the stock touchscreen app a pty in place of `/dev/ttyUSB0`, and serves an OctoPrint-compatible HTTP API plus a web UI on TCP ports 5001 and 80 (5001 is the main port; Orca should keep using it).
 
 This is not the Mac/PC bridge in [`../bridge/`](../bridge/README.md). That program runs on a computer and streams jobs over USB serial. This daemon runs on the printer, so Orca Slicer can print and monitor over the LAN with no cable and no computer in the middle.
 
-The current version is **0.1.7-a33**. Built binaries and install tarballs are not in this folder; build them with `scripts/build.sh`.
+The current version is **0.1.18-a33**. Built binaries and install tarballs are not in this folder; build them with `scripts/build.sh`.
 
 ## Architecture
 
 The real CH340 node (`/dev/ttyUSB0`, 115200 8N1) is recreated as `/dev/ivi-stm32` on devtmpfs. The daemon opens that node exclusively and atomically replaces `/dev/ttyUSB0` with a symlink to a pty. The touchscreen app keeps talking to `/dev/ttyUSB0` and does not need to be patched.
 
-The daemon passes the app's traffic through byte for byte and takes turns on the wire. Replies meant for a network command are kept away from the app, because the app treats any line containing `ok` as an acknowledgement. While a network job runs, the firmware status shown to the app is rewritten to `WORKING_PC` so the stock lock page appears. The lock page's Disconnect button (`M108` + `M2001 S1`) is intercepted and turned into a graceful cancel.
+The daemon passes the app's traffic through byte for byte and takes turns on the wire. Replies meant for a network command are kept away from the app, because the app treats any line containing `ok` as an acknowledgement. `print=true` stores the file in `/userdata/WifiFile` and posts a `/tmp/ivibridge/print_request` so the touchscreen app can open the stock Status page (assist mode; the user taps Start). It does not start a network stream and does not show the `WORKING_PC` lock page. A persistent Auto-start setting (default off) can skip the plate warning and run the stock RUN path. The web UI shows Z offset as a normal offset (reference H minus effective H: 0.00 after calibration, + when the nozzle is higher). Save permanently queues `M665`+`M500` until idle and keeps the displayed offset. “Set current as zero” updates the reference. A stock paper-test calibration resets it. The Calibration tab runs stock G33, G29, and the paper test (with Run all chaining XYZ into leveling, then the paper test), and saves with M500 only on success. The older stream path is only used when `IVIB_NET_STREAM=1` (tests/debug). While a network job *does* run, the firmware status shown to the app is rewritten to `WORKING_PC`. The lock page's Disconnect button (`M108` + `M2001 S1`) is intercepted and turned into a graceful cancel. During a touchscreen job the API can pause, resume, cancel, and adjust temperature, speed, and flow through that same request route; manual moves, homing, and arbitrary console G-code stay blocked.
 
 Network jobs are streamed with Marlin line numbers, checksums, and resend support. Pause, resume, and cancel use the firmware job words (`M2410`, `M2411 S1`/`S3`/`S4`). Resume waits for `Finish pause` / `Resume complete` before the next job line. A stalled line is probed with `M105` and, if it was dropped, resent with the same `N` so a motion line cannot run twice. The daemon never sends `M3` or `M4`. `M5` is included in the cooldown only when the last head report was a laser.
 
-Uploaded jobs start in `/tmp/ivi_jobs`. Once the internal FAT partition is mounted at `/userdata/WifiFile`, new uploads go to `/userdata/WifiFile/ivibridge_jobs` and earlier RAM copies are moved after a size and SHA-256 check. A file that is currently printing is not moved until the job ends. Logs start in `/tmp/ivibridge/` and are also mirrored to `/userdata/WifiFile/ivibridge_logs/` (rotated at 2 × 1 MB each). Uploads are pre-scanned: embedded job-control words and `M3`/`M4` at `S>100` are rejected. Files that do not already have an IVI header get one on upload (`src/ivi_header.c`; also available as `ivibridge --add-header`).
+Uploaded jobs start in `/tmp/ivi_jobs`. Once the internal FAT partition is mounted at `/userdata/WifiFile`, new uploads go to `/userdata/WifiFile` (the same folder the touchscreen Wi-Fi file list shows) and earlier RAM copies are moved after a size and SHA-256 check. A file that is currently printing is not moved until the job ends. Jobs left in the older `/userdata/WifiFile/ivibridge_jobs` folder are still listed in the Files tab but do not appear on the touchscreen until they are moved into `/userdata/WifiFile`. Logs start in `/tmp/ivibridge/` and are also mirrored to `/userdata/WifiFile/ivibridge_logs/` (rotated at 2 × 1 MB each). Uploads are pre-scanned: embedded job-control words and `M3`/`M4` at `S>100` are rejected. Files that do not already have an IVI header get one on upload (`src/ivi_header.c`; also available as `ivibridge --add-header`).
 
 ## Fail-safes
 
@@ -41,7 +41,7 @@ The printer's loopback interface is down, so supervisor `status` never opens a n
 - The console allowlist matches the Mac bridge, except `M3`/`M4` are refused entirely. Temperatures, axis moves, and fans (`M106`/`M107` with optional `P0`/`P1` and `S0–255`) are range-limited. During a job only `M104`, `M140`, `M220`, `M221`, `M106`, `M107`, `M105`, and `M114` are allowed.
 - Do not commit or publish the apikey file, SSH keys, Wi-Fi credentials, password hashes, or the printer serial.
 
-## HTTP API (port 5001)
+## HTTP API (ports 5001 and 80)
 
 Compatible with Orca's OctoPrint connection and with the repo's Orca plugin client.
 
@@ -50,12 +50,13 @@ Compatible with Orca's OctoPrint connection and with the repo's Orca plugin clie
 | GET | `/` | Web UI (`www/index.html`) |
 | GET | `/api/version`, `/api/server` | OctoPrint version stubs |
 | GET | `/api/printer` | Temperatures, state, position, `ivi.head`, `ivi.fan` / `ivi.fans` (percent, once a fan command has been seen) |
+| GET | `/api/fan` | Fan state only, `{"on":…,"fan":…,"fans":[…,…]}` (percent; `null` until a fan command has been seen). Public and read-only, no key, for the touchscreen Fan toggle |
 | GET | `/api/job` | Active job, progress, resend/stall/lost-line counts |
 | GET | `/api/files`, `/api/files/local`, `/api/ivi/files` | Stored jobs (size, mtime, time, filament, thumbnail flag) and the print queue |
 | GET | `/api/ivi/files/thumb?name=…`, `/api/files/local/<name>/thumbnail` | Thumbnail extracted from the G-code comments |
 | GET | `/api/ivi/console?since=` | Console ring (see quiet M114 below) |
 | GET | `/api/ivi/link` | Link state and daemon version |
-| POST | `/api/files/local`, `/api/files/sdcard` | Multipart upload; `print=true` starts the job |
+| POST | `/api/files/local`, `/api/files/sdcard` | Multipart upload; `print=true` stores the file and posts a native-start request |
 | POST | `/api/files/local/<name>` | OctoPrint `select` / `print` of a stored file |
 | POST | `/api/ivi/files`, `/api/ivi/queue` | Queue, print, delete, start-next, clear queue |
 | DELETE | `/api/files/local/<name>` | Delete a stored job (refused while that file is printing) |
@@ -91,27 +92,46 @@ These steps write to the A33's eMMC (`/userapp/ivibridge` on the rootfs). Only r
 
 ### Update an existing install
 
-The package tarball contains `ivibridge`, `www/index.html`, and `SHA256SUMS`. From the directory that holds it, with `PRINTER` set to the printer's SSH host:
+The package tarball contains `ivibridge`, `ivibridge-ram.sh`, `www/index.html`, `www/logo.svg`, and `SHA256SUMS`. From the directory that holds it, with `PRINTER` set to the printer's SSH host. Use a non-login SSH command (`-T`, and if the host entry sets `RequestTTY` or `RemoteCommand`, override them). Only run this when the printer is idle (home screen, no job, nothing heating):
 
 ```sh
 scp -O ivibridge_X.Y.Z.tar "$PRINTER:/tmp/" &&
-ssh "$PRINTER" 'set -e
+ssh -T -o RequestTTY=no -o RemoteCommand=none "$PRINTER" 'set -e
   d=/tmp/ivibridge_update
   rm -rf "$d" && mkdir -p "$d" &&
   tar -C "$d" -xf /tmp/ivibridge_X.Y.Z.tar &&
   cd "$d" && sha256sum -c SHA256SUMS &&
   ./ivibridge -V &&
+  cp -p /userapp/ivibridge/ivibridge /userapp/ivibridge/ivibridge.bak &&
+  cp -p /userapp/ivibridge/ivibridge-ram.sh /userapp/ivibridge/ivibridge-ram.sh.bak &&
   sh /userapp/ivibridge/ivibridge-ram.sh stop &&
   cp ivibridge /userapp/ivibridge/ivibridge &&
-  chmod 755 /userapp/ivibridge/ivibridge &&
+  cp ivibridge-ram.sh /userapp/ivibridge/ivibridge-ram.sh &&
+  chmod 755 /userapp/ivibridge/ivibridge /userapp/ivibridge/ivibridge-ram.sh &&
   mkdir -p /userapp/ivibridge/www &&
   cp www/index.html /userapp/ivibridge/www/index.html &&
+  cp www/logo.svg /userapp/ivibridge/www/logo.svg &&
   sh /userapp/ivibridge/boot.sh'
 ```
 
-Then confirm `sh /userapp/ivibridge/ivibridge-ram.sh status` shows the new version, the touchscreen is back, and `http://<printer-ip>:5001/` serves the page.
+Then confirm `sh /userapp/ivibridge/ivibridge-ram.sh status` shows the new version, the touchscreen is back, and `http://<printer-ip>:5001/` or `http://<printer-ip>/` serves the page.
 
-To roll back, run the same commands with the previous package tarball.
+If any jobs remain in `/userdata/WifiFile/ivibridge_jobs`, move them into `/userdata/WifiFile` only after the printer is idle and no file from that folder is printing. Quote names (some have spaces). The Files tab lists those leftovers until they are moved; the touchscreen list only shows files in `/userdata/WifiFile` itself:
+
+```sh
+ssh -T -o RequestTTY=no -o RemoteCommand=none "$PRINTER" 'set -e
+  P1=/userdata/WifiFile
+  cur=$(cat /tmp/ivibridge/current_job 2>/dev/null || true)
+  for f in "$P1/ivibridge_jobs/"*.gcode; do
+    [ -f "$f" ] || continue
+    [ "$f" = "$cur" ] && { echo "skip live job $f"; continue; }
+    mv -f "$f" "$P1/$(basename "$f")"
+  done
+  rmdir "$P1/ivibridge_jobs" 2>/dev/null || true
+  ls -la "$P1"'
+```
+
+To roll back to the previous package, stop the supervisor, copy the `.bak` files (or the previous tarball) back over `ivibridge` and `ivibridge-ram.sh`, and start with `boot.sh`. Jobs already moved into `/userdata/WifiFile` can stay there.
 
 ### First-time persistent install
 
@@ -155,14 +175,21 @@ python3 -W ignore tests/test_install.py
 python3 -W ignore tests/test_boot.py
 ```
 
-`tests/run_all.sh` runs all five suites. The Orca plugin client test is skipped if `orca/plugin` is not present. A `SHA256SUMS` for a release package should list `ivibridge` and `www/index.html`.
+`tests/run_all.sh` runs all five suites. The Orca plugin client test is skipped if `orca/plugin` is not present. A `SHA256SUMS` for a release package should list `ivibridge`, `ivibridge-ram.sh`, `www/index.html`, and `www/logo.svg`.
 
 ## Known limitations
 
-- The touchscreen fan toggle does not follow fan changes made from the page, Orca, or a network job. The board never reports fan state, and the stock app only remembers its own button presses (and fan commands in files it is printing). The page's fan button does follow fan commands from either side, once the first command has been seen after a restart. Fixing the touchscreen toggle would mean patching the Qt app; that is not done here.
+- The board never reports fan state, so the bridge keeps its own record from every `M106`/`M107` it forwards (page, Orca, touchscreen, or job file). That record starts unknown (`null`) after every restart, until the first fan command. The page's fan button follows it. The stock touchscreen Fan toggle does not; the optional app patch `IVI-Main-Controller.fansync` (Filament page and print status page) polls `GET http://127.0.0.1:5001/api/fan` every 2 s while the page is shown and moves the toggle to match, without sending a command. While the state is unknown, the toggle keeps its stock behaviour.
 - Automatic `M114` polls are hidden from the console, as described above.
 - The A33 Linux tree is set up for an OV5640 on the CSI camera port, outputting YUV. There is no ffmpeg on the printer, so the on-printer camera is not used. The Camera tab takes a snapshot or MJPEG URL from a separate camera, with the snapshot view capped at 5 fps in the browser.
-- `lo` is down on the printer; nothing on the board can use `127.0.0.1`.
+- `lo` is down in the stock boot. The Tailscale `boot.sh` brings it up (Tailscale's userspace forwarding to the bridge needs it), and the touchscreen fan sync relies on it to reach `127.0.0.1:5001`. Without `lo`, the sync fails silently and the toggle behaves as stock.
+
+## See also
+
+- [Calibration view, API, firmware math, and Z-offset display](../docs/calibration.md)
+- [Native print flow (hook, Auto-start, mid-job)](../docs/native_print.md)
+- [IviHook QML sources](../tools/ivi_hook/README.md)
+- [rcc QML repacker](../tools/rcc_repack/README.md)
 
 ## License
 

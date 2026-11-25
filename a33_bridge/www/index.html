@@ -2,15 +2,33 @@
 <html>
 <head>
 <meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1">
+<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>IVI3D (A33 bridge)</title>
+<link rel=apple-touch-icon sizes=180x180 href="/apple-touch-icon.png">
+<link rel=icon type="image/png" sizes=32x32 href="/favicon-32.png">
+<link rel=manifest href="/manifest.webmanifest">
 <meta name=theme-color content="#0F35E7">
+<meta name=apple-mobile-web-app-title content="IVI3D">
+<meta name=apple-mobile-web-app-capable content="yes">
+<meta name=mobile-web-app-capable content="yes">
 <style>
 :root{--b:#1a5cf0;--lb:#dbe8fb;--sel:#a9c8f5;--t:#1a3d8f}
 *{box-sizing:border-box}body{font:15px -apple-system,Helvetica,sans-serif;margin:0;background:#fff;color:#223}
-.top{background:var(--lb);color:#123;text-align:center;font-size:22px;padding:.55em;border-bottom:1px solid #b8cdee;position:relative}
+.top{background:var(--lb);color:#123;text-align:center;font-size:22px;padding:.55em;padding-top:max(.55em,env(safe-area-inset-top,0px));border-bottom:1px solid #b8cdee;position:relative;display:flex;align-items:center;justify-content:center;gap:.45em}.top .logo{height:1.35em;width:auto;display:block;flex:none}
 .top a{position:absolute;right:.8em;top:.45em;font-size:14px;color:var(--t);text-decoration:none}
-.info{display:flex;flex-wrap:wrap;gap:.4em 1.4em;padding:.5em 1em;font-size:13px;color:#456;background:#f4f8fe}
+.info{display:flex;flex-wrap:wrap;gap:.4em 1.4em;padding:.5em 1em;font-size:13px;color:#456;background:#f4f8fe;align-items:center}
+.info .infobtn{background:var(--b);color:#fff;border-radius:999px;padding:.3em 1em;font-size:13px;font-weight:600;min-width:0}
+#btnmain{display:none}
+body.calview #btncal{display:none}
+body.calview #btnmain{display:inline-block}
+.demoban{display:none;margin:0;padding:.45em 1em;background:#fff4d6;border-bottom:1px solid #e8b84a;color:#5a3d00;font-size:13px;font-weight:600;text-align:center}
+.col{display:contents}
+#zoff_slot_tool:empty,#zoff_slot_wide:empty{display:none}
+#p_zoff{display:block;border:0;padding:0;border-radius:0}
+#p_zoff>h3{display:none}
+.calback{float:right;background:var(--lb);color:var(--t);border-radius:999px;padding:.35em 1em;font-size:14px;font-weight:600;min-width:0}
+body.calview .col{display:none}
+body.calview .tabs{display:none}
 .info b{color:#123}.bar{height:6px;background:#e3ebf7}.bar>div{height:100%;background:var(--b);width:0}
 .panels{padding:1em;max-width:1500px;margin:0 auto}.panel{display:none}.panel.on{display:block}
 button{font:inherit;cursor:pointer;border:0}button:disabled{opacity:.4;cursor:default}
@@ -33,10 +51,18 @@ button{font:inherit;cursor:pointer;border:0}button:disabled{opacity:.4;cursor:de
 .pad button{background:var(--lb);color:var(--t);border-radius:6px;font-size:16px}
 .compact{display:flex;flex-wrap:wrap;gap:.6em;align-items:center;margin-top:1.2em;padding-top:.9em;border-top:1px solid #e0e8f5;font-size:14px}
 .compact input{width:4.2em;font:inherit;padding:.3em;border:1px solid #bcd;border-radius:6px}
-.compact button{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .9em}
+.compact button{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .9em}.compact button.btn{background:var(--b);color:#fff}
 h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
 .tabs{display:flex;position:sticky;bottom:0;background:#fff;border-top:1px solid #c9d7ee}
 .tabs button{flex:1;background:#fff;color:var(--b);font-size:20px;padding:.6em}.tabs button.on{background:var(--sel)}
+@media (max-width:1099px) and (orientation:portrait){
+  html,body{height:100%}
+  body{min-height:100vh;min-height:100dvh}
+  #st{min-height:100dvh;padding-bottom:calc(64px + env(safe-area-inset-bottom,0px))}
+  .tabs{position:fixed;left:0;right:0;bottom:0;z-index:8;min-height:60px;padding-bottom:env(safe-area-inset-bottom,0px)}
+  .tabs button{min-height:60px;padding:.4em .15em}
+  body.calview #st{padding-bottom:env(safe-area-inset-bottom,0px)}
+}
 .note{font-size:12px;color:#789;padding:0 1em 1em}
 .dlg{position:fixed;inset:0;background:rgba(20,40,80,.35);align-items:center;justify-content:center;z-index:9}
 .box{background:#fff;border-radius:12px;width:min(560px,92vw);box-shadow:0 10px 40px rgba(0,0,40,.3)}
@@ -55,12 +81,71 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
 .ht{width:100%;border-collapse:collapse;font-size:12px;margin:.4em 0}.ht th{text-align:left;color:#567;font-weight:600;border-bottom:1px solid #d3e0f3}.ht td{padding:.25em .3em;border-bottom:1px solid #eef3fa}.ht .ok{color:#1a8a3a}.ht .bad{color:#c22}
 .con{height:260px;overflow:auto;background:#15171c;color:#cfd6e2;font:12px Menlo,monospace;border-radius:8px;padding:.5em}.con .cs{color:#7fc8ff}.con .ce{color:#ff8a7a}
 .wtabs{display:none;gap:.5em;margin:.8em 1em 0;max-width:1500px}.wtabs button{background:var(--lb);color:var(--t);border-radius:999px;padding:.5em 1.4em;font-size:16px}.wtabs button.on{background:var(--b);color:#fff}
-.cambtns{display:flex;gap:.4em;margin-top:.45em;flex-wrap:wrap;align-items:center}.cambtn{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .95em;font-size:13px;min-height:2.2em;touch-action:manipulation}.cambtn.on{background:var(--b);color:#fff}@media (max-width:560px){.tabs button{font-size:15px;padding:.6em .15em}#tpzw{display:none}}@media (max-width:600px) and (orientation:portrait){body{overflow-x:hidden}.panels{padding:.75em;max-width:100%}.tgrid{grid-template-columns:1fr;grid-template-areas:"pos" "jog" "sel";justify-items:stretch;gap:1em}.tpos,.tsel,.tjog{width:100%;max-width:100%}.tjog{display:flex;flex-direction:column;align-items:center}.tjog .lite{max-width:16em}.pad{justify-content:center}#p_tool .compact{justify-content:center}.fgrid{grid-template-columns:5.2em minmax(0,1fr) 7.2em;gap:.35em .45em}.fgrid .lbl{margin:0;padding:0;line-height:1.2}.fgrid .opts{min-width:0}.fgrid .opts button{padding:.45em .1em;font-size:13px}.fgrid .side{gap:.45em}.fgrid .side .btn{padding:.4em .5em;font-size:14px;min-width:0;width:100%}.fgrid .side .fan{font-size:14px}.two{gap:.7em;margin-bottom:.8em}.opts{max-width:100%}}
-@media (min-width:1100px){.tabs{display:none}.panels{display:grid;grid-template-columns:1fr 1fr;gap:2em}
-.panel{display:block;border:1px solid #d3e0f3;border-radius:10px;padding:1em}
-.panels{grid-template-areas:"tool fil" "con files" "cam files";align-items:start}
-#p_tool{grid-area:tool}#p_fil{grid-area:fil}#p_con{grid-area:con}#p_cam{grid-area:cam}#p_files{grid-area:files}
-.wtabs{display:flex}#p_tp{display:none}body.wtp .panels>.panel{display:none}body.wtp #p_tp{display:block;grid-column:1/-1}}#camimg{cursor:zoom-in}#camfs{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:rgba(10,14,22,.94);padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0)}#camfs.on{display:flex;flex-direction:column}#camfs.on #camimg{max-width:100%;max-height:100%;width:auto;height:auto;flex:1;object-fit:contain;background:#000;border-radius:0;cursor:zoom-out}#camfsx{position:absolute;top:max(.6em,env(safe-area-inset-top));right:max(.6em,env(safe-area-inset-right));z-index:41;background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:999px;padding:.55em 1em;font:600 15px -apple-system,Helvetica,sans-serif;cursor:pointer}body.camfs-on{overflow:hidden}#camframe:fullscreen,#camframe:-webkit-full-screen{width:100%;height:100%;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:.5em;box-sizing:border-box}#camframe:fullscreen #camimg,#camframe:-webkit-full-screen #camimg{max-height:calc(100% - 3.2em);max-width:100%;width:auto;height:auto;border-radius:0;cursor:zoom-out}#camframe:fullscreen .cambtns,#camframe:-webkit-full-screen .cambtns{margin-top:.5em}
+.cambtns{display:flex;gap:.4em;margin-top:.45em;flex-wrap:wrap;align-items:center}.cambtn{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .95em;font-size:13px;min-height:2.2em;touch-action:manipulation}.cambtn.on{background:var(--b);color:#fff}@media (max-width:560px){.tabs button{font-size:15px;padding:.6em .15em}#tpzw{display:none}}@media (max-width:600px) and (orientation:portrait){body{overflow-x:hidden}.panels{padding:.75em;max-width:100%}.tgrid{grid-template-columns:1fr;grid-template-areas:"pos" "jog" "sel";justify-items:stretch;gap:1em}.tpos,.tsel,.tjog{width:100%;max-width:100%}.tjog{display:flex;flex-direction:column;align-items:center}.tjog .lite{max-width:16em}.tjog .jobbtns{max-width:16em;width:100%}.pad{justify-content:center}.jogz button{padding:.65em .05em;font-size:13px}#p_tool .compact{justify-content:center}.fgrid{grid-template-columns:5.2em minmax(0,1fr) 7.2em;gap:.35em .45em}.fgrid .lbl{margin:0;padding:0;line-height:1.2}.fgrid .opts{min-width:0}.fgrid .opts button{padding:.45em .1em;font-size:13px}.fgrid .side{gap:.45em}.fgrid .side .btn{padding:.4em .5em;font-size:14px;min-width:0;width:100%}.fgrid .side .fan{font-size:14px}.two{gap:.7em;margin-bottom:.8em}.opts{max-width:100%}}
+@media (min-width:1100px){
+.tabs{display:none}
+.panels{display:flex;gap:2em;align-items:flex-start}
+.col{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:2em}
+.col .panel{display:block;border:1px solid #d3e0f3;border-radius:10px;padding:1em}
+.panels>#p_cal{display:none}
+body.calview .col{display:none}
+body.calview #p_cal{display:block;flex:1 1 auto;width:100%;border:1px solid #d3e0f3;border-radius:10px;padding:1em}
+#p_zoff{border:1px solid #d3e0f3;border-radius:10px;padding:1em}
+#p_zoff>h3{display:block;margin:.2em 0 .7em}
+.zoff-top{display:flex;flex-wrap:wrap;align-items:flex-end;gap:.75em 1.25em}
+.zoff-top .zoff-step{flex:1 1 16em;min-width:14em}
+.zoff-top .compact{margin:0;padding:0;border:0}
+.zoff-top .zread{margin:0;padding-bottom:.15em;white-space:nowrap}
+.zoff-actions{margin-top:.65em;padding-top:0;border:0}
+.zoff-hint{margin:.4em 0 .15em;max-width:none}
+.zoff-auto{margin-top:.45em;padding-top:.55em;border-top:1px solid #e0e8f5}
+.zoff-auto .chk{margin:.1em 0 .15em}
+.zoff-auto .hint{margin:.1em 0 0}
+.wtabs{display:flex}#p_tp{display:none}
+body.wtp .col{display:none}body.wtp #p_tp{display:block;flex:1 1 auto;width:100%}
+}#camimg{cursor:zoom-in}#camfs{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:rgba(10,14,22,.94);padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0)}#camfs.on{display:flex;flex-direction:column}#camfs.on #camimg{max-width:100%;max-height:100%;width:auto;height:auto;flex:1;object-fit:contain;background:#000;border-radius:0;cursor:zoom-out}#camfsx{position:absolute;top:max(.6em,env(safe-area-inset-top));right:max(.6em,env(safe-area-inset-right));z-index:41;background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:999px;padding:.55em 1em;font:600 15px -apple-system,Helvetica,sans-serif;cursor:pointer}body.camfs-on{overflow:hidden}#camframe:fullscreen,#camframe:-webkit-full-screen{width:100%;height:100%;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:.5em;box-sizing:border-box}#camframe:fullscreen #camimg,#camframe:-webkit-full-screen #camimg{max-height:calc(100% - 3.2em);max-width:100%;width:auto;height:auto;border-radius:0;cursor:zoom-out}#camframe:fullscreen .cambtns,#camframe:-webkit-full-screen .cambtns{margin-top:.5em}
+.zread{margin:.45em 0 .25em;font-size:15px;line-height:1.4;color:#193ADD}.zread b{font-variant-numeric:tabular-nums}
+
+.calgrid{display:grid;grid-template-columns:1fr;gap:1em}
+@media (min-width:800px){.calgrid{grid-template-columns:repeat(3,1fr)}}
+.calcard{border:1px solid #d3e0f3;border-radius:10px;padding:.85em .9em}
+.calcard h4{margin:0 0 .35em;color:var(--t);font-size:17px}
+.calv{font-size:13px;color:#345;line-height:1.45}
+.calv b{font-variant-numeric:tabular-nums}
+.mesh{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;width:min(196px,100%);aspect-ratio:1;margin:.4em 0}
+.mesh i{display:block;border-radius:2px;min-height:0}
+.jogz{display:grid;grid-template-columns:repeat(5,1fr);gap:.35em;margin:.45em 0}
+.jobbtns{display:grid;grid-template-columns:1fr 1fr;gap:.35em;margin-top:.7em;width:100%}
+.jobbtns .lite{width:100%}
+.jogz button{background:var(--lb);color:var(--t);border-radius:10px;padding:.7em .2em;font-size:15px}
+.calprog{margin:.6em 0 1em}
+.calprompt{background:#fff4d6;border:1px solid #e8b84a;border-radius:10px;padding:.8em 1em;margin:.6em 0}
+.calerr{background:#fde8e8;border:1px solid #e8a0a0;color:#7a1010;border-radius:10px;padding:.8em 1em;margin:.6em 0}
+#calban{display:none;margin:.8em 1em 0;padding:.8em 1em;border-radius:10px;background:#eef6e8;border:1px solid #b5d4a8;color:#1d3d16}
+#p_cal h3{margin:.1em 0 .35em}
+#p_cal .hint{max-width:none;margin:.15em 0 .45em}
+.calacts{display:flex;flex-wrap:wrap;gap:.5em;align-items:center;margin:.15em 0 .5em}
+.calacts .btn,.calacts .lite{width:auto;flex:0 1 auto;min-width:10em;padding:.55em 1.2em;font-size:16px}
+.paperacts{display:grid;grid-template-columns:1fr 1fr;gap:.45em;margin-top:.55em;width:100%}
+.paperacts .btn{width:100%;min-width:0;padding:.55em .7em;font-size:15px;box-sizing:border-box}
+@media (max-width:600px){.paperacts .btn{font-size:13px;padding:.5em .35em}}
+.calprog{margin:.35em 0 .45em}
+body.calview #st{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+body.calview .panels{flex:1 1 auto;display:flex;flex-direction:column;max-width:none;width:100%;margin:0;padding:.7em 1.2em 0;min-height:0}
+body.calview #p_cal{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;width:100%}
+body.calview #p_cal+.note,body.calview #msg{margin:.3em 0 0}
+body.calview #fk{display:inline-block;margin:.2em 0 .6em}
+@media (min-width:800px){
+  body.calview .calgrid{flex:1 1 auto;align-items:stretch;min-height:0;gap:1em}
+  body.calview .calcard{height:100%;display:flex;flex-direction:column}
+  body.calview .calcard>.btn,body.calview .calcard>.paperacts{margin-top:auto}
+}
+@media (min-width:1100px){
+  body.calview #p_cal{border:0;border-radius:0;padding:0}
+}
+.hint{font-size:12px;color:#567;margin:.15em 0 .7em;max-width:38em;line-height:1.35}
+.chk{display:flex;gap:.5em;align-items:flex-start;margin:.85em 0 .2em;font-size:14px;color:#123}
+.chk input{margin-top:.15em}
 </style>
 </head>
 <body>
@@ -71,12 +156,15 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
   <button type=button class=btn onclick="saveK()">Save</button></p>
 </div>
 <div id=st>
-<div class=top>IVI3D Control</div>
+<div class=top><img class=logo src="/logo.svg" alt="" width=48 height=30>IVI3D Control</div>
+<div class=demoban id=demoban>Example data — not from a printer</div>
 <div class=info>
   <span>State: <b id=stt>–</b></span>
   <span>File: <b id=fn>–</b></span>
   <span>Progress: <b id=pc></b></span>
   <span>Link: <b id=usb>–</b></span>
+  <button type=button class=infobtn id=btncal onclick="showCal(true)">Calibration</button>
+  <button type=button class=infobtn id=btnmain onclick="showCal(false)">Back to control</button>
 </div>
 <div class=bar><div id=pb></div></div>
 <div class=ban id=ban style="display:none"><div style="flex:1">The touchscreen is printing <b id=banf></b>. Jog and file start are paused until it finishes. Pause, Resume and Stop stay on the printer.</div></div>
@@ -91,9 +179,13 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
     <button onclick="jobClear()">Clear</button>
   </div>
 </div>
+<div id=calban><b>Calibration running</b> · <span id=calbanstep></span> · <span id=calbanel></span>
+  <div class=hbar style="margin-top:.5em"><div id=calbanbar></div></div>
+</div>
 
 <div class=panels>
-<div class=panel on id=p_tool>
+<div class=col id=col_left>
+<div class="panel on" id=p_tool>
   <h3>Toolhead</h3>
   <div class=tgrid>
     <div class=tpos>
@@ -116,16 +208,73 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
         <button class=u onclick="jog('X',-1)">X-</button><button class=u title="Move to X0 Y0" onclick="g(['G90','G1 X0 Y0 F'+sel('tspd')]);posSoon()">X/Y</button><button class=u onclick="jog('X',1)">X+</button><span></span><button class=u title="Home (G28)" onclick="home()">Z</button>
         <span></span><button class=u onclick="jog('Y',-1)">Y-</button><span></span><span></span><button class=u onclick="jog('Z',-1)">Z-</button>
       </div>
+      <div class=jobbtns>
+        <button class="lite u" onclick="job('pause','pause')">Pause</button>
+        <button class="lite u" onclick="job('pause','resume')">Resume</button>
+        <button class="lite u" onclick="if(confirm('Stop the job?'))job('cancel')">Stop</button>
+        <button class="lite u" onclick="jobClear()">Clear</button>
+      </div>
     </div>
   </div>
-  <div class=compact>
-    <button class=u onclick="job('pause','pause')">Pause</button>
-    <button class=u onclick="job('pause','resume')">Resume</button>
-    <button class=u onclick="if(confirm('Stop the job?'))job('cancel')">Stop</button>
-    <button class=u onclick="jobClear()">Clear</button>
+  <div id=zoff_slot_tool>
+  <div class=panel id=p_zoff>
+    <h3>Z Offset</h3>
+    <div class=zoff-top>
+      <div class=zoff-step>
+        <p class=lbl>Z Offset (mm)</p>
+        <div class=opts data-g=zoff><button class=sel>0.01</button><button>0.02</button><button>0.05</button></div>
+      </div>
+      <div class=compact><button class=u onclick="zoff(1)">Z+</button><button class=u onclick="zoff(-1)">Z-</button></div>
+      <div class=zread id=zread>Z offset: +0.00 mm</div>
+    </div>
+    <div class="compact zoff-actions">
+      <button type=button onclick="zsave()">Save Z offset permanently</button>
+      <button type=button onclick="zzero()">Set current as zero</button>
+    </div>
+    <p class="hint zoff-hint">Offset is 0.00 after calibration or after you set zero. + means the nozzle is higher than that reference, − means closer. Save writes a new stored height (M665 H + M500) but keeps this displayed offset. Mid-print, save is queued until idle. A stock paper-test calibration resets the reference to the new height so the offset reads 0.00 again.</p>
+    <div class=zoff-auto>
+      <label class=chk><input type=checkbox id=autostart onchange="setAuto(this.checked)"> Auto-start Upload and Print</label>
+      <p class=hint>Off by default. When on, a successful Upload and Print skips the plate-warning dialog and starts the job the same way the touchscreen RUN button does. When off, you still confirm OK and RUN on the screen.</p>
+    </div>
+  </div>
   </div>
 </div>
 
+<div class=panel id=p_con>
+  <h3>Macros</h3>
+  <div id=mlist class=mlist></div>
+  <p class=lbl>These are the usual defaults, sent as G-code from this page. They are not stored on the printer.</p>
+  <h3 style="margin-top:1em">Console</h3>
+  <div id=con class=con></div>
+  <div style="display:flex;gap:.5em;margin-top:.5em">
+    <input id=cin placeholder="G-code, e.g. M105" style="flex:1;font:14px Menlo,monospace;padding:.45em;border:1px solid #bcd;border-radius:6px" onkeydown="if(event.key==='Enter')csend()">
+    <button id=cbtn class="btn u" style="min-width:5em" onclick="csend()">Send</button>
+  </div>
+  <div class=lbl id=cnote style="margin-top:.3em">Only commands on the bridge's safety list are sent. During a print only temperature, fan, speed, flow, Z-offset (M290) and status commands are allowed.</div>
+</div>
+
+<div class=panel id=p_cam>
+  <h3>Webcam</h3>
+  <div id=camoff class=lbl>No camera URL yet. This printer's built-in OV5640 is not used (it is CSI/YUV, not MJPEG). Paste a snapshot or MJPEG URL from a separate camera. Snapshot view refreshes at 5 frames/sec in this browser, not on the printer.</div>
+  <div class=compact style="border:0;padding:0 0 .8em">
+    <label class=lbl>Snapshot URL <input id=camsnap style="width:16em" placeholder="http://camera/shot.jpg"></label>
+    <label class=lbl>Stream URL <input id=camstream style="width:16em" placeholder="http://camera/video.mjpg"></label>
+    <button type=button onclick="camSave()">Save</button>
+  </div>
+  <div id=camframe style="display:none">
+    <img id=camimg alt="webcam" style="width:100%;max-height:420px;object-fit:contain;background:#15171c;border-radius:8px" title="Tap for full screen" onclick="camToggleFs()">
+    <div class=cambtns>
+      <button type=button class=cambtn data-m=live onclick="camSetMode('live')">Live</button>
+      <button type=button class=cambtn data-m=snap onclick="camSetMode('snap')">Snapshot</button>
+      <button type=button class=cambtn onclick="camRetry()">Retry</button>
+      <button type=button class=cambtn id=camfsbtn onclick="camToggleFs()">Full Screen</button>
+    </div>
+    <div class=lbl id=caminfo style="margin-top:.4em"></div>
+  </div>
+  <div id=camfs aria-hidden=true><button type=button id=camfsx onclick="camExitFs()" title="Close">Close</button></div>
+</div>
+</div>
+<div class=col id=col_right>
 <div class=panel id=p_fil>
   <h3>Filament</h3>
   <div class=two>
@@ -150,27 +299,7 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
   </div>
 </div>
 
-<div class=panel id=p_cam>
-  <h3>Webcam</h3>
-  <div id=camoff class=lbl>No camera URL yet. This printer's built-in OV5640 is not used (it is CSI/YUV, not MJPEG). Paste a snapshot or MJPEG URL from a separate camera. Snapshot view refreshes at 5 frames/sec in this browser, not on the printer.</div>
-  <div class=compact style="border:0;padding:0 0 .8em">
-    <label class=lbl>Snapshot URL <input id=camsnap style="width:16em" placeholder="http://camera/shot.jpg"></label>
-    <label class=lbl>Stream URL <input id=camstream style="width:16em" placeholder="http://camera/video.mjpg"></label>
-    <button type=button onclick="camSave()">Save</button>
-  </div>
-  <div id=camframe style="display:none">
-    <img id=camimg alt="webcam" style="width:100%;max-height:420px;object-fit:contain;background:#15171c;border-radius:8px" title="Tap for full screen" onclick="camToggleFs()">
-    <div class=cambtns>
-      <button type=button class=cambtn data-m=live onclick="camSetMode('live')">Live</button>
-      <button type=button class=cambtn data-m=snap onclick="camSetMode('snap')">Snapshot</button>
-      <button type=button class=cambtn onclick="camRetry()">Retry</button>
-      <button type=button class=cambtn id=camfsbtn onclick="camToggleFs()">Full Screen</button>
-    </div>
-    <div class=lbl id=caminfo style="margin-top:.4em"></div>
-  </div>
-  <div id=camfs aria-hidden=true><button type=button id=camfsx onclick="camExitFs()" title="Close">Close</button></div>
-</div>
-
+<div id=zoff_slot_wide></div>
 <div class=panel id=p_files>
   <h3>Files <span class=lbl>jobs stored on the printer</span></h3>
   <div id=flist class=flist></div>
@@ -182,20 +311,83 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
     <span class=lbl>Queued jobs never start on their own: remove the finished part first, then press Start next.</span>
   </div>
 </div>
-
-<div class=panel id=p_con>
-  <h3>Macros</h3>
-  <div id=mlist class=mlist></div>
-  <p class=lbl>These are the usual defaults, sent as G-code from this page. They are not stored on the printer.</p>
-  <h3 style="margin-top:1em">Console</h3>
-  <div id=con class=con></div>
-  <div style="display:flex;gap:.5em;margin-top:.5em">
-    <input id=cin placeholder="G-code, e.g. M105" style="flex:1;font:14px Menlo,monospace;padding:.45em;border:1px solid #bcd;border-radius:6px" onkeydown="if(event.key==='Enter')csend()">
-    <button id=cbtn class="btn u" style="min-width:5em" onclick="csend()">Send</button>
+</div>
+<div class=panel id=p_cal>
+  <h3>Calibration</h3>
+  <p class=hint>XYZ (G33) takes about 15 minutes and clears the bed mesh, so it always continues into auto-level (G29). Keep the probe on between those two. The paper test is done with the probe off. Settings are saved (M500) only after a successful “Calibration OK” or a complete leveling grid, or when you save the paper test. Cancel stops without saving.</p>
+  <div class=calacts>
+    <button type=button class="btn calgo" onclick="calStart('all')">Run all</button>
+    <button type=button class="lite calgo" onclick="calCancel()">Stop without saving</button>
   </div>
-  <div class=lbl id=cnote style="margin-top:.3em">Only commands on the bridge's safety list are sent. During a print only temperature, fan, speed, flow and status commands are allowed.</div>
+  <div class=calprog id=calprog style="display:none">
+    <div class=hs id=calhs>Starting…</div>
+    <div class=hbar><div id=calbar></div></div>
+    <div class=lbl id=calel style="text-align:center">–</div>
+  </div>
+  <div id=calprompt class=calprompt style="display:none">
+    <p id=calpromptt></p>
+    <div class=compact style="border:0">
+      <button type=button class=btn onclick="calConfirm()">Continue</button>
+      <button type=button class=lite onclick="calCancel()">Cancel</button>
+    </div>
+  </div>
+  <div id=calerr class=calerr style="display:none"></div>
+  <div class=calgrid>
+    <div class=calcard>
+      <h4>XYZ calibration</h4>
+      <div class=calv id=calxyzv>H, R, endstops and tower angles appear after M503.</div>
+      <p class=hint id=calxyzlast>Not run from this page yet.</p>
+      <p class=hint>G33 solves endstops (M666), height H, radius R, and tower angles. It does not change the probe offset (M851) and it wipes the 7×7 mesh, so leveling always follows.</p>
+      <button type=button class="btn calgo" onclick="calStart('xyz')">Run XYZ, then level</button>
+    </div>
+    <div class=calcard>
+      <h4>Auto-level</h4>
+      <div class=calv id=callevv>7×7 bilinear mesh.</div>
+      <div class=mesh id=calmesh></div>
+      <p class=hint id=callevlast>Not run from this page yet.</p>
+      <p class=hint>The firmware grid is fixed at 7×7 (about 35 mm spacing over a 210 mm square). A finer 12×12 grid would need a firmware change.</p>
+      <button type=button class="btn calgo" onclick="calStart('level')">Run leveling</button>
+    </div>
+    <div class=calcard>
+      <h4>Z-offset paper test</h4>
+      <div class=calv id=calpaperv>Current Z and stored height appear here.</div>
+      <p class=hint id=calpaperlast>Not run from this page yet.</p>
+      <p class=hint>After homing, the nozzle moves to Z 40 mm and software endstops are turned off. Jog until the paper just drags, then save. New height is H − Z. Cancel restores endstops and does not save.</p>
+      <div class=jogz>
+        <button type=button class=caljog onclick="calJog(5)">+5</button>
+        <button type=button class=caljog onclick="calJog(1)">+1</button>
+        <button type=button class=caljog onclick="calJog(0.1)">+0.1</button>
+        <button type=button class=caljog onclick="calJog(0.05)">+0.05</button>
+        <button type=button class=caljog onclick="calJog(0.01)">+0.01</button>
+        <button type=button class=caljog onclick="calJog(-5)">−5</button>
+        <button type=button class=caljog onclick="calJog(-1)">−1</button>
+        <button type=button class=caljog onclick="calJog(-0.1)">−0.1</button>
+        <button type=button class=caljog onclick="calJog(-0.05)">−0.05</button>
+        <button type=button class=caljog onclick="calJog(-0.01)">−0.01</button>
+      </div>
+      <div class=paperacts>
+        <button type=button class="btn calgo" onclick="calStart('paper')">Start paper test</button>
+        <button type=button class="btn caljog" onclick="calSave()">Paper drags — Save</button>
+      </div>
+    </div>
+  </div>
 </div>
 </div>
+
+<script>
+(function(){
+  function placeZ(){
+    var card=document.getElementById("p_zoff");
+    var wide=window.matchMedia("(min-width:1100px)").matches;
+    var slot=document.getElementById(wide?"zoff_slot_wide":"zoff_slot_tool");
+    if(card&&slot&&card.parentNode!==slot) slot.appendChild(card);
+  }
+  placeZ();
+  var mq=window.matchMedia("(min-width:1100px)");
+  if(mq.addEventListener) mq.addEventListener("change",placeZ);
+  else if(mq.addListener) mq.addListener(placeZ);
+})();
+</script>
 
 <div class=tabs>
   <button class=on id=t_tool onclick="tab('tool')">Toolhead</button>
@@ -257,10 +449,26 @@ function hms(s){s=Math.round(+s||0); if(s<=0)return '–'; var h=Math.floor(s/36
   return (h?h+'h ':'')+(h||m?m+'m ':'')+sec+'s'}
 function fmtG(f){if(f&&f.filament_g!=null)return (+f.filament_g).toFixed(1)+' g';
   if(f&&f.filament_mm!=null)return ((+f.filament_mm)/1000).toFixed(2)+' m'; return '–'}
-function tab(t){for(const n of['tool','fil','cam','files','con']){
-  document.getElementById('t_'+n).classList.toggle('on',n==t);
-  document.getElementById('p_'+n).classList.toggle('on',n==t)}
+function tab(t){
+  document.body.classList.toggle('calview', t==='cal');
+  for(const n of['tool','fil','cal','cam','files','con']){
+    var tb=document.getElementById('t_'+n), pn=document.getElementById('p_'+n);
+    if(tb) tb.classList.toggle('on',n===t);
+    if(pn) pn.classList.toggle('on',n===t);
+  }
   if(t==='cam')camApply();
+}
+function showCal(on){
+  tab(on?'cal':'tool');
+  try{
+    var h=on?'#cal':'#tool';
+    if(location.hash!==h){ if(history.replaceState) history.replaceState(null,'',h); else location.hash=h; }
+  }catch(e){}
+}
+function bootTab(){
+  var m=(location.hash||'').replace(/^#\/?/,'').split('?')[0].split('&')[0].toLowerCase();
+  if(['tool','fil','cal','cam','files','con'].indexOf(m)<0) m='tool';
+  tab(m);
 }
 function sel(gr){const b=document.querySelector('[data-g='+gr+'] .sel'); return b?b.textContent:''}
 document.querySelectorAll('.opts').forEach(o=>o.querySelectorAll('button').forEach(b=>b.onclick=()=>{
@@ -287,6 +495,28 @@ async function g(cs, quiet, auto){
     if(!quiet) setTimeout(()=>tick(1),300);
     return true;
   }catch(e){if(!quiet)say('Failed: '+e.message); return false}
+}
+function zoff(s){var d=sel('zoff');g(['M290 Z'+(s<0?'-':'')+d])}
+function fmtN(n,sign){if(n==null||n==='')return '—'; var x=Number(n); if(isNaN(x))return '—'; var s=x.toFixed(2); if(sign&&x>0)s='+'+s; if(sign&&x===0)s='+'+s; return s}
+function renderZ(z){
+  const el=document.getElementById('zread'); if(!el)return;
+  if(!z){el.innerHTML='Z offset: +0.00 mm'; return}
+  let msg='Z offset: <b>'+fmtN(z.offset,1)+' mm</b>';
+  if(z.pending_save) msg+=' · <b>Save queued'+(z.pending_height!=null?' → H '+fmtN(z.pending_height):'')+'</b>';
+  el.innerHTML=msg;
+}
+async function zzero(){
+  try{const j=await J('/api/ivi/zoffset/zero',{}); say(j.message||'Zero set'); renderZ(j.zoffset);}
+  catch(e){say('Set zero failed: '+e.message)}
+}
+async function setAuto(on){
+  try{await J('/api/ivi/settings',{autostart:!!on});
+    say(on?'Auto-start is on: Upload and Print will skip the plate warning and start the job.':'Auto-start is off: you confirm OK and RUN on the touchscreen.');
+  }catch(e){say('Failed: '+e.message); const c=document.getElementById('autostart'); if(c)c.checked=!on}
+}
+async function zsave(){
+  try{const j=await J('/api/ivi/zoffset/save',{}); say(j.message||'Save queued'); renderZ(j.zoffset);}
+  catch(e){say('Save failed: '+e.message)}
 }
 function jog(a,s){g(['G91','G1 '+a+(s*sel('tdst'))+' F'+sel('tspd'),'G90']); posSoon()}
 function home(){g(['G28']); posSoon(1)}
@@ -472,6 +702,181 @@ async function csend(){
   conPoll();
 }
 
+
+var CAL=null, calPollOn=0;
+function ago(s){
+  if(!s) return 'Not run from this page yet.';
+  var d=new Date(s*1000), now=new Date();
+  return 'Last run: '+d.toLocaleString();
+}
+function mm(v){ return v==null?'–':(Number(v).toFixed(2)+' mm'); }
+function meshColor(v,lo,hi){
+  if(v==null||isNaN(v)) return '#dfe6f0';
+  var mid=(lo+hi)/2, span=Math.max(0.02, hi-lo), t=(v-lo)/span;
+  t=Math.max(0,Math.min(1,t));
+  var r=Math.round(40+t*190), g=Math.round(90+80*(1-Math.abs(t-0.5)*2)), b=Math.round(200-t*140);
+  return 'rgb('+r+','+g+','+b+')';
+}
+function renderMesh(grid){
+  var el=document.getElementById('calmesh'); if(!el) return;
+  el.innerHTML='';
+  if(!grid||!grid.length){ for(var i=0;i<49;i++){ var x=document.createElement('i'); x.style.background='#e8eef6'; el.appendChild(x);} return; }
+  var vals=[];
+  grid.forEach(function(row){ (row||[]).forEach(function(z){ if(z!=null&&!isNaN(z)) vals.push(+z); }); });
+  var lo=vals.length?Math.min.apply(null,vals):0, hi=vals.length?Math.max.apply(null,vals):0;
+  /* rows are Y (J), cells are X (I); draw J from high to low so the top of the card is +Y */
+  for(var j=grid.length-1;j>=0;j--){
+    var row=grid[j]||[];
+    for(var i=0;i<(row.length||7);i++){
+      var c=document.createElement('i');
+      var z=row[i];
+      c.style.background=meshColor(z,lo,hi);
+      c.title=(z==null?'n/a':Number(z).toFixed(3)+' mm');
+      el.appendChild(c);
+    }
+  }
+}
+function renderCal(cal){
+  CAL=cal||{};
+  var busy=!!CAL.busy, phase=CAL.phase||'idle';
+  var prog=document.getElementById('calprog');
+  if(prog) prog.style.display=(busy||phase==='done'||phase==='fail')?'block':'none';
+  var hs=document.getElementById('calhs');
+  if(hs){
+    hs.textContent=CAL.step||(phase==='done'?'Finished':phase==='fail'?'Failed':'Calibration');
+    hs.className='hs'+(phase==='done'?' done':phase==='fail'?' error':'');
+  }
+  var bar=document.getElementById('calbar'); if(bar) bar.style.width=(CAL.progress||0)+'%';
+  var el=document.getElementById('calel'); if(el) el.textContent=busy?('Elapsed '+hms(CAL.elapsed_s)):'';
+  var pr=document.getElementById('calprompt'), pt=document.getElementById('calpromptt');
+  if(pr){ pr.style.display=CAL.prompt?'block':'none'; if(pt) pt.textContent=CAL.prompt||''; }
+  var er=document.getElementById('calerr');
+  if(er){ if(CAL.error && (phase==='fail'||CAL.error==='cancelled')){ er.style.display='block'; er.textContent=CAL.error; } else er.style.display='none'; }
+  var ban=document.getElementById('calban');
+  if(ban){
+    ban.style.display=busy?'block':'none';
+    var s=document.getElementById('calbanstep'); if(s) s.textContent=CAL.step||'';
+    var e2=document.getElementById('calbanel'); if(e2) e2.textContent=hms(CAL.elapsed_s);
+    var b2=document.getElementById('calbanbar'); if(b2) b2.style.width=(CAL.progress||0)+'%';
+  }
+  var x=CAL.xyz||{}, l=CAL.level||{}, ppr=CAL.paper||{};
+  var xv=document.getElementById('calxyzv');
+  if(xv) xv.innerHTML='H '+mm(x.H)+' · R '+mm(x.R)+' · L '+mm(x.L)+'<br>Endstops X '+mm(x.endstops&&x.endstops.X)+' Y '+mm(x.endstops&&x.endstops.Y)+' Z '+mm(x.endstops&&x.endstops.Z)+'<br>Tower angles X '+(x.angles&&x.angles.X!=null?Number(x.angles.X).toFixed(2)+'°':'–')+' Y '+(x.angles&&x.angles.Y!=null?Number(x.angles.Y).toFixed(2)+'°':'–')+' Z '+(x.angles&&x.angles.Z!=null?Number(x.angles.Z).toFixed(2)+'°':'–');
+  var xl=document.getElementById('calxyzlast'); if(xl) xl.textContent=ago(x.last_s);
+  var lv=document.getElementById('callevv');
+  if(lv) lv.textContent=(l.enabled?'Mesh enabled':'Mesh off')+' · fade '+(l.fade==null?'–':l.fade+' mm')+' · 7×7 bilinear';
+  renderMesh(l.grid);
+  var ll=document.getElementById('callevlast'); if(ll) ll.textContent=ago(l.last_s);
+  var pv=document.getElementById('calpaperv');
+  if(pv) pv.innerHTML='Current Z '+(ppr.z==null?'–':Number(ppr.z).toFixed(3)+' mm')+' · stored H '+mm(ppr.H)+'<br>Offset '+mm(ppr.offset)+' vs reference '+mm(ppr.ref);
+  var pl=document.getElementById('calpaperlast'); if(pl) pl.textContent=ago(ppr.last_s);
+  document.querySelectorAll('.calgo').forEach(function(b){
+    if(/Stop without saving/.test(b.textContent)) b.disabled=!busy;
+    else b.disabled=busy;
+  });
+  var jogging=phase==='paper_jog';
+  document.querySelectorAll('.caljog').forEach(function(b){ b.disabled=!jogging; });
+}
+async function calStart(action){
+  try{
+    const r=await fetch('/api/ivi/cal/start',{method:'POST',headers:H(),body:JSON.stringify({action:action})});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||r.status);
+    renderCal(j.cal); say('Calibration started'); calKick();
+  }catch(e){ say(e.message); }
+}
+async function calConfirm(){
+  try{
+    const r=await fetch('/api/ivi/cal/confirm',{method:'POST',headers:H(),body:JSON.stringify({action:'confirm'})});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||r.status);
+    renderCal(j.cal); calKick();
+  }catch(e){ say(e.message); }
+}
+async function calCancel(){
+  try{
+    const r=await fetch('/api/ivi/cal/cancel',{method:'POST',headers:H(),body:JSON.stringify({action:'cancel'})});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||r.status);
+    renderCal(j.cal); say('Stopped without saving'); calKick();
+  }catch(e){ say(e.message); }
+}
+async function calJog(dz){
+  try{
+    const r=await fetch('/api/ivi/cal/jog',{method:'POST',headers:H(),body:JSON.stringify({dz:dz})});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||r.status);
+    renderCal(j.cal); calKick();
+  }catch(e){ say(e.message); }
+}
+async function calSave(){
+  try{
+    const r=await fetch('/api/ivi/cal/save',{method:'POST',headers:H(),body:JSON.stringify({action:'save'})});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||r.status);
+    renderCal(j.cal); say('Paper test saved'); calKick();
+  }catch(e){ say(e.message); }
+}
+function calKick(){ if(!calPollOn){ calPollOn=1; setTimeout(function(){calPollOn=0},0); } }
+async function calPoll(){
+  try{
+    const r=await fetch('/api/ivi/cal',{headers:H()});
+    if(!r.ok) return;
+    const j=await r.json();
+    renderCal(j);
+  }catch(e){}
+}
+
+function demoKind(){
+  var q=new URLSearchParams(location.search);
+  return q.get('demo')||'';
+}
+function applyDemo(){
+  var d=demoKind();
+  if(!d) return 0;
+  var ban=document.getElementById('demoban');
+  if(ban) ban.style.display='block';
+  stt.textContent='Operational';
+  fn.textContent='example-benchy.gcode';
+  pc.textContent=''; pb.style.width='0';
+  usb.textContent='up';
+  nzv.textContent='25°C/0°C'; bdv.textContent='22°C/0°C';
+  px.textContent='X: 0.00'; py.textContent='Y: 0.00'; pz.textContent='Z: 50.00';
+  renderZ({offset:0, ref:233.22, H:233.22});
+  var ac=document.getElementById('autostart'); if(ac) ac.checked=false;
+  flist.innerHTML=
+    '<div class=fi><div class=nt>example</div><div style="flex:1;min-width:0"><b>example-benchy.gcode</b><div class=lbl>1h 12m 0s · 8.4 g · 2.1 MB · example data</div>'
+    +'<div class=fa><button class=u disabled>Print</button><button class=u disabled>Queue</button><button disabled>Delete</button></div></div></div>'
+    +'<div class=fi><div class=nt>example</div><div style="flex:1;min-width:0"><b>example-cube.gcode</b><div class=lbl>18m 0s · 3.2 g · 0.6 MB · example data</div>'
+    +'<div class=fa><button class=u disabled>Print</button><button class=u disabled>Queue</button><button disabled>Delete</button></div></div></div>';
+  qlist.innerHTML='Empty.';
+  con.innerHTML='<div class=cs>&gt; M114</div><div>X:0.00 Y:0.00 Z:50.00 E:0.00 (example data)</div><div class=cs>&gt; M105</div><div>T:25.0 / 0.0 B:22.0 / 0.0 (example data)</div>';
+  var calIdle={
+    busy:false, phase:'idle', run:'', step:'', prompt:null, error:null, progress:0, elapsed_s:0,
+    xyz:{H:233.22,R:160.31,L:357.50,S:200,endstops:{X:-0.03,Y:-0.13,Z:0},angles:{X:0.11,Y:-0.07,Z:-0.04},last_s:Math.floor(Date.now()/1000)-3600},
+    level:{enabled:true,fade:0,last_s:Math.floor(Date.now()/1000)-1800,grid:[
+      [0.08,0.06,0.04,0.03,0.04,0.06,0.09],
+      [0.05,0.03,0.01,0.00,0.01,0.03,0.05],
+      [0.03,0.01,-0.01,-0.02,-0.01,0.01,0.03],
+      [0.02,0.00,-0.02,-0.03,-0.02,0.00,0.02],
+      [0.03,0.01,-0.01,-0.02,-0.01,0.01,0.04],
+      [0.05,0.03,0.01,0.00,0.01,0.03,0.06],
+      [0.09,0.06,0.04,0.03,0.04,0.06,0.10]
+    ]},
+    paper:{z:0.12,H:233.22,offset:0.00,ref:233.22,last_s:Math.floor(Date.now()/1000)-900}
+  };
+  if(d==='calpaper'){
+    calIdle.busy=true; calIdle.phase='paper_jog'; calIdle.run='paper';
+    calIdle.step='Jog until the paper just drags, then save.';
+    calIdle.progress=88; calIdle.elapsed_s=95;
+    calIdle.paper={z:40.00,H:233.22,offset:0.00,ref:233.22,last_s:calIdle.paper.last_s};
+  }
+  renderCal(calIdle);
+  if(d==='cal'||d==='calpaper') tab('cal');
+  else tab('tool');
+  return 1;
+}
+
 async function tick(f){
   if(w&&!f)return;
   try{
@@ -488,6 +893,9 @@ async function tick(f){
     for(const[g2,v]of[['nz',T.nz],['bd',T.bd]])document.querySelectorAll('[data-g='+g2+'] button:not(.pm)').forEach(b=>b.classList.toggle('sel',parseInt(b.textContent)==v));
     const q=p.position; px.textContent='X: '+(q?q.x.toFixed(2):'–'); py.textContent='Y: '+(q?q.y.toFixed(2):'–'); pz.textContent='Z: '+(q?q.z.toFixed(2):'–');
     const ivi=p.ivi||{}, link=!!ivi.link, ts=!!ivi.touchscreen_job;
+    renderZ(ivi.zoffset);
+    const ac=document.getElementById('autostart');
+    if(ac && document.activeElement!==ac && ivi.autostart!=null) ac.checked=!!ivi.autostart;
     if(ivi.fan!=null && Date.now()-fanClick>4000){fanOn=ivi.fan>0; fan.classList.toggle('on',fanOn); fan.title='Fan '+ivi.fan+'%'}
     usb.textContent=link?(ts?'up (touchscreen job)':'up'):'down';
     ban.style.display=ts?'flex':'none'; banf.textContent=(j.job&&j.job.file&&j.job.file.name)||'';
@@ -500,17 +908,28 @@ async function tick(f){
       jl.textContent=(ji.sent||0)+' / '+(ji.total||0);
       je.textContent=hms(j.progress&&j.progress.printTime); jt.textContent=hms(j.progress&&j.progress.printTimeLeft);
     }
-    const busy=ts||!link;
+    if(ivi.cal) renderCal(ivi.cal);
+    const calBusy=!!(ivi.cal&&ivi.cal.busy);
+    const busy=ts||!link||calBusy;
     document.querySelectorAll('.u,.opts[data-c] button').forEach(b=>{
-      if(b.closest('#jobp')) return;
+      if(b.closest('#jobp')||b.closest('#p_cal')) return;
       const keep=/\b(Pause|Resume|Stop|Clear)\b/.test(b.textContent);
       b.disabled=busy&&!keep;
     });
-    if(link && !ts && Date.now()-lastPos>=10000) posPoll();
+    if(link && !ts && !calBusy && Date.now()-lastPos>=10000) posPoll();
   }catch(e){stt.textContent='bridge offline'; document.querySelectorAll('.u').forEach(b=>b.disabled=true)}
 }
-mLoad(); camInit(); filesLoad(); conPoll();
-tick(1); setInterval(()=>tick(),3000);
-setInterval(conPoll,3000); setInterval(filesLoad,15000);
+bootTab();
+window.addEventListener('hashchange',bootTab);
+window.addEventListener('pageshow',function(){if(!['tool','fil','cal','cam','files','con'].some(function(n){return document.getElementById('p_'+n).classList.contains('on')}))bootTab()});
+mLoad(); camInit();
+if(applyDemo()){
+  /* example-data screenshots: no live printer polls */
+}else{
+  filesLoad(); conPoll(); tick(1);
+  setInterval(()=>tick(),3000);
+  setInterval(function(){ if((CAL&&CAL.busy)||(document.getElementById('p_cal')&&document.getElementById('p_cal').classList.contains('on'))) calPoll(); },1000);
+  setInterval(conPoll,3000); setInterval(filesLoad,15000);
+}
 </script>
 </body></html>

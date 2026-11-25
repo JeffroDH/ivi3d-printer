@@ -1,6 +1,6 @@
 """End-to-end tests: ivibridge (ARM build under qemu-arm, or native with IVIBRIDGE_BIN) between a fake
 STM32 (pty) and a fake touchscreen app (opens the link path the daemon creates), plus the HTTP API."""
-import json, os, re, shutil, signal, socket, subprocess, sys, tempfile, time, unittest, urllib.request, urllib.error
+import json, os, re, shutil, signal, socket, subprocess, sys, tempfile, time, threading, unittest, urllib.request, urllib.error
 sys.path.insert(0, os.path.dirname(__file__))
 from sim_stm32 import FakeSTM32, FakeApp
 
@@ -24,6 +24,8 @@ class Base(unittest.TestCase):
     plain_ok_nook = False; bad_at = None; ok_delay = 0.002; key = KEY; poll = "0"; sim_kw = {}; extra_args = []
     def setUp(self):
         self.d = tempfile.mkdtemp(prefix="ivib-")
+        if getattr(self, "preset_settings", None):
+            with open(os.path.join(self.d, "settings"), "w") as f: f.write(self.preset_settings)
         self.up = os.path.join(self.d, "WifiFile"); os.mkdir(self.up)
         self.sim = FakeSTM32(plain_ok_nook=self.plain_ok_nook, ok_delay=self.ok_delay, bad_checksum_at=self.bad_at, **self.sim_kw)
         self.real = os.path.join(self.d, "ivi-stm32"); os.symlink(self.sim.slave_name, self.real)
@@ -34,8 +36,12 @@ class Base(unittest.TestCase):
         if self.key: args += ["-k", self.key]
         args += list(self.extra_args)
         self.env = os.environ.copy(); self.env["IVIB_DIR"] = self.d
+        if getattr(self, "extra_env", None): self.env.update(self.extra_env)
         self.env["IVIB_WWW"] = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "www")
         if getattr(self, "log_max", None): self.env["IVIB_LOG_MAX"] = str(self.log_max)
+        # Existing job-stream tests keep the 0.1.12 network path. Native-start tests clear this.
+        if getattr(self, "net_stream", True):
+            self.env["IVIB_NET_STREAM"] = "1"
         self.proc = subprocess.Popen(args, env=self.env)
         end = time.time() + 15
         while time.time() < end and not os.path.islink(self.link): time.sleep(0.05)
@@ -61,8 +67,8 @@ class Base(unittest.TestCase):
             except OSError: time.sleep(0.1)
         self.fail("http not up")
 
-    def http(self, method, path, body=None, key=KEY, ctype="application/json", raw=None):
-        url = "http://127.0.0.1:%d%s" % (self.port, path)
+    def http(self, method, path, body=None, key=KEY, ctype="application/json", raw=None, port=None):
+        url = "http://127.0.0.1:%d%s" % (self.port if port is None else port, path)
         data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
         req = urllib.request.Request(url, data=data, method=method)
         if key: req.add_header("X-Api-Key", key)
@@ -479,10 +485,105 @@ class T28_FanStateSync(Base):
         _, body = self.http("GET", "/", key=None); t = body.decode()
         self.assertIn("ivi.fan!=null", t); self.assertIn("fanClick", t)
 
+class T29_FanEndpoint(Base):
+    """GET /api/fan: public read-only fan state for the touchscreen toggle (polled from 127.0.0.1 without a key)"""
+    def get(self):
+        with urllib.request.urlopen("http://127.0.0.1:%d/api/fan" % self.port, timeout=5) as r:   # no X-Api-Key
+            self.assertEqual(r.status, 200)
+            self.assertEqual(r.headers["Cache-Control"], "no-store")
+            self.assertTrue(r.headers["Content-Type"].startswith("application/json"))
+            return json.loads(r.read())
+    def settle(self, want, timeout=5):
+        end = time.time() + timeout
+        while time.time() < end:
+            f = self.get()
+            if f == want: return
+            time.sleep(0.1)
+        self.assertEqual(self.get(), want)
+    def test_states_without_key_on_loopback(self):
+        self.assertTrue(self.key)                                               # daemon runs with a key; loopback is not LAN
+        self.assertEqual(self.get(), {"on": None, "fan": None, "fans": [None, None]})
+        self.assertTrue(self.app.send("M106"))                                  # touchscreen toggle on
+        self.settle({"on": True, "fan": 100, "fans": [100, 100]})
+        self.assertTrue(self.app.send("M107"))                                  # touchscreen toggle off
+        self.settle({"on": False, "fan": 0, "fans": [0, 0]})
+        self.http("POST", "/api/printer/command", {"command": "M106 P1 S128"})  # page / web
+        self.settle({"on": True, "fan": 50, "fans": [0, 50]})
+        _, p = self.http("GET", "/api/printer"); self.assertEqual((p["ivi"]["fan"], p["ivi"]["fans"]), (50, [0, 50]))
+    def test_read_only(self):
+        n = len(self.sim.cmds())
+        for m in ("POST", "PUT", "DELETE"):
+            s, _ = self.http(m, "/api/fan", {"command": "M106"}, key=None); self.assertEqual(s, 403, m)
+        with self.assertRaises(urllib.error.HTTPError) as e: urllib.request.urlopen("http://127.0.0.1:%d/api/fan?x=M106" % self.port, data=b"M106", timeout=5)
+        self.assertEqual(e.exception.code, 403)
+        for _ in range(3): self.get()
+        time.sleep(0.5); self.assertEqual(len(self.sim.cmds()), n)              # nothing reached the STM32
+        self.assertEqual(self.get()["on"], None)
+        with self.assertRaises(urllib.error.HTTPError) as e: urllib.request.urlopen("http://127.0.0.1:%d/api/printer" % self.port, timeout=5)
+        self.assertEqual(e.exception.code, 403)                                 # the rest of the API still needs the key
+
 class T24_VersionAndHeadField(Base):
     def test_version(self):
-        s, l = self.http("GET", "/api/ivi/link"); self.assertEqual(l["version"], "0.1.7-a33")
+        s, l = self.http("GET", "/api/ivi/link"); self.assertEqual(l["version"], "0.1.18-a33")
         s, p = self.http("GET", "/api/printer"); self.assertEqual(p["ivi"]["head"], "")
+
+    def test_icons_and_manifest_no_key_needed(self):
+        base = "http://127.0.0.1:%d" % self.port
+        for path, ct, size in (("/apple-touch-icon.png", "image/png", 180), ("/apple-touch-icon-precomposed.png", "image/png", 180),
+                               ("/icon-192.png", "image/png", 192), ("/icon-512.png", "image/png", 512),
+                               ("/favicon-32.png", "image/png", 32), ("/favicon.ico", "image/x-icon", None)):
+            with urllib.request.urlopen(base + path, timeout=5) as r:
+                body = r.read(); self.assertEqual(r.status, 200); self.assertEqual(r.headers["Content-Type"], ct)
+                self.assertIn("max-age", r.headers["Cache-Control"])
+            if size:
+                self.assertEqual(body[:8], b"\x89PNG\r\n\x1a\n")
+                self.assertEqual(int.from_bytes(body[16:20], "big"), size); self.assertEqual(int.from_bytes(body[20:24], "big"), size)
+            else: self.assertEqual(body[:4], b"\x00\x00\x01\x00")
+        with urllib.request.urlopen(base + "/manifest.webmanifest", timeout=5) as r:
+            m = json.loads(r.read()); self.assertEqual(r.headers["Content-Type"], "application/manifest+json")
+        self.assertEqual((m["name"], m["short_name"], m["display"]), ("IVI3D Bridge", "IVI3D", "standalone"))
+        self.assertEqual({i["sizes"] for i in m["icons"]}, {"180x180", "192x192", "512x512"})
+        with self.assertRaises(urllib.error.HTTPError) as e: urllib.request.urlopen(base + "/api/version", timeout=5)
+        self.assertEqual(e.exception.code, 403)   # icons are public, the API still isn't
+
+    def test_page_head_has_icon_tags(self):
+        with urllib.request.urlopen("http://127.0.0.1:%d/" % self.port, timeout=5) as r: page = r.read().decode()
+        for t in ('rel=apple-touch-icon', 'href="/apple-touch-icon.png"', 'rel=manifest href="/manifest.webmanifest"',
+                  'name=apple-mobile-web-app-title content="IVI3D"', 'name=theme-color',
+                  'src="/logo.svg"', 'viewport-fit=cover'):
+            self.assertIn(t, page)
+
+    def test_logo_route_no_key_needed(self):
+        base = "http://127.0.0.1:%d" % self.port
+        with urllib.request.urlopen(base + "/logo.svg", timeout=5) as r:
+            body = r.read()
+            self.assertEqual(r.status, 200)
+            self.assertTrue(r.headers.get("Content-Type", "").startswith("image/svg+xml"))
+            self.assertIn("public", r.headers.get("Cache-Control", ""))
+        self.assertIn(b"<svg", body)
+        self.assertIn(b"#0F35E7", body)
+        # still no key needed, and the API still requires one
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(base + "/api/version", timeout=5)
+        self.assertEqual(e.exception.code, 403)
+
+    def test_page_fixed_tabs_and_default_tab(self):
+        s, body = self.http("GET", "/", key=None)
+        self.assertEqual(s, 200)
+        text = body.decode() if isinstance(body, (bytes, bytearray)) else body
+        # quoted class so the Toolhead panel is visible on load (unquoted class=panel on
+        # was parsed as class="panel", leaving the page blank on phones until a tab click)
+        self.assertIn('class="panel on"', text)
+        self.assertIn("id=p_tool", text)
+        self.assertIn("function bootTab(", text)
+        self.assertIn("bootTab()", text)
+        self.assertIn("location.hash", text)
+        self.assertRegex(text, r"bootTab\(\)")
+        # phone portrait tab bar is fixed at the bottom, with room for the iOS home indicator
+        self.assertIn("position:fixed;left:0;right:0;bottom:0", text)
+        self.assertIn("100dvh", text)
+        self.assertIn("safe-area-inset-bottom", text)
+        self.assertIn("min-height:60px", text)
 
     def test_status_page_key_flow(self):
         s, body = self.http("GET", "/", key=None)
@@ -511,7 +612,7 @@ class T24_VersionAndHeadField(Base):
         self.assertIn("localStorage.removeItem", text2)
         self.assertIn("localStorage.getItem", text2)
 
-PLUGIN_DIR = os.environ.get("ORCA_PLUGIN_DIR", os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "orca", "plugin")))
+PLUGIN_DIR = os.environ.get("ORCA_PLUGIN_DIR", "/workspace/ivi3d-printer/orca/plugin")
 
 @unittest.skipUnless(os.path.exists(os.path.join(PLUGIN_DIR, "ivi3d_bridge_plugin.py")), "Orca plugin source not present")
 class T14_OrcaPluginClient(Base):
@@ -553,7 +654,7 @@ class T25_PersistJobsAndLogs(Base):
     log_max = 800
     def _ready_p1(self):
         self.p1 = os.path.join(self.d, "p1")
-        os.makedirs(os.path.join(self.p1, "ivibridge_jobs"), exist_ok=True)
+        os.makedirs(self.p1, exist_ok=True)
         os.makedirs(os.path.join(self.p1, "ivibridge_logs"), exist_ok=True)
         open(os.path.join(self.d, "p1.ready"), "w").write(self.p1 + "\n")
 
@@ -567,14 +668,14 @@ class T25_PersistJobsAndLogs(Base):
         self._ready_p1()
         # wait for the 2 s refresh + migrate
         end = time.time() + 6
-        dest = os.path.join(self.p1, "ivibridge_jobs", "early.gcode")
+        dest = os.path.join(self.p1, "early.gcode")
         while time.time() < end and not os.path.exists(dest): time.sleep(0.2)
         self.assertTrue(os.path.exists(dest), "idle RAM job was not migrated")
         self.assertFalse(os.path.exists(os.path.join(self.up, "early.gcode")))
         self.assertEqual(__import__("hashlib").sha256(open(dest, "rb").read()).hexdigest(), early_sha)
         # new uploads go to p1
         s, r = self.upload("later.gcode", gcode(15), start=False); self.assertEqual(s, 201, r)
-        self.assertTrue(os.path.exists(os.path.join(self.p1, "ivibridge_jobs", "later.gcode")))
+        self.assertTrue(os.path.exists(os.path.join(self.p1, "later.gcode")))
         self.assertFalse(os.path.exists(os.path.join(self.up, "later.gcode")))
         # listing includes both names (only p1 now)
         s, listing = self.http("GET", "/api/files"); self.assertEqual(s, 200)
@@ -605,13 +706,13 @@ class T25_PersistJobsAndLogs(Base):
         # while the job is still active (paused), the RAM file and path must stay valid
         time.sleep(2.5)
         self.assertTrue(os.path.exists(src), "active job was moved mid-print")
-        self.assertFalse(os.path.exists(os.path.join(self.p1, "ivibridge_jobs", "printme.gcode")))
+        self.assertFalse(os.path.exists(os.path.join(self.p1, "printme.gcode")))
         s, job = self.http("GET", "/api/job"); self.assertEqual(job["state"], "Paused")
         # after cancel (job ends) it should migrate
         self.http("POST", "/api/job", {"command": "cancel"})
         self.wait_state(lambda j: j["ivi"]["job_state"] == "Cancelled", 30)
         end = time.time() + 6
-        dest = os.path.join(self.p1, "ivibridge_jobs", "printme.gcode")
+        dest = os.path.join(self.p1, "printme.gcode")
         while time.time() < end and not os.path.exists(dest): time.sleep(0.2)
         self.assertTrue(os.path.exists(dest), "finished job was not migrated")
         self.assertFalse(os.path.exists(src))
@@ -629,6 +730,36 @@ class T25_PersistJobsAndLogs(Base):
                         "log was neither rotated nor capped (size=%d)" % st.st_size)
         if os.path.exists(self.log + ".1"):
             self.assertLessEqual(st.st_size, 800 + 400)
+
+
+    def test_list_skips_logs_and_includes_legacy_jobs(self):
+        self._ready_p1()
+        open(os.path.join(self.p1, "visible.gcode"), "w").write(gcode(5))
+        os.makedirs(os.path.join(self.p1, "ivibridge_jobs"), exist_ok=True)
+        open(os.path.join(self.p1, "ivibridge_jobs", "old.gcode"), "w").write(gcode(5))
+        open(os.path.join(self.p1, "ivibridge_logs", "ivibridge.log"), "w").write("log line\n")
+        os.makedirs(os.path.join(self.p1, "tmp_files"), exist_ok=True)
+        open(os.path.join(self.p1, ".hidden.gcode"), "w").write(gcode(5))
+        open(os.path.join(self.p1, "readme.txt"), "w").write("nope\n")
+        # give the 2 s p1 refresh a moment
+        import time
+        end = time.time() + 4
+        names = []
+        while time.time() < end:
+            s, listing = self.http("GET", "/api/ivi/files")
+            self.assertEqual(s, 200)
+            names = [f["name"] for f in listing["files"]]
+            if "visible.gcode" in names and "old.gcode" in names:
+                break
+            time.sleep(0.2)
+        self.assertIn("visible.gcode", names)
+        self.assertIn("old.gcode", names)           # leftover pre-0.1.12 jobs still listed
+        self.assertNotIn("ivibridge.log", names)
+        self.assertNotIn("ivibridge_logs", names)
+        self.assertNotIn("tmp_files", names)
+        self.assertNotIn("ivibridge_jobs", names)
+        self.assertNotIn("readme.txt", names)
+        self.assertNotIn(".hidden.gcode", names)
 
 class T26_IviHeaderUpload(Base):
     """Uploads get the same IVI header as the Mac bridge; already-headered files are left alone."""
@@ -752,6 +883,729 @@ class T26_FilesUiAndPage(Base):
         self.assertEqual(s, 400)
         s, r = self.http("POST", "/api/printer/command", {"command": "M3 S255"})
         self.assertEqual(s, 400)
+
+
+
+class SecondHttpPort(Base):
+    """The extra listener (port 80 on the printer) is configurable so the harness need not bind 80."""
+    def setUp(self):
+        self.port2 = free_port()
+        self.extra_args = ["-2", str(self.port2)]
+        super().setUp()
+
+    def test_second_port_same_handlers_and_auth(self):
+        # public page on both ports, no key
+        for port in (self.port, self.port2):
+            s, body = self.http("GET", "/", key=None, port=port)
+            self.assertEqual(s, 200, body)
+            text = body.decode() if isinstance(body, (bytes, bytearray)) else body
+            self.assertIn("IVI3D Control", text)
+            s, _ = self.http("GET", "/logo.svg", key=None, port=port)
+            self.assertEqual(s, 200)
+        # loopback still needs the key on both ports
+        for port in (self.port, self.port2):
+            s, r = self.http("GET", "/api/version", key=None, port=port)
+            self.assertEqual(s, 403, r)
+            s, r = self.http("GET", "/api/version", port=port)
+            self.assertEqual(s, 200, r)
+            self.assertIn("ivi-bridge", r.get("text", ""))
+        # a control POST on the extra port is accepted with the key
+        s, r = self.http("POST", "/api/printer/command", {"commands": ["M105"]}, port=self.port2)
+        self.assertIn(s, (200, 204), r)
+
+class SecondHttpPortBindFail(Base):
+    def setUp(self):
+        self.holder = socket.socket(); self.holder.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.holder.bind(("127.0.0.1", 0))
+        self.port2 = self.holder.getsockname()[1]
+        self.holder.listen(1)
+        self.extra_args = ["-2", str(self.port2)]
+        super().setUp()
+
+    def tearDown(self):
+        try: super().tearDown()
+        finally: self.holder.close()
+
+    def test_second_port_bind_failure_is_nonfatal(self):
+        s, l = self.http("GET", "/api/ivi/link")
+        self.assertEqual(s, 200, l)
+        self.assertEqual(l["version"], "0.1.18-a33")
+        log = open(self.log).read()
+        self.assertIn("continuing on %d only" % self.port, log)
+        self.assertIn(":%d:" % self.port2, log)
+        # the held port is not served by the bridge (the occupant may reset or speak no HTTP)
+        try:
+            s, r = self.http("GET", "/api/version", port=self.port2)
+            self.assertNotEqual(s, 200)
+        except Exception:
+            pass
+
+
+class T30_NativeRequest(Base):
+    """print=true posts a print_request instead of starting a WORKING_PC stream."""
+    net_stream = False
+
+    def req_path(self):
+        return os.path.join(self.d, "print_request")
+
+    def peek(self):
+        s, r = self.http("GET", "/api/ivi/r")
+        self.assertEqual(s, 200, r)
+        return r
+
+    def ack(self, rid, ok=1, result="opened"):
+        s, r = self.http("GET", "/api/ivi/a?id=%d&ok=%d&result=%s" % (rid, ok, result))
+        self.assertEqual(s, 200, r)
+        return r
+
+    def ack_soon(self, result="opened", delay=0.15, ok=1):
+        def run():
+            time.sleep(delay)
+            r = self.peek()
+            if r and r.get("pending"):
+                self.ack(r["id"], ok=ok, result=result)
+        threading.Thread(target=run, daemon=True).start()
+
+    def test_upload_print_writes_request_and_waits_for_ack(self):
+        self.ack_soon("opened")
+        s, r = self.upload("assist.gcode", gcode(4), start=True)
+        self.assertEqual(s, 201, r)
+        self.assertTrue(r.get("effectivePrint"))
+        self.assertEqual(r.get("ivi", {}).get("mode"), "assist")
+        self.assertEqual(r.get("ivi", {}).get("result"), "opened")
+        self.assertTrue(os.path.isfile(os.path.join(self.up, "assist.gcode")))
+        self.assertFalse(os.path.exists(self.req_path()))  # cleared on ack
+        # no network stream, no WORKING_PC
+        time.sleep(0.4)
+        self.assertNotIn("M2411 S2", self.sim.cmds())
+        s, job = self.http("GET", "/api/job")
+        self.assertNotEqual(job.get("ivi", {}).get("source"), "network stream (a33)")
+
+    def test_upload_print_timeout_keeps_file(self):
+        s, r = self.upload("late.gcode", gcode(3), start=True)
+        self.assertEqual(s, 201, r)
+        self.assertFalse(r.get("effectivePrint"))
+        self.assertEqual(r.get("ivi", {}).get("result"), "timeout")
+        self.assertTrue(os.path.isfile(os.path.join(self.up, "late.gcode")))
+
+    def test_refuse_start_if_touchscreen_job_active(self):
+        self.app.send("M2411 S2")
+        time.sleep(0.3)
+        s, r = self.upload("blocked.gcode", gcode(3), start=True)
+        self.assertEqual(s, 409, r)
+        self.assertTrue(os.path.isfile(os.path.join(self.up, "blocked.gcode")))
+
+    def test_refuse_second_start_while_request_pending(self):
+        s, r = self.upload("assist.gcode", gcode(3), start=False)
+        self.assertEqual(s, 201, r)
+        first, second = [], []
+        def do_first():
+            first.append(self.http("POST", "/api/files/local/assist.gcode", {"command": "select", "print": True}))
+        threading.Thread(target=do_first, daemon=True).start()
+        # wait until the first request is pending
+        end = time.time() + 3
+        while time.time() < end and not self.peek().get("pending"):
+            time.sleep(0.05)
+        self.assertTrue(self.peek().get("pending"), "first start did not post a request")
+        s2, r2 = self.http("POST", "/api/files/local/assist.gcode", {"command": "select", "print": True})
+        self.assertEqual(s2, 409, r2)
+        self.ack(self.peek()["id"], result="opened")
+        end = time.time() + 3
+        while time.time() < end and not first:
+            time.sleep(0.05)
+        self.assertTrue(first, "first start did not finish after ack")
+        self.assertEqual(first[0][0], 204, first[0][1])
+
+    def test_pause_resume_cancel_and_temp_via_request_during_app_job(self):
+        self.app.send("M2411 S2")
+        time.sleep(0.3)
+        # motion blocked
+        s, r = self.http("POST", "/api/printer/command", {"command": "G1 X10 F1200"})
+        self.assertEqual(s, 409, r)
+        s, r = self.http("POST", "/api/printer/command", {"command": "G28"})
+        self.assertEqual(s, 409, r)
+        # temperature / speed / flow via request (not injected onto the serial link)
+        self.ack_soon("set")
+        s, r = self.http("POST", "/api/printer/tool", {"tool0": 210})
+        self.assertEqual(s, 204, r)
+        self.ack_soon("set")
+        s, r = self.http("POST", "/api/printer/bed", {"target": 60})
+        self.assertEqual(s, 204, r)
+        self.ack_soon("set")
+        s, r = self.http("POST", "/api/printer/printhead", {"factor": 110})
+        self.assertEqual(s, 204, r)
+        self.ack_soon("set")
+        s, r = self.http("POST", "/api/printer/tool", {"factor": 95})
+        self.assertEqual(s, 204, r)
+        # no M104/M220 went to the serial from the bridge
+        cmds = self.sim.cmds()
+        self.assertNotIn("M104 S210", cmds)
+        self.assertNotIn("M140 S60", cmds)
+        self.assertNotIn("M220 S110", cmds)
+        self.assertNotIn("M221 S95", cmds)
+        # pause / cancel via /api/job
+        self.ack_soon("paused")
+        s, r = self.http("POST", "/api/job", {"command": "pause", "action": "pause"})
+        self.assertEqual(s, 200, r)
+        self.assertEqual(r.get("result"), "paused")
+        self.ack_soon("cancelled")
+        s, r = self.http("POST", "/api/job", {"command": "cancel"})
+        self.assertEqual(s, 200, r)
+        self.assertEqual(r.get("result"), "cancelled")
+        self.assertNotIn("M2410", self.sim.cmds())
+        self.assertNotIn("M2411 S3", self.sim.cmds())
+
+    def test_request_endpoints_and_file_format(self):
+        s, r = self.upload("fmt.gcode", gcode(2), start=False)
+        self.assertEqual(s, 201)
+        # start via select+print but ack after inspecting the file
+        def inspect_and_ack():
+            time.sleep(0.2)
+            path = self.req_path()
+            end = time.time() + 3
+            while time.time() < end and not os.path.isfile(path):
+                time.sleep(0.05)
+            self.assertTrue(os.path.isfile(path), "print_request was not written")
+            body = open(path).read()
+            self.assertIn("cmd=start", body)
+            self.assertIn("fmt.gcode", body)
+            self.assertIn("autostart=0", body)
+            peek = self.peek()
+            self.assertTrue(peek["pending"])
+            self.assertEqual(peek["cmd"], "start")
+            self.assertTrue(peek["file"].endswith("fmt.gcode"))
+            self.ack(peek["id"], result="opened")
+        threading.Thread(target=inspect_and_ack, daemon=True).start()
+        s, r = self.http("POST", "/api/files/local/fmt.gcode", {"command": "select", "print": True})
+        self.assertEqual(s, 204, r)
+
+    def test_zoffset_via_request_during_app_job(self):
+        self.app.send("M2411 S2")
+        time.sleep(0.3)
+        def inspect_and_ack(expect_cmd, expect_z, result="set"):
+            def run():
+                end = time.time() + 3
+                peek = {}
+                while time.time() < end:
+                    peek = self.peek()
+                    if peek.get("pending"):
+                        break
+                    time.sleep(0.05)
+                self.assertTrue(peek.get("pending"), "zoffset request was not posted")
+                self.assertEqual(peek["cmd"], expect_cmd)
+                self.assertEqual(peek.get("zoffset"), expect_z)
+                self.assertEqual(peek.get("value"), expect_z)
+                body = open(self.req_path()).read()
+                self.assertIn("cmd=%s" % expect_cmd, body)
+                self.assertIn("zoffset=%s" % (str(expect_z) if expect_z >= 0 else str(expect_z)), body)
+                self.ack(peek["id"], result=result)
+            threading.Thread(target=run, daemon=True).start()
+        inspect_and_ack("zoffset", 0.01)
+        s, r = self.http("POST", "/api/printer/command", {"command": "M290 Z0.01"})
+        self.assertEqual(s, 204, r)
+        inspect_and_ack("zoffset", -0.05)
+        s, r = self.http("POST", "/api/printer/command", {"command": "M290 Z-0.05"})
+        self.assertEqual(s, 204, r)
+        cmds = self.sim.cmds()
+        self.assertNotIn("M290 Z0.01", cmds)
+        self.assertNotIn("M290 Z-0.05", cmds)
+        s, r = self.http("POST", "/api/printer/command", {"command": "M290 Z0.1"})
+        self.assertEqual(s, 400, r)
+        s, r = self.http("POST", "/api/printer/command", {"command": "M290 Z1"})
+        self.assertEqual(s, 400, r)
+        s, r = self.http("POST", "/api/printer/command", {"command": "M851 Z-14.29"})
+        self.assertEqual(s, 400, r)
+        s, r = self.http("POST", "/api/printer/command", {"command": "G1 Z0.01 F300"})
+        self.assertEqual(s, 409, r)
+        self.assertNotIn("M290 Z0.1", self.sim.cmds())
+        self.assertNotIn("M851 Z-14.29", self.sim.cmds())
+
+    def test_m290_allowed_steps_idle(self):
+        s, r = self.http("POST", "/api/printer/command", {"command": "M290 Z0.02"})
+        self.assertEqual(s, 204, r)
+        end = time.time() + 3
+        while time.time() < end and "M290 Z0.02" not in self.sim.cmds():
+            time.sleep(0.05)
+        self.assertIn("M290 Z0.02", self.sim.cmds())
+        s, r = self.http("POST", "/api/printer/command", {"command": "M290 Z0.1"})
+        self.assertEqual(s, 400, r)
+        self.assertNotIn("M290 Z0.1", self.sim.cmds())
+
+    def test_upload_without_print_does_not_request(self):
+        s, r = self.upload("idle.gcode", gcode(2), start=False)
+        self.assertEqual(s, 201, r)
+        self.assertFalse(r.get("effectivePrint"))
+        self.assertFalse(os.path.exists(self.req_path()))
+        peek = self.peek()
+        self.assertFalse(peek.get("pending"))
+
+
+class T31_SettingsAndZOffset(T30_NativeRequest):
+    """Persistent autostart setting, live Z-offset, and queued-until-idle save."""
+
+    def settings_file(self):
+        return os.path.join(self.d, "settings")
+
+    def test_settings_default_and_persist(self):
+        s, r = self.http("GET", "/api/ivi/settings")
+        self.assertEqual(s, 200, r)
+        self.assertFalse(r.get("autostart"))
+        z = r.get("zoffset") or {}
+        self.assertEqual(z.get("babystep"), 0)
+        self.assertIsNone(z.get("height"))
+        self.assertFalse(z.get("pending_save"))
+        s, r = self.http("POST", "/api/ivi/settings", {"autostart": True})
+        self.assertEqual(s, 200, r)
+        self.assertTrue(r.get("autostart"))
+        self.assertIn("autostart=1", open(self.settings_file()).read())
+        s, r = self.http("GET", "/api/printer")
+        self.assertEqual(s, 200, r)
+        self.assertTrue(r.get("ivi", {}).get("autostart"))
+        s, r = self.http("POST", "/api/ivi/settings", {"autostart": False})
+        self.assertEqual(s, 200, r)
+        self.assertFalse(r.get("autostart"))
+        self.assertIn("autostart=0", open(self.settings_file()).read())
+
+    def test_settings_loopback_get_without_key(self):
+        s, r = self.http("GET", "/api/ivi/settings", key="")
+        self.assertEqual(s, 200, r)
+        self.assertIn("autostart", r)
+        self.assertIn("zoffset", r)
+
+    def test_autostart_is_written_into_start_request(self):
+        s, r = self.http("POST", "/api/ivi/settings", {"autostart": True})
+        self.assertEqual(s, 200, r)
+        self.ack_soon("started")
+        # Peek the request file before the ack thread clears it.
+        seen = []
+        def watch():
+            end = time.time() + 4
+            while time.time() < end:
+                path = self.req_path()
+                if os.path.exists(path):
+                    body = open(path).read()
+                    if "autostart=1" in body:
+                        seen.append(body)
+                        return
+                time.sleep(0.02)
+        th = threading.Thread(target=watch); th.start()
+        s, r = self.upload("auto.gcode", gcode(4), start=True)
+        th.join(5)
+        self.assertEqual(s, 201, r)
+        self.assertTrue(seen, "start request never contained autostart=1")
+        # The test ack used result=started; hook would do that when the flag is on.
+
+    def test_m503_height_and_m290_accumulate_and_g28_reset(self):
+        s, r = self.http("POST", "/api/printer/command", {"command": "M503"})
+        self.assertEqual(s, 204, r)
+        end = time.time() + 3
+        height = None
+        while time.time() < end:
+            s, r = self.http("GET", "/api/ivi/settings")
+            height = (r.get("zoffset") or {}).get("height")
+            if height is not None:
+                break
+            time.sleep(0.05)
+        self.assertEqual(height, 233.22)
+        self.assertEqual(r["zoffset"].get("probe"), -14.29)
+        self.assertEqual(r["zoffset"].get("reference"), 233.22)
+        self.assertEqual(r["zoffset"].get("offset"), 0)
+        self.assertIn("ref_h=233.22", open(self.settings_file()).read())
+        for cmd, baby in (("M290 Z0.05", 0.05), ("M290 Z0.02", 0.07), ("M290 Z-0.01", 0.06)):
+            s, r = self.http("POST", "/api/printer/command", {"command": cmd})
+            self.assertEqual(s, 204, r)
+            end = time.time() + 3
+            got = None
+            while time.time() < end:
+                s, r = self.http("GET", "/api/ivi/settings")
+                got = (r.get("zoffset") or {}).get("babystep")
+                if got == baby:
+                    break
+                time.sleep(0.05)
+            self.assertEqual(got, baby, cmd)
+        self.assertEqual(r["zoffset"].get("effective_height"), 233.16)  # 233.22 - 0.06
+        self.assertEqual(r["zoffset"].get("reference"), 233.22)
+        self.assertEqual(r["zoffset"].get("offset"), 0.06)
+        s, r = self.http("POST", "/api/printer/command", {"command": "G28"})
+        self.assertEqual(s, 204, r)
+        end = time.time() + 3
+        while time.time() < end:
+            s, r = self.http("GET", "/api/ivi/settings")
+            if (r.get("zoffset") or {}).get("babystep") == 0:
+                break
+            time.sleep(0.05)
+        self.assertEqual(r["zoffset"].get("babystep"), 0)
+        self.assertEqual(r["zoffset"].get("height"), 233.22)
+        self.assertEqual(r["zoffset"].get("offset"), 0)
+        self.assertEqual(r["zoffset"].get("reference"), 233.22)
+
+    def test_console_refuses_m665_and_m500(self):
+        for c in ("M665 H233.00", "M500"):
+            s, r = self.http("POST", "/api/printer/command", {"command": c})
+            self.assertEqual(s, 400, (c, r))
+            self.assertNotIn(c, self.sim.cmds())
+
+    def test_save_queued_during_touchscreen_job_applies_when_idle(self):
+        s, r = self.http("POST", "/api/printer/command", {"command": "M503"})
+        self.assertEqual(s, 204, r)
+        end = time.time() + 3
+        while time.time() < end:
+            s, r = self.http("GET", "/api/ivi/settings")
+            if (r.get("zoffset") or {}).get("height") == 233.22:
+                break
+            time.sleep(0.05)
+        self.assertEqual(r["zoffset"]["height"], 233.22)
+        self.app.send("M2411 S2")
+        time.sleep(0.3)
+        self.app.send("M290 Z0.05")
+        end = time.time() + 3
+        while time.time() < end:
+            s, r = self.http("GET", "/api/ivi/settings")
+            if (r.get("zoffset") or {}).get("babystep") == 0.05:
+                break
+            time.sleep(0.05)
+        self.assertEqual(r["zoffset"]["babystep"], 0.05)
+        self.assertFalse(r["zoffset"].get("idle"))
+        s, r = self.http("POST", "/api/ivi/zoffset/save", {})
+        self.assertEqual(s, 200, r)
+        self.assertTrue(r["zoffset"].get("pending_save"))
+        self.assertEqual(r["zoffset"].get("pending_height"), 233.17)
+        self.assertIn("queued", (r.get("message") or "").lower())
+        time.sleep(0.6)
+        cmds = self.sim.cmds()
+        self.assertFalse(any(c.startswith("M665") for c in cmds), cmds)
+        self.assertNotIn("M500", cmds)
+        self.app.send("M2411 S3")
+        end = time.time() + 8
+        while time.time() < end:
+            s, r = self.http("GET", "/api/ivi/settings")
+            z = r.get("zoffset") or {}
+            if z.get("height") == 233.17 and not z.get("pending_save") and z.get("babystep") == 0:
+                break
+            time.sleep(0.1)
+        self.assertEqual(r["zoffset"]["height"], 233.17)
+        self.assertFalse(r["zoffset"]["pending_save"])
+        self.assertEqual(r["zoffset"]["babystep"], 0)
+        self.assertEqual(r["zoffset"]["reference"], 233.22)
+        self.assertEqual(r["zoffset"]["offset"], 0.05)  # save keeps the displayed offset
+        cmds = self.sim.cmds()
+        self.assertTrue(any(c.startswith("M665 H233.17") for c in cmds), cmds)
+        self.assertIn("M500", cmds)
+        self.assertIn("M290 Z-0.05", cmds)
+
+    def test_save_without_adjustment_refused(self):
+        s, r = self.http("POST", "/api/printer/command", {"command": "M503"})
+        self.assertEqual(s, 204, r)
+        end = time.time() + 3
+        while time.time() < end:
+            s, r = self.http("GET", "/api/ivi/settings")
+            if (r.get("zoffset") or {}).get("height") is not None:
+                break
+            time.sleep(0.05)
+        s, r = self.http("POST", "/api/ivi/zoffset/save", {})
+        self.assertEqual(s, 409, r)
+
+
+    def test_set_zero_and_paper_test_resets_reference(self):
+        s, r = self.http("POST", "/api/printer/command", {"command": "M503"})
+        self.assertEqual(s, 204, r)
+        end = time.time() + 3
+        while time.time() < end:
+            s, r = self.http("GET", "/api/ivi/settings")
+            if (r.get("zoffset") or {}).get("height") == 233.22:
+                break
+            time.sleep(0.05)
+        self.assertEqual(r["zoffset"]["offset"], 0)
+        self.assertEqual(r["zoffset"]["reference"], 233.22)
+        s, r = self.http("POST", "/api/printer/command", {"command": "M290 Z0.05"})
+        self.assertEqual(s, 204, r)
+        end = time.time() + 3
+        while time.time() < end:
+            s, r = self.http("GET", "/api/ivi/settings")
+            if (r.get("zoffset") or {}).get("offset") == 0.05:
+                break
+            time.sleep(0.05)
+        self.assertEqual(r["zoffset"]["offset"], 0.05)
+        s, r = self.http("POST", "/api/ivi/zoffset/zero", {})
+        self.assertEqual(s, 200, r)
+        z = r["zoffset"]
+        self.assertEqual(z["offset"], 0)
+        self.assertEqual(z["reference"], 233.17)
+        self.assertEqual(z["height"], 233.22)
+        self.assertEqual(z["babystep"], 0.05)
+        self.assertIn("ref_h=233.17", open(self.settings_file()).read())
+        s, r = self.http("POST", "/api/printer/command", {"command": "M290 Z0.02"})
+        self.assertEqual(s, 204, r)
+        end = time.time() + 3
+        while time.time() < end:
+            s, r = self.http("GET", "/api/ivi/settings")
+            if (r.get("zoffset") or {}).get("offset") == 0.02:
+                break
+            time.sleep(0.05)
+        self.assertEqual(r["zoffset"]["offset"], 0.02)
+        self.assertEqual(r["zoffset"]["reference"], 233.17)
+        # A stock paper-test M665 (not our save) resets the reference.
+        self.app.send("M665 H234.00")
+        end = time.time() + 3
+        while time.time() < end:
+            s, r = self.http("GET", "/api/ivi/settings")
+            if (r.get("zoffset") or {}).get("reference") == 234.00:
+                break
+            time.sleep(0.05)
+        self.assertEqual(r["zoffset"]["height"], 234.00)
+        self.assertEqual(r["zoffset"]["reference"], 234.00)
+        self.assertIn("ref_h=234.00", open(self.settings_file()).read())
+
+
+class T32_AutostartLoaded(Base):
+    net_stream = False
+    preset_settings = "autostart=1\n"
+
+    def test_autostart_loaded_from_settings_file(self):
+        s, r = self.http("GET", "/api/ivi/settings")
+        self.assertEqual(s, 200, r)
+        self.assertTrue(r.get("autostart"))
+
+
+
+class _CalBase(Base):
+    extra_env = {
+        "IVIB_CAL_G33_MS": "8000",
+        "IVIB_CAL_G29_MS": "8000",
+        "IVIB_CAL_HOME_MS": "4000",
+        "IVIB_CAL_CMD_MS": "4000",
+        "IVIB_CAL_SETTLE_MS": "200",
+    }
+
+    def wait_cal(self, pred, timeout=20):
+        end = time.time() + timeout
+        last = None
+        while time.time() < end:
+            s, j = self.http("GET", "/api/ivi/cal")
+            last = j
+            if s == 200 and pred(j):
+                return j
+            time.sleep(0.1)
+        self.fail("timeout waiting for calibration state; last = %r" % (last,))
+
+    def start(self, action):
+        s, r = self.http("POST", "/api/ivi/cal/start", {"action": action})
+        self.assertEqual(s, 200, r)
+        return r
+
+    def confirm(self):
+        s, r = self.http("POST", "/api/ivi/cal/confirm", {"action": "confirm"})
+        self.assertEqual(s, 200, r)
+        return r
+
+    def cmds_plain(self):
+        out = []
+        for c in self.sim.cmds():
+            m = re.match(r"^N\d+ (.*)\*\d+$", c)
+            out.append(m.group(1) if m else c)
+        return out
+
+class T33_Calibration(_CalBase):
+    def test_printer_json_includes_cal(self):
+        s, r = self.http("GET", "/api/printer")
+        self.assertEqual(s, 200, r)
+        self.assertIn("cal", (r.get("ivi") or {}))
+        self.assertFalse(r["ivi"]["cal"]["busy"])
+        self.assertEqual(r["ivi"]["cal"]["phase"], "idle")
+
+    def test_xyz_chains_into_leveling_and_saves_only_on_success(self):
+        self.start("xyz")
+        self.wait_cal(lambda j: j["phase"] == "prompt_bed")
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "prompt_attach", 15)
+        self.confirm()
+        j = self.wait_cal(lambda j: j["phase"] == "prompt_remove", 20)
+        self.assertTrue(j["xyz"]["H"])
+        self.confirm()
+        j = self.wait_cal(lambda j: j["phase"] == "done", 8)
+        self.assertEqual(j["progress"], 100)
+        cmds = self.cmds_plain()
+        self.assertIn("G53", cmds)
+        self.assertIn("G28", cmds)
+        self.assertIn("G0 X0 Y0 Z100 F1000", cmds)
+        self.assertIn("M119", cmds)
+        self.assertIn("G33", cmds)
+        self.assertIn("G29", cmds)
+        self.assertIn("M500", cmds)
+        # Order: G33 before first M500, G29 after that M500, second M500 after G29.
+        i_g33 = cmds.index("G33")
+        i_g29 = cmds.index("G29")
+        saves = [i for i, c in enumerate(cmds) if c == "M500"]
+        self.assertEqual(len(saves), 2, cmds)
+        self.assertTrue(i_g33 < saves[0] < i_g29 < saves[1], cmds)
+        s, p = self.http("GET", "/api/printer")
+        self.assertEqual(s, 200, p)
+        cal = p["ivi"]["cal"]
+        self.assertIsNotNone(cal["level"]["grid"])
+        self.assertEqual(len(cal["level"]["grid"]), 7)
+        self.assertEqual(len(cal["level"]["grid"][0]), 7)
+        self.assertTrue(cal["level"]["enabled"])
+        self.assertTrue(cal["xyz"]["last_s"])
+        self.assertTrue(cal["level"]["last_s"])
+        # G33 changed H; that is a new calibration so the Z-offset reference follows it.
+        self.assertAlmostEqual(cal["xyz"]["H"], 233.26, places=2)
+        self.assertIn("last_xyz=", open(os.path.join(self.d, "settings")).read())
+
+    def test_g33_no_convergence_does_not_save(self):
+        self.sim.g33_result = "no_convergence"
+        self.start("xyz")
+        self.wait_cal(lambda j: j["phase"] == "prompt_bed")
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "prompt_attach", 15)
+        self.confirm()
+        j = self.wait_cal(lambda j: j["phase"] == "fail", 15)
+        self.assertIn("No convergence", j.get("error") or "")
+        self.assertNotIn("M500", self.cmds_plain())
+
+    def test_g33_probing_failed_does_not_save(self):
+        self.sim.g33_result = "probing_failed"
+        self.start("xyz")
+        self.wait_cal(lambda j: j["phase"] == "prompt_bed")
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "prompt_attach", 15)
+        self.confirm()
+        j = self.wait_cal(lambda j: j["phase"] == "fail", 15)
+        self.assertIn("Probing Failed", j.get("error") or "")
+        self.assertNotIn("M500", self.cmds_plain())
+
+    def test_g29_warning_does_not_save(self):
+        self.sim.g29_result = "warning"
+        self.start("level")
+        self.wait_cal(lambda j: j["phase"] == "prompt_bed")
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "prompt_attach", 15)
+        self.confirm()
+        j = self.wait_cal(lambda j: j["phase"] == "fail", 15)
+        self.assertTrue((j.get("error") or "").startswith("warning:"), j)
+        self.assertNotIn("M500", self.cmds_plain())
+
+    def test_m119_missing_probe_retries(self):
+        self.sim.probe_present = False
+        self.start("level")
+        self.wait_cal(lambda j: j["phase"] == "prompt_bed")
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "prompt_attach", 15)
+        self.confirm()
+        j = self.wait_cal(lambda j: j["phase"] == "attach_retry", 10)
+        self.assertIn("not seen", (j.get("prompt") or "").lower() + (j.get("step") or "").lower())
+        self.sim.probe_present = True
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "prompt_remove", 20)
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "done", 8)
+        self.assertIn("G29", self.cmds_plain())
+        self.assertIn("M500", self.cmds_plain())
+
+    def test_paper_save_formula_and_cancel_restores_endstops(self):
+        self.start("paper")
+        self.wait_cal(lambda j: j["phase"] == "prompt_bed")
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "paper_jog", 15)
+        s, r = self.http("POST", "/api/ivi/cal/jog", {"dz": -0.1})
+        self.assertEqual(s, 200, r)
+        j = self.wait_cal(lambda j: j.get("paper", {}).get("z") is not None and abs(j["paper"]["z"] - 39.9) < 0.05, 8)
+        self.assertAlmostEqual(j["paper"]["z"], 39.9, places=2)
+        s, r = self.http("POST", "/api/ivi/cal/save", {"action": "save"})
+        self.assertEqual(s, 200, r)
+        j = self.wait_cal(lambda j: j["phase"] == "done", 8)
+        cmds = self.cmds_plain()
+        # new_H = 233.22 - 39.90 = 193.32
+        self.assertTrue(any(c.startswith("M665 H193.32") for c in cmds), cmds)
+        self.assertIn("M500", cmds)
+        self.assertIn("M211 S0", cmds)
+        self.assertIn("M211 S1", cmds)
+        self.assertGreater(cmds.index("M211 S1"), cmds.index("M500"))
+
+    def test_paper_jog_accepts_5mm_and_rejects_other(self):
+        self.start("paper")
+        self.wait_cal(lambda j: j["phase"] == "prompt_bed")
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "paper_jog", 15)
+        s, r = self.http("POST", "/api/ivi/cal/jog", {"dz": 2})
+        self.assertEqual(s, 400, r)
+        s, r = self.http("POST", "/api/ivi/cal/jog", {"dz": 5})
+        self.assertEqual(s, 200, r)
+        j = self.wait_cal(lambda j: j.get("paper", {}).get("z") is not None and abs(j["paper"]["z"] - 45) < 0.05, 8)
+        self.assertAlmostEqual(j["paper"]["z"], 45.0, places=2)
+        s, r = self.http("POST", "/api/ivi/cal/jog", {"dz": -5})
+        self.assertEqual(s, 200, r)
+        j = self.wait_cal(lambda j: abs(j.get("paper", {}).get("z", 0) - 40) < 0.05, 8)
+        self.assertAlmostEqual(j["paper"]["z"], 40.0, places=2)
+        cmds = self.cmds_plain()
+        self.assertTrue(any(c.replace(" ", "") in ("G1Z5.000F500", "G1Z5.00F500", "G1Z5.0F500") or c.startswith("G1 Z5.000") or c.startswith("G1 Z5.00") for c in cmds), cmds)
+        self.assertTrue(any("Z-5.000" in c or "Z-5.00" in c for c in cmds), cmds)
+        self.assertNotIn("M500", cmds)
+
+    def test_paper_cancel_sends_m211_without_m500(self):
+        self.start("paper")
+        self.wait_cal(lambda j: j["phase"] == "prompt_bed")
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "paper_jog", 15)
+        s, r = self.http("POST", "/api/ivi/cal/cancel", {"action": "cancel"})
+        self.assertEqual(s, 200, r)
+        j = self.wait_cal(lambda j: j["phase"] == "fail", 8)
+        self.assertEqual(j.get("error"), "cancelled")
+        cmds = self.cmds_plain()
+        self.assertIn("M211 S0", cmds)
+        self.assertIn("M211 S1", cmds)
+        self.assertNotIn("M500", cmds)
+        self.assertFalse(any(c.startswith("M665") for c in cmds), cmds)
+
+    def test_locks_and_double_start(self):
+        self.start("paper")
+        self.wait_cal(lambda j: j["phase"] == "prompt_bed")
+        s, r = self.http("POST", "/api/ivi/cal/start", {"action": "xyz"})
+        self.assertEqual(s, 409, r)
+        s, r = self.http("POST", "/api/printer/command", {"command": "G28"})
+        self.assertEqual(s, 409, r)
+        s, r = self.http("POST", "/api/ivi/cal/cancel", {"action": "cancel"})
+        self.assertEqual(s, 200, r)
+        self.wait_cal(lambda j: j["phase"] in ("fail", "idle"), 8)
+
+    def test_print_lock(self):
+        self.assertTrue(self.app.send("M2411 S2", wait=False))
+        time.sleep(0.5)
+        s, r = self.http("POST", "/api/ivi/cal/start", {"action": "xyz"})
+        self.assertEqual(s, 409, r)
+
+    def test_run_all_one_attach_then_paper(self):
+        self.start("all")
+        self.wait_cal(lambda j: j["phase"] == "prompt_bed")
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "prompt_attach", 15)
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "prompt_remove", 20)
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "paper_jog", 15)
+        s, r = self.http("POST", "/api/ivi/cal/save", {"action": "save"})
+        self.assertEqual(s, 200, r)
+        j = self.wait_cal(lambda j: j["phase"] == "done", 8)
+        cmds = self.cmds_plain()
+        self.assertEqual(cmds.count("M119"), 1, cmds)
+        self.assertIn("G33", cmds)
+        self.assertIn("G29", cmds)
+        self.assertIn("M211 S0", cmds)
+        self.assertGreaterEqual(cmds.count("M500"), 3)  # G33, G29, paper
+
+
+class T33b_CalTimeout(_CalBase):
+    extra_env = dict(_CalBase.extra_env, IVIB_CAL_G33_MS="800")
+
+    def test_g33_timeout_does_not_save(self):
+        self.sim.g33_result = "hang"
+        self.start("xyz")
+        self.wait_cal(lambda j: j["phase"] == "prompt_bed")
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "prompt_attach", 15)
+        self.confirm()
+        j = self.wait_cal(lambda j: j["phase"] == "fail", 12)
+        self.assertIn("timed out", (j.get("error") or "").lower())
+        self.assertNotIn("M500", self.cmds_plain())
 
 
 

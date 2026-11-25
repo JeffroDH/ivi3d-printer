@@ -28,6 +28,8 @@ Confidence tags used throughout: **[V]** read in firmware, a boot log, or a live
 | Doc | What it covers |
 |---|---|
 | [wifi_touch.md](wifi_touch.md) | Wi-Fi today: upload, USB bridge, and touch injection |
+| [calibration.md](calibration.md) | Calibration view and API, verified G33 / G29 / paper-test math, Z-offset display |
+| [native_print.md](native_print.md) | How ivibridge starts a job through the stock touchscreen hook |
 | [home_session/RUNBOOK.md](home_session/RUNBOOK.md) | Step-by-step sshd + touch-navigator session |
 | [home_session/QUICKREF.md](home_session/QUICKREF.md) | One-page version of that session |
 | [laser_cnc_gcode.md](laser_cnc_gcode.md) | Laser and CNC G-code |

@@ -201,15 +201,15 @@ exit 0
         self.assertTrue(os.path.exists(os.path.join(self.run, "p1.ready")))
         self.assertEqual(open(os.path.join(self.run, "p1.ready")).read().strip(), self.p1)
         self.assertTrue(os.path.isdir(os.path.join(self.p1, "ivibridge_logs")))
-        self.assertTrue(os.path.isdir(os.path.join(self.p1, "ivibridge_jobs")))
+        self.assertFalse(os.path.isdir(os.path.join(self.p1, "ivibridge_jobs")))
         self.assertIn("early boot line", open(os.path.join(self.p1, "ivibridge_logs", "boot.log")).read())
         self.assertIn("early ram line", open(os.path.join(self.p1, "ivibridge_logs", "ram.log")).read())
         self.assertIn("early daemon line", open(os.path.join(self.p1, "ivibridge_logs", "ivibridge.log")).read())
-        self.assertTrue(os.path.exists(os.path.join(self.p1, "ivibridge_jobs", "idle.gcode")))
+        self.assertTrue(os.path.exists(os.path.join(self.p1, "idle.gcode")))
         self.assertFalse(os.path.exists(idle))
         # live job must stay in RAM until it ends
         self.assertTrue(os.path.exists(live))
-        self.assertFalse(os.path.exists(os.path.join(self.p1, "ivibridge_jobs", "live.gcode")))
+        self.assertFalse(os.path.exists(os.path.join(self.p1, "live.gcode")))
         # health reset
         deadline = time.time() + 4
         while time.time() < deadline and open(os.path.join(self.home, "bootfail")).read().strip() != "0":

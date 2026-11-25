@@ -43,7 +43,7 @@ Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/mar
 | `fusion/` | Autodesk Fusion post processors for the laser and CNC heads + header checker ([fusion/README.md](fusion/README.md)) |
 | `docs/laser_cnc_gcode.md` | Laser (line/point) and CNC G-code + header format from IVI 3licer test files |
 | `bridge/` | Orca Slicer / Anycubic Next bridge: OctoPrint-compatible service, Wi-Fi upload + USB serial streaming, tests; installers for macOS (launchd), Linux (systemd) and Windows (Task Scheduler) in `bridge/install/` |
-| `a33_bridge/` | On-printer Wi-Fi bridge (ivibridge 0.1.7-a33): static C daemon on the A33, OctoPrint-compatible API and web UI on port 5001, no computer in the middle ([a33_bridge/README.md](a33_bridge/README.md)) |
+| `a33_bridge/` | On-printer Wi-Fi bridge (ivibridge 0.1.18-a33): static C daemon on the A33, OctoPrint-compatible API and web UI on ports 5001 and 80, Calibration view, no computer in the middle ([a33_bridge/README.md](a33_bridge/README.md)) |
 | `ivi-control.sh` | Command-line client for the HTTP API (discover, status, print, pause, G-code, …) |
 | `docs/README.md` | Index of the topic docs |
 | `docs/architecture.md` | Three processors, ports, and how a job starts |
@@ -51,9 +51,11 @@ Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/mar
 | `docs/a33.md` | Touchscreen board: Qt, sshd, kore upload, update package, boot |
 | `docs/gd32.md` | GD32E230 soft-power controller |
 | `docs/wifi_touch.md` | Wi-Fi upload, the USB bridge, and touch injection |
+| `docs/calibration.md` | Calibration view and API, G33 / G29 / paper-test math, Z-offset display |
+| `docs/native_print.md` | How ivibridge starts a job through the stock touchscreen hook |
 | `docs/backups.md` | What has been backed up, and the restore routes |
 | `docs/home_session/` | Runbook, quick reference, and upload/probe notes for the touch navigator |
-| `tools/` | `ivi_touch_nav` v0.2.0, STM32 dump/probe helpers, framebuffer and tap helpers |
+| `tools/` | `ivi_touch_nav` v0.2.0, STM32 dump/probe helpers, framebuffer and tap helpers, rcc QML repacker, IviHook sources |
 | `hardware/uart-pogo-holder/` | Printable pogo block for the DEBUGUART pads |
 | `docs/slicer_report.md` | How IVI 3licer 1.6.2 (a rebranded Snapmaker Luban) talks to the printer |
 | `docs/firmware_report.md` | UI-board ELF: discovery, serial link, commands the UI sends |

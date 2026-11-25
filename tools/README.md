@@ -11,6 +11,8 @@
 | [stm32/bldis.py](stm32/bldis.py), [stm32/blq.py](stm32/blq.py) | Bootloader listings and one decompiled function plus its literals. Offline |
 | [a33/](a33/README.md) | `fb2png.py` (raw framebuffer to PNG) and `ivitap.sh` / `ivitap.c` (BusyBox and C tap helpers) |
 | [a33_rescue/](a33_rescue/README.md) | A33 FEL and microSD rescue kit. FEL plus a RAM boot writes nothing. Emulation-tested only; the hardware list is still open. The 64 MiB card image is not committed |
+| [rcc_repack/](rcc_repack/README.md) | Relocate the IVI-Main-Controller QML resource tree so patches can be any size. Sources only; packed app binaries are not stored here |
+| [ivi_hook/](ivi_hook/README.md) | IviHook.qml and related touch-app overlay sources used with the rcc packer |
 | [command_map/](command_map/README.md) | Regenerators for [docs/data/stm32_app_commands.csv](../docs/data/stm32_app_commands.csv) |
 
 Session procedure for the navigator: [docs/home_session/RUNBOOK.md](../docs/home_session/RUNBOOK.md).

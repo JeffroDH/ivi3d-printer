@@ -33,11 +33,11 @@ class Supervisor(unittest.TestCase):
         sysdev = os.path.join(self.d, "sys_ttyUSB0_dev"); open(sysdev, "w").write("188:0\n")
         mk = os.path.join(self.d, "fake_mknod")
         open(mk, "w").write('#!/bin/dash\nif [ "$1" = "$IVIB_REAL" ]; then ln -s "$SIM_PTY" "$1"; else echo "node $3:$4" > "$1"; fi\n'); os.chmod(mk, 0o755)
-        self.run_dir = os.path.join(self.d, "run"); self.port = free_port(); self.applog = os.path.join(self.d, "app.log")
+        self.run_dir = os.path.join(self.d, "run"); self.port = free_port(); self.port2 = free_port(); self.applog = os.path.join(self.d, "app.log")
         self.real = os.path.join(self.d, "ivi-stm32")
         self.env = dict(PATH=bb + ":/usr/bin:/bin", IVIB_DIR=self.run_dir, IVIB_BIN="qemu-arm " + os.path.abspath(BIN),
                         IVIB_LINK=self.link, IVIB_REAL=self.real, IVIB_SYSDEV=sysdev, IVIB_APP=self.app,
-                        IVIB_UPDIR=os.path.join(self.d, "jobs"), IVIB_PORT=str(self.port), IVIB_ARGS="-n -b 127.0.0.1 -P 0",
+                        IVIB_UPDIR=os.path.join(self.d, "jobs"), IVIB_PORT=str(self.port), IVIB_PORT2=str(self.port2), IVIB_ARGS="-n -b 127.0.0.1 -P 0",
                         IVIB_MKNOD=mk, IVIB_TEST="1", IVIB_SELF=os.path.abspath(SCRIPT), SIM_PTY=self.sim.slave_name,
                         FAKEAPP_LOG=self.applog, FAKEAPP_PORT=self.link, IVIB_LOCKFILE=os.path.join(self.d, "LCK..ttyUSB0"), IVIB_UPTIME="10", IVIB_BOOT_WINDOW="90")
         # the "stock" app, started the way autorun.sh would (its env/cwd/stdout must survive the restarts)
@@ -80,6 +80,8 @@ class Supervisor(unittest.TestCase):
         self.assertEqual(oct(os.stat(os.path.join(self.run_dir, "apikey")).st_mode & 0o777), "0o600")
         req = urllib.request.Request("http://127.0.0.1:%d/api/version" % self.port, headers={"X-Api-Key": key})
         self.assertEqual(json.load(urllib.request.urlopen(req, timeout=5))["server"].split()[0][:1].isdigit() or True, True)
+        req2 = urllib.request.Request("http://127.0.0.1:%d/api/version" % self.port2, headers={"X-Api-Key": key})
+        self.assertIn("ivi-bridge", json.load(urllib.request.urlopen(req2, timeout=5))["text"])
         self.assertTrue(self.wait(lambda: "M2051" in self.sim.cmds(), 5))   # restarted app talks through the pty
         rc, st = self.sh("status"); self.assertIn("daemon: running", st); self.assertIn("watchdog: running", st)
 
@@ -127,11 +129,12 @@ class Supervisor(unittest.TestCase):
         self.assertLess(time.time() - t0, 20, st); self.assertEqual(rc, 0, st)
         self.assertIn("daemon: running", st); self.assertIn("watchdog: running", st)
         self.assertIn("http: listening on port %d" % self.port, st)
-        self.assertIn("link: %s -> /dev/pts/" % self.link, st); self.assertIn("version: ivibridge 0.1.7-a33", st)
+        self.assertIn("http: listening on port %d" % self.port2, st)
+        self.assertIn("link: %s -> /dev/pts/" % self.link, st); self.assertIn("version: ivibridge 0.1.18-a33", st)
         self.assertFalse(os.path.exists(called), open(called).read() if os.path.exists(called) else "")
         rc, out = self.sh("stop"); self.assertEqual(rc, 0, out)
         rc, st = self.sh("status", timeout=30)
-        self.assertIn("daemon: not running", st); self.assertIn("http: port %d not listening" % self.port, st)
+        self.assertIn("daemon: not running", st); self.assertIn("http: port %d not listening" % self.port, st); self.assertIn("http: port %d not listening" % self.port2, st)
         self.assertIn("is the real node", st)
 
     def test_refuses_when_already_bridged(self):
