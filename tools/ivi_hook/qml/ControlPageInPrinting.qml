@@ -22,13 +22,6 @@ Rectangle {
             s = "+" + s;
         return s;
     }
-    function iviOffsetLabel(baby, height) {
-        var babyTxt = iviFmtBaby(baby) + " mm";
-        if (height == null || height < 0)
-            return "This print  " + babyTxt + "\nStored H  —";
-        var eff = Math.round((height - baby) * 100) / 100;
-        return "This print  " + babyTxt + "\nH  " + height.toFixed(2) + "  →  " + eff.toFixed(2);
-    }
     function iviAddBaby(sign) {
         var w = Window.window;
         if (!w)
@@ -544,24 +537,27 @@ Rectangle {
         font.pixelSize: 16
         horizontalAlignment: Text.AlignLeft
         anchors.top: controlHead.bottom
-        anchors.topMargin: 42
+        anchors.topMargin: 24
         anchors.left: finetuneOption.left
     }
+    // Current Z adjustment for this print (babystep total), under the label and above the step buttons.
+    // Replaces the 0.1.15 readout that was drawn over the nozzle-temperature -/+ buttons.
     Text {
-        id: zOffsetReadout
-        width: 128
-        wrapMode: Text.WordWrap
+        id: zOffsetValue
+        width: 157
+        height: 24
+        fontSizeMode: Text.HorizontalFit
+        minimumPixelSize: 12
+        verticalAlignment: Text.AlignVCenter
         color: "#193ADD"
         font.family: "SF Pro Display"
         font.pixelSize: 16
         font.bold: true
         horizontalAlignment: Text.AlignLeft
-        text: iviOffsetLabel(Window.window ? Window.window.iviZBabystep : 0,
-                             Window.window ? Window.window.iviZHeight : -1)
+        text: "Current: " + iviFmtBaby(Window.window ? Window.window.iviZBabystep : 0) + " mm"
         anchors.top: zAxisTxt.bottom
-        anchors.topMargin: 6
-        anchors.right: finetuneOption.left
-        anchors.rightMargin: 12
+        anchors.topMargin: 1
+        anchors.left: finetuneOption.left
     }
     Column{
         id: finetuneOption

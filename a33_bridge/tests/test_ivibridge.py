@@ -524,7 +524,7 @@ class T29_FanEndpoint(Base):
 
 class T24_VersionAndHeadField(Base):
     def test_version(self):
-        s, l = self.http("GET", "/api/ivi/link"); self.assertEqual(l["version"], "0.1.18-a33")
+        s, l = self.http("GET", "/api/ivi/link"); self.assertEqual(l["version"], "0.1.19-a33")
         s, p = self.http("GET", "/api/printer"); self.assertEqual(p["ivi"]["head"], "")
 
     def test_icons_and_manifest_no_key_needed(self):
@@ -929,7 +929,7 @@ class SecondHttpPortBindFail(Base):
     def test_second_port_bind_failure_is_nonfatal(self):
         s, l = self.http("GET", "/api/ivi/link")
         self.assertEqual(s, 200, l)
-        self.assertEqual(l["version"], "0.1.18-a33")
+        self.assertEqual(l["version"], "0.1.19-a33")
         log = open(self.log).read()
         self.assertIn("continuing on %d only" % self.port, log)
         self.assertIn(":%d:" % self.port2, log)
@@ -1607,6 +1607,299 @@ class T33b_CalTimeout(_CalBase):
         self.assertIn("timed out", (j.get("error") or "").lower())
         self.assertNotIn("M500", self.cmds_plain())
 
+
+
+class T33c_HeatedLeveling(_CalBase):
+    """0.1.19: optional heated leveling (bed 40..80 C, default 60 in the UI). Nozzle-only cool gate."""
+    extra_env = dict(_CalBase.extra_env, IVIB_CAL_HEAT_MS="3000")
+
+    def start_bed(self, action, bed, expect=200):
+        s, r = self.http("POST", "/api/ivi/cal/start", {"action": action, "bed": bed})
+        self.assertEqual(s, expect, r)
+        return r
+
+    def cancel(self):
+        s, r = self.http("POST", "/api/ivi/cal/cancel", {"action": "cancel"})
+        self.assertEqual(s, 200, r)
+        return self.wait_cal(lambda j: j["phase"] == "fail", 8)
+
+    def to_heat(self, bed=60):
+        self.sim.b = 22.0
+        r = self.start_bed("level", bed)
+        self.assertEqual(r["cal"]["bed_target"], bed)
+        self.wait_cal(lambda j: j["phase"] == "prompt_bed")
+        self.confirm()
+        self.wait_cal(lambda j: j["phase"] == "prompt_attach", 15)
+        self.confirm()
+        return self.wait_cal(lambda j: j["phase"] == "heat_bed" and "M140 S%d" % bed in self.cmds_plain(), 10)
+
+    def test_heated_level_order_and_bed_off_after_save(self):
+        j = self.to_heat(60)
+        self.assertEqual(j["bed_target"], 60)
+        time.sleep(0.6)   # still waiting: the bed is cold, so no G29 yet
+        self.assertNotIn("G29", self.cmds_plain())
+        self.assertEqual(self.wait_cal(lambda j: True)["phase"], "heat_bed")
+        self.sim.b = 59.4  # within 1 C of target
+        j = self.wait_cal(lambda j: j["phase"] == "prompt_remove", 20)
+        self.assertIn("heater is off", j.get("prompt") or "")
+        self.assertEqual(self.sim.bt, 0.0)
+        self.confirm()
+        j = self.wait_cal(lambda j: j["phase"] == "done", 8)
+        c = self.cmds_plain()
+        order = [c.index(x) for x in ("G28", "G0 X0 Y0 Z100 F1000", "M119", "M140 S60", "G29", "M500", "M503", "M140 S0")]
+        self.assertEqual(order, sorted(order), c)
+        self.assertEqual(c.count("M140 S0"), 1, c)   # only after the save, never before G29
+        self.assertGreater(len(c) - 1 - c[::-1].index("G0 X0 Y0 Z100 F1000"), c.index("M140 S0"))   # then move up for removal
+        self.assertNotIn("M190 S60", c)      # wait loop polls M105 instead of a blocking M190
+        self.assertEqual(c.count("M500"), 1, c)
+
+    def test_bed_clamped_and_only_for_level(self):
+        r = self.start_bed("level", 95); self.assertEqual(r["cal"]["bed_target"], 80); self.cancel()
+        r = self.start_bed("level", 20); self.assertEqual(r["cal"]["bed_target"], 40); self.cancel()
+        r = self.start_bed("level", "65"); self.assertEqual(r["cal"]["bed_target"], 65); self.cancel()
+        r = self.start_bed("level", True); self.assertEqual(r["cal"]["bed_target"], 60); self.cancel()
+        r = self.start_bed("level", 0); self.assertIsNone(r["cal"]["bed_target"]); self.cancel()
+        self.start_bed("xyz", 60, expect=400)
+        self.start_bed("paper", 60, expect=400)
+        self.assertNotIn("M140 S0", self.cmds_plain())   # nothing was heated, nothing to turn off
+
+    def test_gate_is_nozzle_only(self):
+        # hot bed, cool nozzle: both the cold flow and the heated flow go straight to the plate prompt
+        self.sim.report_s = 0.3; self.sim.next_report = 0   # periodic temperature reports, like the real firmware
+        self.sim.b = 70.0; self.sim.t = 30.0
+        self.wait_cal(lambda j: j.get("bed") == 70.0 and j.get("nozzle") == 30.0, 15)
+        self.start("level"); self.wait_cal(lambda j: j["phase"] == "prompt_bed"); self.cancel()
+        self.start("xyz"); self.wait_cal(lambda j: j["phase"] == "prompt_bed"); self.cancel()
+        self.start_bed("level", 60); self.wait_cal(lambda j: j["phase"] == "prompt_bed"); self.cancel()
+        # hot nozzle blocks probe attach
+        self.sim.t = 120.0
+        self.wait_cal(lambda j: j.get("nozzle") == 120.0, 15)
+        self.start_bed("level", 60)
+        j = self.wait_cal(lambda j: j["phase"] == "cool", 8)
+        self.assertIn("nozzle", (j.get("prompt") or "").lower())
+        self.assertNotIn("bed", (j.get("prompt") or "").lower())
+        self.sim.t = 39.5
+        self.wait_cal(lambda j: j["phase"] == "prompt_bed", 10)
+        self.cancel()
+        self.assertNotIn("M140 S0", self.cmds_plain())
+
+    def test_cancel_while_heating_turns_bed_off(self):
+        self.to_heat(70)
+        self.cancel()
+        end = time.time() + 6
+        while time.time() < end and "M140 S0" not in self.cmds_plain():
+            time.sleep(0.1)
+        c = self.cmds_plain()
+        self.assertIn("M140 S0", c)
+        self.assertLess(c.index("M140 S70"), c.index("M140 S0"))
+        self.assertNotIn("G29", c); self.assertNotIn("M500", c)
+        end = time.time() + 3
+        while time.time() < end and self.sim.bt != 0.0:
+            time.sleep(0.05)
+        self.assertEqual(self.sim.bt, 0.0)
+
+    def test_heat_timeout_fails_and_turns_bed_off(self):
+        self.to_heat(60)
+        j = self.wait_cal(lambda j: j["phase"] == "fail", 10)
+        self.assertIn("did not reach", j.get("error") or "")
+        end = time.time() + 6
+        while time.time() < end and "M140 S0" not in self.cmds_plain():
+            time.sleep(0.1)
+        self.assertIn("M140 S0", self.cmds_plain())
+        self.assertNotIn("G29", self.cmds_plain())
+
+    def test_g29_failure_while_hot_turns_bed_off_without_save(self):
+        self.sim.g29_result = "fail"
+        self.to_heat(60)
+        self.sim.b = 60.0
+        j = self.wait_cal(lambda j: j["phase"] == "fail", 15)
+        self.assertIn("Probing Failed", j.get("error") or "")
+        end = time.time() + 6
+        while time.time() < end and "M140 S0" not in self.cmds_plain():
+            time.sleep(0.1)
+        c = self.cmds_plain()
+        self.assertIn("M140 S0", c); self.assertNotIn("M500", c)
+
+    def test_g29_still_not_allowed_from_console(self):
+        for cmd in ("G29", "g29", "G29 P1"):
+            s, r = self.http("POST", "/api/printer/command", {"command": cmd})
+            self.assertGreaterEqual(s, 400, (cmd, r))
+        self.assertNotIn("G29", self.cmds_plain())
+
+    def test_page_has_heated_option(self):
+        s, body = self.http("GET", "/", key=None)
+        text = body.decode() if isinstance(body, (bytes, bytearray)) else body
+        for needle in ("id=calhot", "id=calbedt", "<option selected>60", "body.bed=", "Heat the bed first", "CAL.bed_target"):
+            self.assertIn(needle, text)
+
+
+class T37_ConsoleReason(_CalBase):
+    """0.1.19: the console says why it is off (calibration step pending, link down, print) and shows
+    the bridge's 409 / 400 refusals, including for Enter. M503 is allowed when idle."""
+    def test_m503_allowed_idle_refused_with_reason_during_cal(self):
+        s, r = self.http("POST", "/api/printer/command", {"command": "M503"}); self.assertEqual(s, 204, r)
+        self.start("level"); self.wait_cal(lambda j: j["phase"] == "prompt_bed")
+        s, r = self.http("POST", "/api/printer/command", {"command": "M503"})
+        self.assertEqual(s, 409, r); self.assertIn("calibration", r.get("error", ""))
+        s, r = self.http("POST", "/api/ivi/cal/cancel", {"action": "cancel"}); self.assertEqual(s, 200, r)
+        self.wait_cal(lambda j: j["phase"] == "fail", 8)
+        s, r = self.http("POST", "/api/printer/command", {"command": "M503"}); self.assertEqual(s, 204, r)
+
+    def test_page_console_reason_and_errors(self):
+        s, body = self.http("GET", "/", key=None)
+        text = body.decode() if isinstance(body, (bytes, bytearray)) else body
+        for needle in ("id=creason", "id=creasont", "function conReason(", "Open Calibration", "conReason(link,calBusy,ivi.cal,",
+                       "printer link is down", "Touchscreen job running", "Print running", "calibration runs"):
+            self.assertIn(needle, text)
+        i = text.index("async function csend(")
+        fn = text[i:text.index("\nvar CAL=", i)]
+        self.assertIn("j.error", fn); self.assertIn("className='ce'", fn)
+        self.assertNotIn("g([c],true)", fn)               # the 409 must reach the console (not a quiet request)
+        self.assertNotIn("id=cbtn class=\"btn u\"", text); self.assertNotRegex(text, r"id=cbtn class=[^>]*\bu\b")
+
+
+def layered_gcode(layers=6, per_layer=120):
+    """Orca-like: relative E (M83), a Z move per layer, z-hop travel that does not extrude."""
+    out = [";Generated by IVI 3licer", ";header_type: 3dp", "G90", "M83"]
+    for L in range(layers):
+        z = 0.3 + 0.2 * L
+        out.append("M73 P%d R%d" % (L * 100 // layers, layers - L))
+        out.append("G1 Z%.2f F600" % z)
+        for i in range(per_layer):
+            out.append("G1 X%.2f Y%.2f E0.0300 F1800" % (i % 40, (i * 7) % 40))
+        out.append("G1 Z%.2f F600 ; z-hop" % (z + 0.4))
+        out.append("G1 X0 Y0 F6000 ; travel")
+        out.append("G1 Z%.2f F600" % z)
+    return "\n".join(out) + "\n"
+
+MOTION = ["G28", "G1 X10 F1200", "G1 Z5 F300", "G91", "M83", "G1 E5 F300"]
+
+class T34_PrintNetJob(Base):
+    """0.1.19: Status / Adjust data and the motion lock during a bridge (network) job."""
+    ok_delay = 0.01
+    def test_status_adjust_and_motion_lock(self):
+        s, p = self.http("GET", "/api/printer")
+        self.assertFalse(p["ivi"]["print"]["active"]); self.assertIsNone(p["ivi"]["print"]["source"])
+        s, r = self.upload("layers.gcode", layered_gcode())
+        self.assertEqual(s, 201, r)
+        self.wait_state(lambda j: j.get("state") == "Printing", 20)
+        for c in MOTION:
+            s, r = self.http("POST", "/api/printer/command", {"command": c})
+            self.assertEqual(s, 409, (c, r))
+        for c in ("M220 S120", "M221 S95", "M106 S128", "M104 S205", "M140 S60", "M290 Z0.02"):
+            s, r = self.http("POST", "/api/printer/command", {"command": c})
+            self.assertEqual(s, 204, (c, r))
+        end = time.time() + 30; pr = {}
+        while time.time() < end:
+            s, p = self.http("GET", "/api/printer"); pr = p["ivi"]["print"]
+            if pr.get("speed") == 120 and pr.get("flow") == 95 and (pr.get("layer") or 0) >= 2: break
+            time.sleep(0.2)
+        self.assertTrue(pr["active"]); self.assertEqual(pr["source"], "network"); self.assertEqual(pr["file"], "layers.gcode")
+        # adjust commands reach the printer between job lines, not after the print
+        s, j = self.http("GET", "/api/job"); self.assertEqual(j["state"], "Printing")
+        for c in ("M220 S120", "M221 S95", "M106 S128", "M104 S205", "M140 S60", "M290 Z0.02"): self.assertIn(c, self.sim.cmds())
+        self.assertEqual((pr["speed"], pr["flow"]), (120, 95))
+        self.assertGreaterEqual(pr["layer"], 2)
+        self.assertAlmostEqual(pr["z"], 0.3 + 0.2 * (pr["layer"] - 1), places=2)   # z-hops are not layers
+        self.assertEqual(p["ivi"]["fan"], 50)
+        for c in MOTION: self.assertNotIn(c, self.sim.cmds())
+        # pause / resume / cancel stay available
+        s, r = self.http("POST", "/api/job", {"command": "cancel"}); self.assertEqual(s, 200, r)
+        self.wait_state(lambda j: j.get("state") in ("Operational", "Cancelled"), 30)
+        s, p = self.http("GET", "/api/printer")
+        self.assertFalse(p["ivi"]["print"]["active"]); self.assertIsNone(p["ivi"]["print"]["layer"])
+        s, r = self.http("POST", "/api/printer/command", {"commands": ["G91", "G1 X1 F600", "G90"]})
+        self.assertEqual(s, 204, r)                      # moves are allowed again once the print is over
+
+class T35_PrintTouchscreenJob(T30_NativeRequest):
+    """0.1.19: touchscreen job: status from the app's own lines, fan via the hook, motion locked."""
+    def wait_request(self, timeout=3):
+        end = time.time() + timeout
+        while time.time() < end:
+            r = self.peek()
+            if r.get("pending"): return r
+            time.sleep(0.05)
+        self.fail("no request posted")
+
+    def test_status_from_app_lines_fan_request_and_lock(self):
+        self.assertTrue(self.app.send("M2411 S2", wait=False)); time.sleep(0.4)
+        for c in ["M83", "M220 S90", "G1 Z0.30 F600", "G1 X1 Y1 E0.05 F1800", "G1 X2 Y2 E0.05", "G1 Z0.70 F600",
+                  "G1 X5 Y5 F6000", "G1 Z0.50 F600", "G1 X3 Y3 E0.05"]:
+            self.assertTrue(self.app.send(c), c)
+        s, p = self.http("GET", "/api/printer"); pr = p["ivi"]["print"]
+        self.assertTrue(pr["active"]); self.assertEqual(pr["source"], "touchscreen")
+        self.assertEqual(pr["speed"], 90); self.assertEqual(pr["layer"], 2); self.assertAlmostEqual(pr["z"], 0.5)
+        for c in MOTION:
+            s, r = self.http("POST", "/api/printer/command", {"command": c})
+            self.assertEqual(s, 409, (c, r))
+        results = {}
+        def fan(cmd):
+            results[cmd] = self.http("POST", "/api/printer/command", {"command": cmd})
+        for cmd, val in (("M106 S255", 1), ("M107", 0)):
+            t = threading.Thread(target=fan, args=(cmd,)); t.start()
+            r = self.wait_request()
+            self.assertEqual((r["cmd"], r.get("fan"), r.get("value")), ("fan", val, val))
+            body = open(self.req_path()).read()
+            self.assertIn("cmd=fan", body); self.assertIn("fan=%d" % val, body)
+            self.ack(r["id"], result="set"); t.join(5)
+            self.assertEqual(results[cmd][0], 204, results[cmd])
+        sent = self.sim.cmds()
+        self.assertNotIn("M106 S255", sent); self.assertNotIn("M107", sent)   # the app sends it, not the bridge
+        for c in ("G28", "G1 X10 F1200", "G1 Z5 F300", "G1 E5 F300"): self.assertNotIn(c, sent)
+
+    def test_fan_request_timeout_names_the_touchscreen_app(self):
+        self.assertTrue(self.app.send("M2411 S2", wait=False)); time.sleep(0.4)
+        s, r = self.http("POST", "/api/printer/command", {"command": "M107"})
+        self.assertEqual(s, 409, r); self.assertIn("0.1.19 touchscreen app", r["error"])
+
+    def test_working_screen_without_m2411_still_locks(self):
+        # bridge restarted mid-print: it never saw M2411 S2, but the firmware reports WORKING_SCREEN
+        self.sim.ws = "WORKING_SCREEN"; self.sim.systat = 2
+        self.assertTrue(self.app.send("M2007"))
+        time.sleep(0.2)
+        s, p = self.http("GET", "/api/printer")
+        self.assertFalse(p["ivi"]["touchscreen_job"])
+        self.assertTrue(p["ivi"]["print"]["active"]); self.assertEqual(p["ivi"]["print"]["source"], "touchscreen")
+        for c in MOTION:
+            s, r = self.http("POST", "/api/printer/command", {"command": c})
+            self.assertEqual(s, 409, (c, r))
+        self.ack_soon("set")
+        s, r = self.http("POST", "/api/printer/tool", {"tool0": 215})
+        self.assertEqual(s, 204, r)                       # adjust goes to the touchscreen hook
+        self.assertNotIn("M104 S215", self.sim.cmds())
+        for c in ("G28", "G1 X10 F1200", "G1 Z5 F300", "G1 E5 F300"): self.assertNotIn(c, self.sim.cmds())
+
+class T36_StatusAdjustPage(Base):
+    def test_page_has_status_and_adjust(self):
+        s, body = self.http("GET", "/", key=None)
+        text = body.decode() if isinstance(body, (bytes, bytearray)) else body
+        for needle in ("id=p_status", "id=p_adj", "function setPrinting(", "function renderPrint(", "body.printing #p_tool",
+                       "data-c=M220", "data-c=M221", "azoff(1)", "afan(", "printadj", "id=col_left", "id=col_right"):
+            self.assertIn(needle, text)
+        # Status takes Toolhead's place (left column), Adjust takes Filament's place (right column)
+        self.assertLess(text.index("id=col_left"), text.index("id=p_status")); self.assertLess(text.index("id=p_status"), text.index("id=p_tool"))
+        self.assertLess(text.index("id=col_right"), text.index("id=p_adj")); self.assertLess(text.index("id=p_adj"), text.index("id=p_fil"))
+        # round-bed mesh map (0.1.19): canvas over the 210 mm circle, bilinear like the firmware
+        for needle in ("<canvas class=mesh id=calmesh", "function meshAt(", "function meshInside(", "MR=105, MO=-105, MS=35", "meshPick(event)"):
+            self.assertIn(needle, text)
+        self.assertNotIn(KEY, text)
+
+    def test_mesh_math_in_node(self):
+        node = shutil.which("node")
+        if not node: self.skipTest("node not installed")
+        s, body = self.http("GET", "/", key=None)
+        text = body.decode() if isinstance(body, (bytes, bytearray)) else body
+        a = text.index("var MR=105"); b = text.index("function renderMesh(")
+        js = text[a:b] + r"""
+var g=[];for(var j=0;j<7;j++){g.push([]);for(var i=0;i<7;i++)g[j].push(i+10*j);}
+var ins=0;for(var j=0;j<7;j++)for(var i=0;i<7;i++)if(meshInside(i,j))ins++;
+console.log(JSON.stringify({p:meshAt(g,-70,-105),c:meshAt(g,0,0),m:meshAt(g,-87.5,-87.5),e:meshAt(g,105,105),ins:ins,corner:meshInside(0,0),edge:meshInside(3,6)}));"""
+        out = json.loads(subprocess.check_output([node, "-e", js]).decode())
+        self.assertAlmostEqual(out["p"], 1)          # I1 J0 exactly at a grid point
+        self.assertAlmostEqual(out["c"], 33)         # centre I3 J3
+        self.assertAlmostEqual(out["m"], 5.5)        # middle of the I0..1 / J0..1 cell
+        self.assertAlmostEqual(out["e"], 66)         # far corner I6 J6
+        self.assertEqual(out["ins"], 29); self.assertFalse(out["corner"]); self.assertTrue(out["edge"])
 
 
 if __name__ == "__main__":

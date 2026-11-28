@@ -112,14 +112,23 @@ body.wtp .col{display:none}body.wtp #p_tp{display:block;flex:1 1 auto;width:100%
 .calcard h4{margin:0 0 .35em;color:var(--t);font-size:17px}
 .calv{font-size:13px;color:#345;line-height:1.45}
 .calv b{font-variant-numeric:tabular-nums}
-.mesh{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;width:min(196px,100%);aspect-ratio:1;margin:.4em 0}
-.mesh i{display:block;border-radius:2px;min-height:0}
+.calheat{display:flex;flex-wrap:wrap;align-items:center;gap:.4em .6em;font-size:14px;color:#345;margin:.2em 0 .5em}
+.calheat label{display:flex;align-items:center;gap:.35em;cursor:pointer}
+.calheat input{width:18px;height:18px;margin:0}
+.calheat select{font:inherit;padding:.2em .3em;border:1px solid #c5d3ea;border-radius:6px;background:#fff}
+.meshw{position:relative;width:min(330px,100%);margin:1.1em auto 1.1em;padding:0 1.6em}
+.mesh{display:block;width:100%;aspect-ratio:1;border-radius:6px;image-rendering:auto;cursor:crosshair;touch-action:manipulation}
+.mx{position:absolute;font-size:11px;color:#567}.mb_{bottom:-1.25em;left:50%;transform:translateX(-50%)}.mt_{top:-1.25em;left:50%;transform:translateX(-50%)}.ml_{left:0;top:50%;transform:translateY(-50%)}.mr_{right:0;top:50%;transform:translateY(-50%)}
+.mlo{display:inline-block;width:.8em;height:.8em;border-radius:2px;vertical-align:-1px;margin:0 .25em}
 .jogz{display:grid;grid-template-columns:repeat(5,1fr);gap:.35em;margin:.45em 0}
 .jobbtns{display:grid;grid-template-columns:1fr 1fr;gap:.35em;margin-top:.7em;width:100%}
 .jobbtns .lite{width:100%}
 .jogz button{background:var(--lb);color:var(--t);border-radius:10px;padding:.7em .2em;font-size:15px}
 .calprog{margin:.6em 0 1em}
 .calprompt{background:#fff4d6;border:1px solid #e8b84a;border-radius:10px;padding:.8em 1em;margin:.6em 0}
+.creason{display:none;align-items:center;gap:.5em;flex-wrap:wrap;margin-top:.45em;padding:.5em .7em;border-radius:8px;background:#fff6dc;border:1px solid #ecd38a;color:#5c4400;font-size:13px}
+.creason.on{display:flex}
+.creason button{font-size:12px;padding:.25em .7em}
 .calerr{background:#fde8e8;border:1px solid #e8a0a0;color:#7a1010;border-radius:10px;padding:.8em 1em;margin:.6em 0}
 #calban{display:none;margin:.8em 1em 0;padding:.8em 1em;border-radius:10px;background:#eef6e8;border:1px solid #b5d4a8;color:#1d3d16}
 #p_cal h3{margin:.1em 0 .35em}
@@ -138,7 +147,8 @@ body.calview #fk{display:inline-block;margin:.2em 0 .6em}
 @media (min-width:800px){
   body.calview .calgrid{flex:1 1 auto;align-items:stretch;min-height:0;gap:1em}
   body.calview .calcard{height:100%;display:flex;flex-direction:column}
-  body.calview .calcard>.btn,body.calview .calcard>.paperacts{margin-top:auto}
+  body.calview .calcard>.btn,body.calview .calcard>.paperacts,body.calview .calcard>.calheat{margin-top:auto}
+  body.calview .calcard>.calheat+.btn{margin-top:0}
 }
 @media (min-width:1100px){
   body.calview #p_cal{border:0;border-radius:0;padding:0}
@@ -146,6 +156,28 @@ body.calview #fk{display:inline-block;margin:.2em 0 .6em}
 .hint{font-size:12px;color:#567;margin:.15em 0 .7em;max-width:38em;line-height:1.35}
 .chk{display:flex;gap:.5em;align-items:flex-start;margin:.85em 0 .2em;font-size:14px;color:#123}
 .chk input{margin-top:.15em}
+
+/* 0.1.19: during a print the Toolhead / Filament boxes become Status / Adjust (stock touchscreen analogs) */
+#p_status,#p_adj{display:none}
+body:not(.printing) #p_status,body:not(.printing) #p_adj{display:none!important}
+body.printing #p_tool,body.printing #p_fil,body.printing #p_zoff,body.printing #zoff_slot_wide,body.printing #jobp,body.printing #ban{display:none!important}
+body.printing #p_status.on,body.printing #p_adj.on{display:block}
+@media (min-width:1100px){body.printing #p_status,body.printing #p_adj{display:block}}
+.sgrid{display:grid;grid-template-columns:auto 1fr;gap:1em 1.4em;align-items:center}
+.ring{--p:0;flex:none;width:9.5em;height:9.5em;border-radius:50%;background:conic-gradient(var(--b) calc(var(--p)*1%),#e3ebf7 0);display:flex;align-items:center;justify-content:center}
+.ring>div{width:7.7em;height:7.7em;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.ring b{font-size:26px;color:#123;font-variant-numeric:tabular-nums}.ring span{font-size:12px;color:#567}
+.sfile{font-size:16px;font-weight:600;color:#123;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srows{display:grid;grid-template-columns:auto 1fr;gap:.3em 1em;font-size:14px;color:#456;margin-top:.45em}.srows b{color:#123;font-variant-numeric:tabular-nums}
+.stemp{display:grid;grid-template-columns:5em 1fr 1fr;gap:.25em 1em;margin-top:1em;border:1px solid #c9d7ee;border-radius:6px;padding:.6em 1em;font-size:14px;color:#456}
+.stemp b{font-size:17px;color:#123;font-variant-numeric:tabular-nums}.stemp .h{font-size:12px;color:#567}
+#p_status .jobbtns{margin-top:1em}
+.agrid{display:grid;grid-template-columns:7.5em minmax(0,1fr);gap:.7em 1em;align-items:center}
+.azrow{display:flex;flex-wrap:wrap;gap:.5em;align-items:center}
+.azrow .lite{width:auto;min-width:5.5em;padding:.5em 1.2em;font-size:16px}
+.azrow .zread{margin:0}
+.anote{font-size:12px;color:#567;margin:.9em 0 0;line-height:1.35}
+@media (max-width:600px) and (orientation:portrait){.sgrid{grid-template-columns:1fr;justify-items:center}.sgrid>div:not(.ring){width:100%}.agrid .val{font-size:15px}.ring{width:8.5em;height:8.5em}.ring>div{width:6.9em;height:6.9em}.agrid{grid-template-columns:5.2em minmax(0,1fr);gap:.45em .45em}.agrid .opts button{padding:.45em .1em;font-size:13px}.agrid .lbl{line-height:1.2}.stemp{grid-template-columns:4.2em 1fr 1fr;padding:.5em .7em}}
 </style>
 </head>
 <body>
@@ -185,6 +217,31 @@ body.calview #fk{display:inline-block;margin:.2em 0 .6em}
 
 <div class=panels>
 <div class=col id=col_left>
+<div class=panel id=p_status>
+  <h3>Status <span class=lbl id=ssrc></span></h3>
+  <div class=sgrid>
+    <div class=ring id=sring><div><b id=spc>–</b><span id=sst>Printing</span></div></div>
+    <div style="min-width:0">
+      <div class=sfile id=sfile>–</div>
+      <div class=srows>
+        <span>Elapsed</span><b id=sela>–</b>
+        <span>Remaining</span><b id=slt>–</b>
+        <span>Layer</span><b id=sly>–</b>
+      </div>
+    </div>
+  </div>
+  <div class=stemp>
+    <span></span><span class=h>Actual</span><span class=h>Target</span>
+    <span>Nozzle</span><b id=snza>–</b><b id=snzt>–</b>
+    <span>Bed</span><b id=sbda>–</b><b id=sbdt>–</b>
+  </div>
+  <div class=jobbtns>
+    <button class=lite onclick="job('pause','pause')">Pause</button>
+    <button class=lite onclick="job('pause','resume')">Resume</button>
+    <button class=lite onclick="if(confirm('Stop the print?'))job('cancel')">Stop</button>
+    <button class=lite onclick="jobClear()">Clear</button>
+  </div>
+</div>
 <div class="panel on" id=p_tool>
   <h3>Toolhead</h3>
   <div class=tgrid>
@@ -248,8 +305,9 @@ body.calview #fk{display:inline-block;margin:.2em 0 .6em}
   <div id=con class=con></div>
   <div style="display:flex;gap:.5em;margin-top:.5em">
     <input id=cin placeholder="G-code, e.g. M105" style="flex:1;font:14px Menlo,monospace;padding:.45em;border:1px solid #bcd;border-radius:6px" onkeydown="if(event.key==='Enter')csend()">
-    <button id=cbtn class="btn u" style="min-width:5em" onclick="csend()">Send</button>
+    <button id=cbtn class=btn style="min-width:5em" onclick="csend()">Send</button>
   </div>
+  <div class=creason id=creason role=status aria-live=polite><span id=creasont></span><button type=button class=lite id=creasonb style="display:none" onclick="tab('cal')">Open Calibration</button></div>
   <div class=lbl id=cnote style="margin-top:.3em">Only commands on the bridge's safety list are sent. During a print only temperature, fan, speed, flow, Z-offset (M290) and status commands are allowed.</div>
 </div>
 
@@ -275,6 +333,30 @@ body.calview #fk{display:inline-block;margin:.2em 0 .6em}
 </div>
 </div>
 <div class=col id=col_right>
+<div class=panel id=p_adj>
+  <h3>Adjust</h3>
+  <div class=agrid>
+    <div class=lbl>Nozzle<br><span class=val id=anzv>–</span></div>
+    <div class="opts adj" data-g=anz data-c=M104 data-max=300><button>210°C</button><button>240°C</button><button>270°C</button><button class=pm data-d=-5>-</button><button class=pm data-d=5>+</button></div>
+    <div class=lbl>Bed<br><span class=val id=abdv>–</span></div>
+    <div class="opts adj" data-g=abd data-c=M140 data-max=120><button>60°C</button><button>80°C</button><button>100°C</button><button class=pm data-d=-5>-</button><button class=pm data-d=5>+</button></div>
+    <div class=lbl>Z offset<br>distance (mm)</div>
+    <div class="opts adj" data-g=azs><button class=sel>0.01</button><button>0.02</button><button>0.05</button></div>
+    <div></div>
+    <div class=azrow><button type=button class="lite adj" onclick="azoff(1)">Z+</button><button type=button class="lite adj" onclick="azoff(-1)">Z−</button><span class=zread id=azread>Z offset: +0.00 mm</span></div>
+    <div class=lbl>Speed<br><span class=val id=aspv>–</span></div>
+    <div class="opts adj" data-g=asp data-c=M220 data-min=10 data-max=300><button>50</button><button>100</button><button>150</button><button>200</button><button class=pm data-d=-10>-</button><button class=pm data-d=10>+</button></div>
+    <div class=lbl>Flow<br><span class=val id=aflv>–</span></div>
+    <div class="opts adj" data-g=afl data-c=M221 data-min=10 data-max=200><button>90</button><button>100</button><button>110</button><button>120</button><button class=pm data-d=-5>-</button><button class=pm data-d=5>+</button></div>
+    <div class=lbl>Fan<br><span class=val id=afnv>–</span></div>
+    <div class="opts adj" data-g=afan><button data-f=0>Off</button><button data-f=50 id=afan50>50%</button><button data-f=100>100%</button></div>
+  </div>
+  <div class="compact" style="margin-top:1em">
+    <button type=button class=adj onclick="zsave()">Save Z offset permanently</button>
+    <span class=lbl>Saved after the print ends (queued).</span>
+  </div>
+  <p class=anote id=anote>Jog, home, extrude / retract and the movement macros are locked until the print ends. The bridge refuses those commands while a job is active, too.</p>
+</div>
 <div class=panel id=p_fil>
   <h3>Filament</h3>
   <div class=two>
@@ -343,9 +425,14 @@ body.calview #fk{display:inline-block;margin:.2em 0 .6em}
     <div class=calcard>
       <h4>Auto-level</h4>
       <div class=calv id=callevv>7×7 bilinear mesh.</div>
-      <div class=mesh id=calmesh></div>
+      <div class=meshw><canvas class=mesh id=calmesh width=140 height=140 onmousemove="meshPick(event)" onclick="meshPick(event)" ontouchstart="meshPick(event)" aria-label="Bed mesh over the 210 mm print circle, front at the bottom"></canvas><span class="mx mb_">Front</span><span class="mx mt_">Back</span><span class="mx ml_">X−</span><span class="mx mr_">X+</span></div>
+      <div class=lbl id=calmeshrd></div>
+      <div class=lbl id=calmeshlg></div>
       <p class=hint id=callevlast>Not run from this page yet.</p>
-      <p class=hint>The firmware grid is fixed at 7×7 (about 35 mm spacing over a 210 mm square). A finer 12×12 grid would need a firmware change.</p>
+      <p class=hint>The firmware grid is fixed at 7×7 (35 mm spacing over a 210 mm square). The map shows it over the 210 mm round print area, interpolated the way the firmware applies it; hollow dots are grid points outside that circle. A finer 12×12 grid would need a firmware change.</p>
+      <div class=calheat><label><input type=checkbox id=calhot class=calgo onchange="document.getElementById('calhothint').style.display=this.checked?'block':'none'"> Heat the bed first</label>
+        <select id=calbedt class=calgo aria-label="Leveling bed temperature"><option>40<option>45<option>50<option>55<option selected>60<option>65<option>70<option>75<option>80</select> °C</div>
+      <p class=hint id=calhothint style="display:none">The bed heats after the probe check and before G29, so the mesh matches a hot bed. Only the nozzle has to be at 40 °C or below. The bed is turned off after the mesh is saved, and on cancel.</p>
       <button type=button class="btn calgo" onclick="calStart('level')">Run leveling</button>
     </div>
     <div class=calcard>
@@ -456,6 +543,8 @@ function tab(t){
     if(tb) tb.classList.toggle('on',n===t);
     if(pn) pn.classList.toggle('on',n===t);
   }
+  document.getElementById('p_status').classList.toggle('on',t==='tool');
+  document.getElementById('p_adj').classList.toggle('on',t==='fil');
   if(t==='cam')camApply();
 }
 function showCal(on){
@@ -473,7 +562,8 @@ function bootTab(){
 function sel(gr){const b=document.querySelector('[data-g='+gr+'] .sel'); return b?b.textContent:''}
 document.querySelectorAll('.opts').forEach(o=>o.querySelectorAll('button').forEach(b=>b.onclick=()=>{
   const c=o.dataset.c;
-  if(b.dataset.d){const cur=(T[o.dataset.g]||0)+(+b.dataset.d); return g([c+' S'+Math.max(0,cur)])}
+  if(b.dataset.f!=null) return afan(+b.dataset.f);
+  if(b.dataset.d){const cur=(T[o.dataset.g]||0)+(+b.dataset.d); return g([c+' S'+Math.min(+(o.dataset.max||999),Math.max(+(o.dataset.min||0),cur))])}
   o.querySelectorAll('button').forEach(x=>x.classList.toggle('sel',x==b));
   if(c)g([c+' S'+parseInt(b.textContent)]);
 }));
@@ -499,6 +589,8 @@ async function g(cs, quiet, auto){
 function zoff(s){var d=sel('zoff');g(['M290 Z'+(s<0?'-':'')+d])}
 function fmtN(n,sign){if(n==null||n==='')return '—'; var x=Number(n); if(isNaN(x))return '—'; var s=x.toFixed(2); if(sign&&x>0)s='+'+s; if(sign&&x===0)s='+'+s; return s}
 function renderZ(z){
+  const az=document.getElementById('azread');
+  if(az) az.innerHTML=z?('Z offset: <b>'+fmtN(z.offset,1)+' mm</b>'+(z.babystep!=null?' · this print <b>'+fmtN(z.babystep,1)+'</b>':'')+(z.pending_save?' · <b>save queued</b>':'')):'Z offset: +0.00 mm';
   const el=document.getElementById('zread'); if(!el)return;
   if(!z){el.innerHTML='Z offset: +0.00 mm'; return}
   let msg='Z offset: <b>'+fmtN(z.offset,1)+' mm</b>';
@@ -528,6 +620,46 @@ function job(c,a){fetch('/api/job',{method:'POST',headers:H(),body:JSON.stringif
   say(r.ok?'OK':('Failed: '+((await r.json().catch(()=>({}))).error||r.status))); setTimeout(()=>tick(1),300)
 })}
 function jobClear(){J('/api/ivi/clear',{}).then(j=>say(j.message||'Cleared')).catch(e=>say('Failed: '+e.message))}
+/* 0.1.19 Status / Adjust (during a print) */
+var PR=false, PRSRC='';
+function setPrinting(on){
+  if(PR===on)return; PR=on;
+  document.body.classList.toggle('printing',on);
+  t_tool.textContent=on?'Status':'Toolhead'; t_fil.textContent=on?'Adjust':'Filament';
+}
+function isPrinting(p,j){
+  const iv=(p&&p.ivi)||{};
+  if(iv.print&&iv.print.active!=null) return !!iv.print.active;
+  const s=(p&&p.state&&p.state.text)||(j&&j.state)||'';
+  return !!iv.touchscreen_job||/^(Printing|Paused|Pausing|Starting|Resuming|Finishing|Cancelling)/.test(s);
+}
+function azoff(s){g(['M290 Z'+(s<0?'-':'')+sel('azs')])}
+function afan(v){g(v>0?['M106 S'+Math.round(v*2.55)]:['M107'])}
+function selVal(gr,v){document.querySelectorAll('[data-g='+gr+'] button:not(.pm)').forEach(b=>b.classList.toggle('sel',v!=null&&parseInt(b.dataset.f!=null?b.dataset.f:b.textContent)==v))}
+function tc(v){return v==null?'–':Math.round(v)+'°C'}
+function renderPrint(p,j){
+  const iv=p.ivi||{}, pr=iv.print||{}, t=p.temperature||{}, pg=j.progress||{};
+  const c=pg.completion, st=(p.state&&p.state.text)||j.state||'Printing';
+  sring.style.setProperty('--p',c==null?0:Math.max(0,Math.min(100,c)));
+  spc.textContent=c==null?'–':(+c).toFixed(c>=10?0:1)+'%'; sst.textContent=pr.paused?'Paused':st;
+  sfile.textContent=pr.file||(j.job&&j.job.file&&j.job.file.name)||'(started on the touchscreen)';
+  const src=pr.source||(iv.touchscreen_job?'touchscreen':'network');
+  ssrc.textContent=src==='touchscreen'?'touchscreen job':src==='network'?'bridge job':'printer job';
+  sela.textContent=hms(pg.printTime); slt.textContent=hms(pg.printTimeLeft);
+  sly.textContent=pr.layer!=null?(pr.layer+(pr.z!=null?' · Z '+(+pr.z).toFixed(2)+' mm':'')):'–';
+  snza.textContent=tc(t.tool0&&t.tool0.actual); snzt.textContent=tc(t.tool0&&t.tool0.target);
+  sbda.textContent=tc(t.bed&&t.bed.actual); sbdt.textContent=tc(t.bed&&t.bed.target);
+  const tp=(v)=>v?Math.round(v.actual)+'/'+Math.round(v.target)+'°C':'–'; anzv.textContent=tp(t.tool0); abdv.textContent=tp(t.bed);
+  T.anz=t.tool0?t.tool0.target:0; T.abd=t.bed?t.bed.target:0; T.asp=pr.speed||100; T.afl=pr.flow||100;
+  selVal('anz',T.anz); selVal('abd',T.abd);
+  aspv.textContent=pr.speed!=null?pr.speed+'%':'–'; aflv.textContent=pr.flow!=null?pr.flow+'%':'–';
+  selVal('asp',pr.speed); selVal('afl',pr.flow);
+  const fp=iv.fan; afnv.textContent=fp==null?'–':(fp>0?fp+'%':'Off');
+  selVal('afan',fp==null?null:fp<=0?0:fp>=99?100:fp>=45&&fp<=55?50:null);
+  PRSRC=src;
+  /* touchscreen jobs: the stock Fan switch is on/off only, so 50% is not offered */
+  afan50.style.display=src==='touchscreen'?'none':'';
+}
 function fans(){fanOn=!fanOn; fanClick=Date.now(); fan.classList.toggle('on',fanOn); g([fanOn?'M106 S255':'M107'])}
 
 function fv(v){v_pick.style.display=v==='pick'?'block':'none'; v_heat.style.display=v==='heat'?'block':'none'}
@@ -657,7 +789,7 @@ async function filesLoad(){
   let d; try{d=await J('/api/ivi/files')}catch(e){return}
   const files=d.files||[];
   flist.innerHTML=files.length?files.map(f=>'<div class=fi>'+(f.thumbnail?'<img src="'+thumbUrl(f.name)+'" alt="">':'<div class=nt>no preview</div>')+'<div style="flex:1;min-width:0"><b>'+esc(f.name)+'</b><div class=lbl>'+hms(f.time_s)+' · '+fmtG(f)+' · '+((f.size||0)/1048576).toFixed(1)+' MB · '+new Date((f.mtime||f.date||0)*1000).toLocaleString()+'</div>'
-    +'<div class=fa><button class=u data-a=print data-n="'+esc(f.name)+'">Print</button><button class=u data-a=queue data-n="'+esc(f.name)+'">Queue</button><button data-a=delete data-n="'+esc(f.name)+'">Delete</button></div></div></div>').join(''):'<div class=lbl>No uploaded jobs yet.</div>';
+    +'<div class=fa><button class=u data-a=print data-n="'+esc(f.name)+'">Print</button><button data-a=queue data-n="'+esc(f.name)+'">Queue</button><button data-a=delete data-n="'+esc(f.name)+'">Delete</button></div></div></div>').join(''):'<div class=lbl>No uploaded jobs yet.</div>';
   flist.querySelectorAll('button').forEach(b=>b.onclick=()=>fact(b.dataset.a,b.dataset.n));
   const q=d.queue||[];
   qlist.innerHTML=q.length?q.map((n,i)=>(i+1)+'. '+esc(n)+' <a href=# data-n="'+esc(n)+'">remove</a>').join('<br>'):'Empty.';
@@ -696,9 +828,35 @@ async function conPoll(){
     if((d.lines||[]).length) con.scrollTop=con.scrollHeight;
   }catch(e){}
 }
+/* 0.1.19: say why the console is off or limited instead of silently disabling Send.
+   Calibration and a down link block every console command (the bridge answers 409), so Send is disabled;
+   during a print Send stays on and the bridge filters to the commands allowed then. */
+function conReason(link,calBusy,cal,ts,printing){
+  var t='', off=false, calb=false;
+  if(!link){ t='Console unavailable: the printer link is down.'; off=true; }
+  else if(calBusy){
+    var st=(cal&&cal.step)||'calibration step';
+    t='Console paused while calibration runs'+((cal&&cal.prompt)?' and is waiting for you: ':': ')+st+'. Finish or cancel it on the Calibration tab.';
+    off=true; calb=true;
+  }
+  else if(ts) t='Touchscreen job running: only temperature, fan, speed, flow and Z-offset changes are accepted (sent through the touchscreen).';
+  else if(printing) t='Print running: only temperature, fan, speed, flow, Z-offset (M290) and status commands (M105, M114) are accepted.';
+  var r=document.getElementById('creason'); if(!r) return;
+  r.classList.toggle('on',!!t);
+  document.getElementById('creasont').textContent=t;
+  document.getElementById('creasonb').style.display=calb?'inline-block':'none';
+  var cb=document.getElementById('cbtn'); if(cb){ cb.disabled=off; cb.title=off?t:''; }
+}
 async function csend(){
+  if(document.getElementById('cbtn').disabled){ const x=document.createElement('div');x.className='ce';x.textContent='! '+(document.getElementById('creasont').textContent||'console is unavailable');con.appendChild(x);con.scrollTop=con.scrollHeight;return; }
   const c=cin.value.trim(); if(!c)return;
-  try{await g([c],true); cin.value=''; say('Sent '+c)}catch(e){const x=document.createElement('div');x.className='ce';x.textContent='! '+e.message;con.appendChild(x)}
+  /* no client-side filter: the bridge's check_command is the one allow-list (M503 included). g() returns false on refusal */
+  try{
+    const r=await fetch('/api/printer/command',{method:'POST',headers:H(),body:JSON.stringify({commands:[c]})});
+    if(r.status===403){setForm(true,true); return}
+    if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error||('HTTP '+r.status)); }
+    cin.value=''; say('Sent '+c);
+  }catch(e){const x=document.createElement('div');x.className='ce';x.textContent='! '+e.message;con.appendChild(x); say('Refused: '+e.message)}
   conPoll();
 }
 
@@ -717,24 +875,60 @@ function meshColor(v,lo,hi){
   var r=Math.round(40+t*190), g=Math.round(90+80*(1-Math.abs(t-0.5)*2)), b=Math.round(200-t*140);
   return 'rgb('+r+','+g+','+b+')';
 }
+/* 0.1.19 round-bed mesh: the 7x7 grid (origin -105,-105, 35 mm spacing, I = X from the left, J = Y from the
+   front) drawn over the 210 mm print circle with the firmware's bilinear interpolation. Outside r = 105 is
+   dimmed; grid points outside the circle are drawn hollow (probed by the firmware's extrapolation, not on the
+   bed you print on). Rendered once per mesh change on a small canvas, then scaled; hover / tap reads a value. */
+var MESH={grid:null,key:'',lo:0,hi:0};
+var MR=105, MO=-105, MS=35, ME=112;   /* canvas spans ±112 mm so the edge grid points fit */
+function meshAt(g,x,y){
+  var fx=(x-MO)/MS, fy=(y-MO)/MS, i=Math.max(0,Math.min(5,Math.floor(fx))), j=Math.max(0,Math.min(5,Math.floor(fy)));
+  var tx=fx-i, ty=fy-j, a=g[j]&&g[j][i], b=g[j]&&g[j][i+1], c=g[j+1]&&g[j+1][i], d=g[j+1]&&g[j+1][i+1];
+  if(a==null||b==null||c==null||d==null) return null;
+  return (a*(1-tx)+b*tx)*(1-ty)+(c*(1-tx)+d*tx)*ty;
+}
+function meshInside(i,j){var x=MO+i*MS,y=MO+j*MS; return x*x+y*y<=MR*MR+0.01}
 function renderMesh(grid){
-  var el=document.getElementById('calmesh'); if(!el) return;
-  el.innerHTML='';
-  if(!grid||!grid.length){ for(var i=0;i<49;i++){ var x=document.createElement('i'); x.style.background='#e8eef6'; el.appendChild(x);} return; }
-  var vals=[];
-  grid.forEach(function(row){ (row||[]).forEach(function(z){ if(z!=null&&!isNaN(z)) vals.push(+z); }); });
-  var lo=vals.length?Math.min.apply(null,vals):0, hi=vals.length?Math.max.apply(null,vals):0;
-  /* rows are Y (J), cells are X (I); draw J from high to low so the top of the card is +Y */
-  for(var j=grid.length-1;j>=0;j--){
-    var row=grid[j]||[];
-    for(var i=0;i<(row.length||7);i++){
-      var c=document.createElement('i');
-      var z=row[i];
-      c.style.background=meshColor(z,lo,hi);
-      c.title=(z==null?'n/a':Number(z).toFixed(3)+' mm');
-      el.appendChild(c);
-    }
+  var cv=document.getElementById('calmesh'); if(!cv||!cv.getContext) return;
+  var key=JSON.stringify(grid||null); if(key===MESH.key) return; MESH.key=key; MESH.grid=grid;
+  var N=224, ctx=cv.getContext('2d'); cv.width=N; cv.height=N;
+  var img=ctx.createImageData(N,N), ok=grid&&grid.length===7;
+  var lo=0, hi=0, vals=[];
+  if(ok) for(var j=0;j<7;j++) for(var i=0;i<7;i++){ var z=grid[j]&&grid[j][i]; if(z!=null&&meshInside(i,j)) vals.push(+z); }
+  if(vals.length){ lo=Math.min.apply(null,vals); hi=Math.max.apply(null,vals); }
+  MESH.lo=lo; MESH.hi=hi;
+  var sc=2*ME/N;
+  for(var py=0;py<N;py++) for(var px=0;px<N;px++){
+    var x=-ME+(px+0.5)*sc, y=ME-(py+0.5)*sc, in_=x*x+y*y<=MR*MR, k=(py*N+px)*4;
+    var v=ok&&Math.abs(x)<=-MO&&Math.abs(y)<=-MO?meshAt(grid,x,y):null, r=232,gg=238,b=246;
+    if(v!=null){ var m=meshColor(v,lo,hi).match(/\d+/g); r=+m[0]; gg=+m[1]; b=+m[2]; }
+    if(!in_){ r=Math.round(r*0.25+235*0.75); gg=Math.round(gg*0.25+238*0.75); b=Math.round(b*0.25+243*0.75); }
+    img.data[k]=r; img.data[k+1]=gg; img.data[k+2]=b; img.data[k+3]=255;
   }
+  ctx.putImageData(img,0,0);
+  ctx.strokeStyle='#1a3d8f'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.arc(N/2,N/2,MR/sc,0,2*Math.PI); ctx.stroke();
+  if(ok) for(var j2=0;j2<7;j2++) for(var i2=0;i2<7;i2++){
+    var cx=(MO+i2*MS+ME)/sc, cy=(ME-(MO+j2*MS))/sc;
+    ctx.beginPath(); ctx.arc(cx,cy,3.2,0,2*Math.PI);
+    if(meshInside(i2,j2)){ctx.fillStyle='#123';ctx.fill()} else {ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle='#567';ctx.lineWidth=1.3;ctx.stroke()}
+  }
+  var lg=document.getElementById('calmeshlg');
+  if(lg) lg.innerHTML=ok?('<span class=mlo style="background:'+meshColor(lo,lo,hi)+'"></span>'+fmtN(lo,1)+' … <span class=mlo style="background:'+meshColor(hi,lo,hi)+'"></span>'+fmtN(hi,1)+' mm inside the print circle · range '+(hi-lo).toFixed(3)+' mm · ○ = outside r 105 (extrapolated)'):'No mesh yet.';
+  var rd=document.getElementById('calmeshrd'); if(rd) rd.textContent=ok?'Hover or tap the bed for a value.':'';
+}
+function meshPick(e){
+  var cv=document.getElementById('calmesh'), rd=document.getElementById('calmeshrd'); if(!cv||!rd||!MESH.grid) return;
+  var r=cv.getBoundingClientRect(), p=e.touches?e.touches[0]:e;
+  var x=-ME+(p.clientX-r.left)/r.width*2*ME, y=ME-(p.clientY-r.top)/r.height*2*ME;
+  var i=Math.round((x-MO)/MS), j=Math.round((y-MO)/MS), gx=MO+i*MS, gy=MO+j*MS;
+  if(i>=0&&i<7&&j>=0&&j<7&&Math.hypot(x-gx,y-gy)<6){
+    var z=MESH.grid[j]&&MESH.grid[j][i];
+    rd.textContent='I'+i+' J'+j+' (X '+gx+', Y '+gy+'): '+(z==null?'n/a':fmtN(z,1)+' mm')+(meshInside(i,j)?' · probed':' · outside the print circle (extrapolated)');
+    return;
+  }
+  if(x*x+y*y>MR*MR){ rd.textContent='Outside the 210 mm print circle'; return; }
+  var v=meshAt(MESH.grid,x,y);
+  rd.textContent='X '+x.toFixed(0)+', Y '+y.toFixed(0)+': '+(v==null?'n/a':fmtN(v,1)+' mm')+' (bilinear)';
 }
 function renderCal(cal){
   CAL=cal||{};
@@ -774,12 +968,17 @@ function renderCal(cal){
     if(/Stop without saving/.test(b.textContent)) b.disabled=!busy;
     else b.disabled=busy;
   });
+  var hot=document.getElementById('calhot'), hh=document.getElementById('calhothint');
+  if(hot&&busy&&CAL.bed_target){ hot.checked=true; var bt=document.getElementById('calbedt'); if(bt) bt.value=String(CAL.bed_target); }
+  if(hh&&hot) hh.style.display=hot.checked?'block':'none';
   var jogging=phase==='paper_jog';
   document.querySelectorAll('.caljog').forEach(function(b){ b.disabled=!jogging; });
 }
 async function calStart(action){
   try{
-    const r=await fetch('/api/ivi/cal/start',{method:'POST',headers:H(),body:JSON.stringify({action:action})});
+    var body={action:action}, hot=document.getElementById('calhot'), bt=document.getElementById('calbedt');
+    if(action==='level'&&hot&&hot.checked) body.bed=parseInt(bt&&bt.value||'60',10)||60;
+    const r=await fetch('/api/ivi/cal/start',{method:'POST',headers:H(),body:JSON.stringify(body)});
     const j=await r.json();
     if(!r.ok) throw new Error(j.error||r.status);
     renderCal(j.cal); say('Calibration started'); calKick();
@@ -854,15 +1053,7 @@ function applyDemo(){
   var calIdle={
     busy:false, phase:'idle', run:'', step:'', prompt:null, error:null, progress:0, elapsed_s:0,
     xyz:{H:233.22,R:160.31,L:357.50,S:200,endstops:{X:-0.03,Y:-0.13,Z:0},angles:{X:0.11,Y:-0.07,Z:-0.04},last_s:Math.floor(Date.now()/1000)-3600},
-    level:{enabled:true,fade:0,last_s:Math.floor(Date.now()/1000)-1800,grid:[
-      [0.08,0.06,0.04,0.03,0.04,0.06,0.09],
-      [0.05,0.03,0.01,0.00,0.01,0.03,0.05],
-      [0.03,0.01,-0.01,-0.02,-0.01,0.01,0.03],
-      [0.02,0.00,-0.02,-0.03,-0.02,0.00,0.02],
-      [0.03,0.01,-0.01,-0.02,-0.01,0.01,0.04],
-      [0.05,0.03,0.01,0.00,0.01,0.03,0.06],
-      [0.09,0.06,0.04,0.03,0.04,0.06,0.10]
-    ]},
+    level:{enabled:true,fade:0,last_s:Math.floor(Date.now()/1000)-1800,grid:[[0.08005, 0.03613, -0.04049, -0.00937, 0.01107, 0.00015, -0.03946], [-0.04064, 0.09038, -0.03927, 0.03184, 0.01782, -0.02632, -0.0293], [-0.04042, -0.07238, 0.01252, -0.00542, 0.07535, 0.01948, -0.07899], [0.08284, -0.05564, 0.03352, 0.03297, -0.07611, -0.06055, -0.02548], [0.06741, 0.06914, 0.01838, 0.09352, 0.02851, 0.15345, 0.03666], [0.1467, 0.21624, 0.1491, 0.15433, 0.15639, 0.29834, 0.30736], [0.30818, 0.35289, 0.42132, 0.35199, 0.28574, 0.294, 0.48283]]},
     paper:{z:0.12,H:233.22,offset:0.00,ref:233.22,last_s:Math.floor(Date.now()/1000)-900}
   };
   if(d==='calpaper'){
@@ -871,8 +1062,33 @@ function applyDemo(){
     calIdle.progress=88; calIdle.elapsed_s=95;
     calIdle.paper={z:40.00,H:233.22,offset:0.00,ref:233.22,last_s:calIdle.paper.last_s};
   }
+  if(d==='calhot'){ var hc=document.getElementById('calhot'); if(hc) hc.checked=true; }
+  if(d==='calheat'){
+    calIdle.busy=true; calIdle.phase='heat_bed'; calIdle.run='level'; calIdle.bed_target=60; calIdle.bed=52.4; calIdle.nozzle=27.1;
+    calIdle.step='Heating the bed: 52 / 60 °C';
+    calIdle.progress=17; calIdle.elapsed_s=212;
+  }
   renderCal(calIdle);
-  if(d==='cal'||d==='calpaper') tab('cal');
+  if(d==='calremove'){
+    renderCal({busy:true,phase:'prompt_remove',run:'level',step:'Remove the probe',prompt:'Take the probe off the toolhead, then continue.',error:null,progress:88,elapsed_s:402,
+      xyz:calIdle.xyz,level:calIdle.level,paper:calIdle.paper});
+    conReason(true,true,CAL,false,false);
+    document.querySelectorAll('.u,.opts[data-c] button').forEach(function(b){ if(b.closest('#p_cal')||b.closest('#p_adj'))return; if(!/\b(Pause|Resume|Stop|Clear)\b/.test(b.textContent)) b.disabled=true; });
+  }
+  if(d==='print'||d==='printadj'||d==='printts'){
+    var ts=d==='printts';
+    stt.textContent='Printing'; fn.textContent='example-benchy.gcode'; pc.textContent='42.0%'; pb.style.width='42%';
+    usb.textContent=ts?'up (touchscreen job)':'up';
+    var dp={state:{text:'Printing'},temperature:{tool0:{actual:209.6,target:210},bed:{actual:60.1,target:60}},
+      ivi:{link:true,touchscreen_job:ts,fan:100,zoffset:{offset:-0.03,babystep:-0.03,height:233.22,pending_save:false},
+        print:{active:true,source:ts?'touchscreen':'network',paused:false,file:'example-benchy.gcode',speed:100,flow:100,layer:37,z:7.50}}};
+    var dj={state:'Printing',job:{file:{name:'example-benchy.gcode'}},progress:{completion:42.0,printTime:1830,printTimeLeft:2520}};
+    renderZ(dp.ivi.zoffset); setPrinting(true); renderPrint(dp,dj); conReason(true,false,null,ts,true);
+    document.querySelectorAll('.u,.opts[data-c] button').forEach(function(b){ if(b.closest('#p_adj')||b.closest('#p_cal'))return; if(!/\b(Pause|Resume|Stop|Clear)\b/.test(b.textContent)) b.disabled=true; });
+    tab(d==='printadj'?'fil':'tool');
+    return 1;
+  }
+  if(d==='cal'||d==='calpaper'||d==='calhot'||d==='calheat') tab('cal');
   else tab('tool');
   return 1;
 }
@@ -910,14 +1126,21 @@ async function tick(f){
     }
     if(ivi.cal) renderCal(ivi.cal);
     const calBusy=!!(ivi.cal&&ivi.cal.busy);
-    const busy=ts||!link||calBusy;
+    const printing=isPrinting(p,j);
+    setPrinting(printing);
+    if(printing) renderPrint(p,j);
+    /* motion / start controls: off during any print, calibration, or with the link down.
+       Adjust controls: on during a print while the link is up. Pause / Resume / Stop / Clear stay on. */
+    const busy=printing||!link||calBusy;
     document.querySelectorAll('.u,.opts[data-c] button').forEach(b=>{
-      if(b.closest('#jobp')||b.closest('#p_cal')) return;
+      if(b.closest('#jobp')||b.closest('#p_cal')||b.closest('#p_adj')) return;
       const keep=/\b(Pause|Resume|Stop|Clear)\b/.test(b.textContent);
       b.disabled=busy&&!keep;
     });
-    if(link && !ts && !calBusy && Date.now()-lastPos>=10000) posPoll();
-  }catch(e){stt.textContent='bridge offline'; document.querySelectorAll('.u').forEach(b=>b.disabled=true)}
+    document.querySelectorAll('#p_adj button').forEach(b=>{b.disabled=!link||calBusy||!printing});
+    conReason(link,calBusy,ivi.cal,ts||(printing&&ivi.print&&ivi.print.source==='touchscreen'),printing);
+    if(link && !printing && !calBusy && Date.now()-lastPos>=10000) posPoll();
+  }catch(e){stt.textContent='bridge offline'; document.querySelectorAll('.u').forEach(b=>b.disabled=true); conReason(false,false,null,false,false); document.getElementById('creasont').textContent='Console unavailable: the bridge is not answering.'}
 }
 bootTab();
 window.addEventListener('hashchange',bootTab);

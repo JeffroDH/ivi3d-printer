@@ -106,6 +106,14 @@ Item {
             gfn.setWorkSpeed(parseInt(s));
         if (f != null && f !== "")
             gfn.setFlowrate("" + parseInt(f));
+        // 0.1.19: Fan on/off, the same slots as the stock Status page Fan switch
+        var fv = o.fan != null && o.fan !== "" ? o.fan : o.cmd === "fan" ? o.value : undefined;
+        if (fv != null && fv !== "") {
+            if (parseInt(fv) > 0)
+                gfn.sendSetFanOnCMD();
+            else
+                gfn.sendSetFanOffCMD();
+        }
         var z = o.zoffset != null && o.zoffset !== "" ? o.zoffset : o.cmd === "zoffset" ? o.value : undefined;
         if (z != null && z !== "") {
             var zs = ("" + z).replace(/^\+/, "");
@@ -195,7 +203,7 @@ Item {
             lastId = id;
             gfn.stopPrinting();
             ack(id, 1, "cancelled");
-        } else if (c === "temp" || c === "speed" || c === "flow" || c === "adjust" || c === "zoffset") {
+        } else if (c === "temp" || c === "speed" || c === "flow" || c === "adjust" || c === "zoffset" || c === "fan") {
             lastId = id;
             adjust(o);
             ack(id, 1, "set");

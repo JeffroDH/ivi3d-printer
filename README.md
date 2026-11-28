@@ -43,7 +43,7 @@ Saved printer output: [`docs/marlin_M115.txt`](docs/marlin_M115.txt), [`docs/mar
 | `fusion/` | Autodesk Fusion post processors for the laser and CNC heads + header checker ([fusion/README.md](fusion/README.md)) |
 | `docs/laser_cnc_gcode.md` | Laser (line/point) and CNC G-code + header format from IVI 3licer test files |
 | `bridge/` | Orca Slicer / Anycubic Next bridge: OctoPrint-compatible service, Wi-Fi upload + USB serial streaming, tests; installers for macOS (launchd), Linux (systemd) and Windows (Task Scheduler) in `bridge/install/` |
-| `a33_bridge/` | On-printer Wi-Fi bridge (ivibridge 0.1.18-a33): static C daemon on the A33, OctoPrint-compatible API and web UI on ports 5001 and 80, Calibration view, no computer in the middle ([a33_bridge/README.md](a33_bridge/README.md)) |
+| `a33_bridge/` | On-printer Wi-Fi bridge (ivibridge 0.1.19-a33): static C daemon on the A33, OctoPrint-compatible API and web UI on ports 5001 and 80, print-time Status / Adjust, Calibration view with heated leveling, no computer in the middle ([a33_bridge/README.md](a33_bridge/README.md)) |
 | `ivi-control.sh` | Command-line client for the HTTP API (discover, status, print, pause, G-code, …) |
 | `docs/README.md` | Index of the topic docs |
 | `docs/architecture.md` | Three processors, ports, and how a job starts |

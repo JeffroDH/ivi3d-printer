@@ -130,7 +130,7 @@ class Supervisor(unittest.TestCase):
         self.assertIn("daemon: running", st); self.assertIn("watchdog: running", st)
         self.assertIn("http: listening on port %d" % self.port, st)
         self.assertIn("http: listening on port %d" % self.port2, st)
-        self.assertIn("link: %s -> /dev/pts/" % self.link, st); self.assertIn("version: ivibridge 0.1.18-a33", st)
+        self.assertIn("link: %s -> /dev/pts/" % self.link, st); self.assertIn("version: ivibridge 0.1.19-a33", st)
         self.assertFalse(os.path.exists(called), open(called).read() if os.path.exists(called) else "")
         rc, out = self.sh("stop"); self.assertEqual(rc, 0, out)
         rc, st = self.sh("status", timeout=30)

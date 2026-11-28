@@ -1,5 +1,5 @@
 #!/bin/sh
-# ivibridge-ram.sh {start|stop|status|watchdog}   (for ivibridge 0.1.18-a33)
+# ivibridge-ram.sh {start|stop|status|watchdog}   (for ivibridge 0.1.19-a33)
 # RAM-only run of the A33 Wi-Fi bridge (busybox 1.18 ash). Writes only to /tmp (tmpfs) and /dev (devtmpfs);
 # nothing on the eMMC changes, and a reboot always returns the printer to stock.
 #   start : save the app's env/cwd/stdout, stop IVI-Main-Controller, make /dev/ivi-stm32 (same major:minor as

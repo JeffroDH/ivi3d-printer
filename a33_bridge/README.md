@@ -4,13 +4,13 @@
 
 This is not the Mac/PC bridge in [`../bridge/`](../bridge/README.md). That program runs on a computer and streams jobs over USB serial. This daemon runs on the printer, so Orca Slicer can print and monitor over the LAN with no cable and no computer in the middle.
 
-The current version is **0.1.18-a33**. Built binaries and install tarballs are not in this folder; build them with `scripts/build.sh`.
+The current version is **0.1.19-a33**. Built binaries and install tarballs are not in this folder; build them with `scripts/build.sh`.
 
 ## Architecture
 
 The real CH340 node (`/dev/ttyUSB0`, 115200 8N1) is recreated as `/dev/ivi-stm32` on devtmpfs. The daemon opens that node exclusively and atomically replaces `/dev/ttyUSB0` with a symlink to a pty. The touchscreen app keeps talking to `/dev/ttyUSB0` and does not need to be patched.
 
-The daemon passes the app's traffic through byte for byte and takes turns on the wire. Replies meant for a network command are kept away from the app, because the app treats any line containing `ok` as an acknowledgement. `print=true` stores the file in `/userdata/WifiFile` and posts a `/tmp/ivibridge/print_request` so the touchscreen app can open the stock Status page (assist mode; the user taps Start). It does not start a network stream and does not show the `WORKING_PC` lock page. A persistent Auto-start setting (default off) can skip the plate warning and run the stock RUN path. The web UI shows Z offset as a normal offset (reference H minus effective H: 0.00 after calibration, + when the nozzle is higher). Save permanently queues `M665`+`M500` until idle and keeps the displayed offset. “Set current as zero” updates the reference. A stock paper-test calibration resets it. The Calibration tab runs stock G33, G29, and the paper test (with Run all chaining XYZ into leveling, then the paper test), and saves with M500 only on success. The older stream path is only used when `IVIB_NET_STREAM=1` (tests/debug). While a network job *does* run, the firmware status shown to the app is rewritten to `WORKING_PC`. The lock page's Disconnect button (`M108` + `M2001 S1`) is intercepted and turned into a graceful cancel. During a touchscreen job the API can pause, resume, cancel, and adjust temperature, speed, and flow through that same request route; manual moves, homing, and arbitrary console G-code stay blocked.
+The daemon passes the app's traffic through byte for byte and takes turns on the wire. Replies meant for a network command are kept away from the app, because the app treats any line containing `ok` as an acknowledgement. `print=true` stores the file in `/userdata/WifiFile` and posts a `/tmp/ivibridge/print_request` so the touchscreen app can open the stock Status page (assist mode; the user taps Start). It does not start a network stream and does not show the `WORKING_PC` lock page. A persistent Auto-start setting (default off) can skip the plate warning and run the stock RUN path. The web UI shows Z offset as a normal offset (reference H minus effective H: 0.00 after calibration, + when the nozzle is higher). Save permanently queues `M665`+`M500` until idle and keeps the displayed offset. “Set current as zero” updates the reference. A stock paper-test calibration resets it. The Calibration tab runs stock G33, G29, and the paper test (with Run all chaining XYZ into leveling, then the paper test), and saves with M500 only on success. The older stream path is only used when `IVIB_NET_STREAM=1` (tests/debug). While a network job *does* run, the firmware status shown to the app is rewritten to `WORKING_PC`. The lock page's Disconnect button (`M108` + `M2001 S1`) is intercepted and turned into a graceful cancel. During a touchscreen job the API can pause, resume, cancel, and adjust temperature, speed, flow, fan (on/off), and Z-offset through that same request route; manual moves, homing, and arbitrary console G-code stay blocked.
 
 Network jobs are streamed with Marlin line numbers, checksums, and resend support. Pause, resume, and cancel use the firmware job words (`M2410`, `M2411 S1`/`S3`/`S4`). Resume waits for `Finish pause` / `Resume complete` before the next job line. A stalled line is probed with `M105` and, if it was dropped, resent with the same `N` so a motion line cannot run twice. The daemon never sends `M3` or `M4`. `M5` is included in the cooldown only when the last head report was a laser.
 
@@ -38,7 +38,7 @@ The printer's loopback interface is down, so supervisor `status` never opens a n
   - Clients on RFC 1918 networks — `10/8`, `172.16/12`, and `192.168/16` — are trusted without a key.
   - Loopback and Tailscale `100.x` addresses still need the key (`X-Api-Key` or `?apikey=`).
 - With no apikey file, every POST returns 403 and controls are disabled. GET status endpoints still work.
-- The console allowlist matches the Mac bridge, except `M3`/`M4` are refused entirely. Temperatures, axis moves, and fans (`M106`/`M107` with optional `P0`/`P1` and `S0–255`) are range-limited. During a job only `M104`, `M140`, `M220`, `M221`, `M106`, `M107`, `M105`, and `M114` are allowed.
+- The console allowlist matches the Mac bridge, except `M3`/`M4` are refused entirely. Temperatures, axis moves, and fans (`M106`/`M107` with optional `P0`/`P1` and `S0–255`) are range-limited. During a print (bridge job, touchscreen job, or a firmware `WORKING_*` status) only `M104`, `M140`, `M220`, `M221`, `M290` (±0.01 / 0.02 / 0.05 mm), `M106`, `M107`, `M105`, and `M114` are allowed; everything that moves the machine returns 409. `G29` is never on the console allow-list; leveling runs only from the Calibration flow.
 - Do not commit or publish the apikey file, SSH keys, Wi-Fi credentials, password hashes, or the printer serial.
 
 ## HTTP API (ports 5001 and 80)
@@ -64,7 +64,9 @@ Compatible with Orca's OctoPrint connection and with the repo's Orca plugin clie
 | POST | `/api/printer/command`, `/api/printer/tool`, `/api/printer/bed`, `/api/printer/printhead` | Allowlisted commands, hotend/bed targets, flow, feedrate |
 | POST | `/api/ivi/clear` | Orca plugin "clear stale job" |
 
-A touchscreen print makes the API read-only: network start, uploads that print, console commands, and job control return 409 until it finishes.
+A touchscreen print restricts the API: network start, uploads that print, and moving console commands return 409 until it finishes. Pause, resume, cancel, and the adjust commands above still work.
+
+`GET /api/printer` includes `ivi.print` (`active`, `source` = `network` / `touchscreen` / `printer`, `paused`, `file`, `speed`, `flow`, `layer`, `z`) and `ivi.cal`. `GET /api/ivi/cal` returns the calibration state, the xyz values, and the current mesh as `level.grid[j][i]` (J rows from the front, I columns from the left).
 
 ## Web UI
 
@@ -72,9 +74,10 @@ The page is a port of the Mac bridge UI, served from `www/index.html`.
 
 - **Toolhead:** temperatures, feedrate and flow, fan toggle, jog, Home (with a 14 px gap under the jog pad), and a position bar.
 - **Filament:** load and unload wizard.
+- **While printing**, Toolhead becomes **Status** and Filament becomes **Adjust** (the web counterparts of the touchscreen Status and Adjust pages). Status shows progress, elapsed and remaining time, layer and Z, temperatures, and the file, with Pause / Resume / Stop / Clear. Adjust has nozzle and bed targets, Z offset (`M290` babysteps and Save permanently), speed, flow, and fan. Jog, Home, extrude / retract, and moving macros are hidden or disabled, and the binary enforces the same lock. The normal boxes return when the print ends. On a phone these are the first two tabs; on a wide screen they take the places of Toolhead and Filament in the left and right columns.
 - **Camera:** snapshot or MJPEG URL from a *separate* camera. Snapshot view refreshes at 5 frames/sec in the browser, not on the printer.
 - **Files:** list of jobs stored on the printer, thumbnails, print, delete, and a manual queue (a queued job never starts on its own).
-- **Console:** allowlisted G-code, plus a few built-in preset buttons (preheat PLA/PETG, cooldown, park, load/unload).
+- **Console:** allowlisted G-code, plus a few built-in preset buttons (preheat PLA/PETG, cooldown, park, load/unload). A line under Send gives the reason when the console is unavailable or limited (printer link down, a calibration step waiting, a touchscreen job, or a print), and refusals from the bridge are printed in the console.
 
 Automatic position checks (`M114`) are sent only while the Toolhead tab is visible: immediately after a jog or Home, and otherwise about every 10 seconds. Those automatic checks are posted with `"quiet": true` and are kept out of the console view. A check you type yourself still appears.
 

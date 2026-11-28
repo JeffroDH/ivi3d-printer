@@ -18,6 +18,7 @@ enum {
     CAL_PROMPT_ATTACH,
     CAL_M119,
     CAL_ATTACH_RETRY,
+    CAL_HEAT,              /* 0.1.19 heated leveling: M140 S<t>, then poll until the bed is at temperature */
     CAL_RUN,
     CAL_SAVE,
     CAL_PROBE_M503,
@@ -34,6 +35,8 @@ enum { CAL_K_NONE = 0, CAL_K_XYZ, CAL_K_LEVEL, CAL_K_PAPER, CAL_K_ALL };
 
 #define CAL_GRID 7
 #define CAL_TEMP_MAX 40.0
+#define CAL_BED_MIN 40
+#define CAL_BED_MAX 80
 
 static struct {
     int st, kind;
@@ -48,8 +51,10 @@ static struct {
     long long started_ms, phase_ms, last_poll_ms, last_m114_ms;
     int progress, soft_off, confirmed;
     int paper_new_h;
+    int bed_c;             /* heated leveling target °C (0 = the cold flow) */
+    int bed_on;            /* this run turned the bed heater on (cancel / failure turns it off) */
     int cmd_sent;          /* waiting for current P_CAL command */
-    char step[96], prompt[240], err[200], run_name[12];
+    char step[96], prompt[240], err[200], run_name[16];
 } g_cal;
 
 static int cal_g33_ms(void) {
@@ -71,6 +76,13 @@ static int cal_home_ms(void) {
     long v = e && *e ? atol(e) : 120000L;
     if (v < 500) v = 500;
     if (v > 600000) v = 600000;
+    return (int)v;
+}
+static int cal_heat_ms(void) {
+    const char *e = getenv("IVIB_CAL_HEAT_MS");
+    long v = e && *e ? atol(e) : 1200000L;     /* 20 min to reach the bed target */
+    if (v < 500) v = 500;
+    if (v > 3600000) v = 3600000;
     return (int)v;
 }
 static int cal_cmd_ms(void) {
@@ -95,6 +107,7 @@ static const char *cal_phase_name(int st) {
     case CAL_PROMPT_ATTACH: return "prompt_attach";
     case CAL_M119: return "m119";
     case CAL_ATTACH_RETRY: return "attach_retry";
+    case CAL_HEAT: return "heat_bed";
     case CAL_RUN: return "run";
     case CAL_SAVE: return "save";
     case CAL_PROBE_M503: return "probe_m503";
@@ -140,12 +153,18 @@ static void cal_fail(const char *why) {
         net_send("M211 S1", NW_OK, P_CAL, cal_cmd_ms(), NULL, NULL, NULL);
         g_cal.soft_off = 0;
         g_cal.cmd_sent = 1;
+    } else if (g_cal.bed_on && net_ready() && g_ser >= 0) {
+        /* heated leveling: cancel / failure turns the bed off (cal_tick retries if the link is busy) */
+        net_send("M140 S0", NW_OK, P_CAL, cal_cmd_ms(), NULL, NULL, NULL);
+        g_cal.bed_on = 0;
+        g_cal.cmd_sent = 1;
     }
     cal_set_st(CAL_FAIL, "Failed", NULL);
     logf_("cal failed: %s", g_cal.err);
 }
 
 static void cal_succeed(void) {
+    g_cal.bed_on = 0;                  /* heated leveling already sent M140 S0 after the save */
     g_cal.progress = 100;
     g_cal.prompt[0] = 0;
     cal_set_st(CAL_DONE, "Finished", NULL);
@@ -163,9 +182,11 @@ static void cal_send_ok(const char *cmd, int timeout_ms) {
     cal_send(cmd, NW_OK, NULL, timeout_ms);
 }
 
+/* Probe attach / removal needs a cool nozzle only. Stock checkTempForWizard checks the nozzle's actual
+   temperature, not the bed, so a warm bed does not block the probe flows (needed for heated leveling). */
 static int cal_temps_ok(void) {
     if (!S.have_t) return 0;
-    return S.t_act < CAL_TEMP_MAX && S.b_act < CAL_TEMP_MAX;
+    return S.t_act <= CAL_TEMP_MAX;
 }
 
 static int cal_temps_fresh(void) {
@@ -174,8 +195,8 @@ static int cal_temps_fresh(void) {
 
 static const char *cal_cool_msg(void) {
     static char b[160];
-    snprintf(b, sizeof b, "Cool the printer below 40 °C before attaching the probe (nozzle %.0f °C, bed %.0f °C).",
-             S.have_t ? S.t_act : 0, S.have_t ? S.b_act : 0);
+    snprintf(b, sizeof b, "Let the nozzle cool to 40 °C or below before attaching the probe (nozzle %.0f °C).",
+             S.have_t ? S.t_act : 0);
     return b;
 }
 
@@ -199,7 +220,7 @@ static int cal_locked(char *err, size_t en) {
     return 0;
 }
 
-static int cal_start(const char *action, char *err, size_t en) {
+static int cal_start(const char *action, int bed_c, char *err, size_t en) {
     int rc = cal_locked(err, en);
     if (rc) return rc;
     if (cal_busy()) { snprintf(err, en, "calibration is already running"); return 409; }
@@ -210,6 +231,9 @@ static int cal_start(const char *action, char *err, size_t en) {
     else if (!strcmp(action, "paper") || !strcmp(action, "zoffset") || !strcmp(action, "z-offset")) kind = CAL_K_PAPER;
     else if (!strcmp(action, "all")) kind = CAL_K_ALL;
     else { snprintf(err, en, "unknown action '%s' (use xyz, level, paper, or all)", action); return 400; }
+    if (bed_c && kind != CAL_K_LEVEL) { snprintf(err, en, "a bed temperature is only used with action level"); return 400; }
+    if (bed_c && bed_c < CAL_BED_MIN) bed_c = CAL_BED_MIN;
+    if (bed_c > CAL_BED_MAX) bed_c = CAL_BED_MAX;
 
     memset(&g_cal.err, 0, sizeof g_cal.err);
     g_cal.kind = kind;
@@ -223,6 +247,7 @@ static int cal_start(const char *action, char *err, size_t en) {
     g_cal.cmd_sent = 0;
     g_cal.confirmed = 0;
     g_cal.paper_new_h = INT_MIN;
+    g_cal.bed_c = bed_c; g_cal.bed_on = 0;
     snprintf(g_cal.run_name, sizeof g_cal.run_name, "%s",
              kind == CAL_K_XYZ ? "xyz" : kind == CAL_K_LEVEL ? "level" : kind == CAL_K_PAPER ? "paper" : "all");
 
@@ -441,6 +466,10 @@ static void cal_json(struct sb *s) {
     else if (g_cal.err[0] && !strcmp(g_cal.err, "cancelled") && cal_busy()) sb_str(s, g_cal.err);
     else sb_add(s, "null");
     sb_add(s, ",\"progress\":%d,\"elapsed_s\":%.1f", g_cal.progress, el);
+    /* 0.1.19 heated leveling: the run's bed target (null = cold flow) and the live bed temperature */
+    if (g_cal.bed_c && (cal_busy() || g_cal.st == CAL_DONE || g_cal.st == CAL_FAIL)) sb_add(s, ",\"bed_target\":%d", g_cal.bed_c);
+    else sb_add(s, ",\"bed_target\":null");
+    if (S.have_t) sb_add(s, ",\"bed\":%.1f,\"nozzle\":%.1f", S.b_act, S.t_act); else sb_add(s, ",\"bed\":null,\"nozzle\":null");
     sb_add(s, ",\"xyz\":{");
     cal_hund_json(s, "H", g_cal.H != INT_MIN ? g_cal.H : g_z_height_h);
     sb_add(s, ","); cal_hund_json(s, "R", g_cal.R);
@@ -520,6 +549,15 @@ static void cal_after_m503(void) {
     if (g_cal.want_level && g_cal.st == CAL_PROBE_M503)
         cal_mark_last(CAL_K_LEVEL);
     /* After leveling (or level-only), stow and maybe paper. */
+    if (g_cal.kind == CAL_K_LEVEL && g_cal.bed_on) {
+        /* heated leveling: the mesh is saved, turn the bed off before the probe comes off */
+        cal_set_st(CAL_MOVE_REMOVE, "Turning the bed off (M140 S0)", NULL);
+        g_cal.progress = 85;
+        cal_send_ok("M140 S0", cal_cmd_ms());
+        g_cal.bed_on = 0;
+        g_cal.confirmed = 60;          /* 60 = M140 S0 in flight, 61 = send G0, 62 = G0 in flight */
+        return;
+    }
     if (g_cal.kind == CAL_K_LEVEL || g_cal.kind == CAL_K_XYZ || g_cal.kind == CAL_K_ALL) {
         cal_set_st(CAL_MOVE_REMOVE, "Moving up so you can remove the probe", NULL);
         g_cal.progress = 86;
@@ -602,13 +640,28 @@ static void cal_cmd_done(int timed_out, int failed, const char *fail) {
         g_cal.progress = 14;
         return;
     case CAL_M119:
-        if (g_cal.m119_ok && !g_cal.m119_missing) {
+        if (g_cal.m119_ok && !g_cal.m119_missing && g_cal.bed_c) {
+            char st[96]; snprintf(st, sizeof st, "Heating the bed to %d °C", g_cal.bed_c);
+            cal_set_st(CAL_HEAT, st, NULL);
+            g_cal.progress = 17;
+            g_cal.confirmed = 50;          /* 50 = send M140, 51 = wait loop */
+        } else if (g_cal.m119_ok && !g_cal.m119_missing) {
             cal_begin_probe_run();
         } else {
             cal_set_st(CAL_ATTACH_RETRY, "Probe not detected",
                        "The probe was not seen (no z_min, or z_min: no exist). Attach it firmly and retry, or cancel.");
             g_cal.progress = 14;
         }
+        return;
+    case CAL_HEAT:
+        if (g_cal.confirmed == 50) { g_cal.confirmed = 51; g_cal.bed_on = 1; g_cal.last_poll_ms = 0; return; }   /* M140 done */
+        if (S.have_t && S.b_act >= g_cal.bed_c - 1.0) {
+            logi_("cal: bed at %.1f °C (target %d), starting G29", S.b_act, g_cal.bed_c);
+            cal_begin_probe_run();
+            return;
+        }
+        if (now_ms() - g_cal.phase_ms > cal_heat_ms()) { cal_fail("the bed did not reach the leveling temperature"); return; }
+        snprintf(g_cal.step, sizeof g_cal.step, "Heating the bed: %.0f / %d °C", S.have_t ? S.b_act : 0.0, g_cal.bed_c);
         return;
     case CAL_RUN:
         /* Success string was matched and the trailing ok arrived (G28 settle included). */
@@ -625,6 +678,16 @@ static void cal_cmd_done(int timed_out, int failed, const char *fail) {
         cal_after_m503();
         return;
     case CAL_MOVE_REMOVE:
+        if (g_cal.confirmed == 60) {
+            g_cal.confirmed = 61;
+            snprintf(g_cal.step, sizeof g_cal.step, "Moving up so you can remove the probe");
+            g_cal.progress = 86;
+            return;
+        }
+        if (g_cal.bed_c) {
+            cal_set_st(CAL_PROMPT_REMOVE, "Remove the probe",
+                       "Take the probe off the toolhead, then continue. The bed heater is off, but the bed is still hot; take care.");
+        } else
         cal_set_st(CAL_PROMPT_REMOVE, "Remove the probe",
                    "Take the probe off the toolhead, then continue.");
         g_cal.progress = 88;
@@ -685,6 +748,9 @@ static void cal_tick(void) {
         if (g_cal.st == CAL_FAIL && g_cal.soft_off && !g_cal.cmd_sent && net_ready() && g_ser >= 0) {
             cal_send_ok("M211 S1", cal_cmd_ms());
             g_cal.soft_off = 0;
+        } else if (g_cal.st == CAL_FAIL && g_cal.bed_on && !g_cal.cmd_sent && net_ready() && g_ser >= 0) {
+            cal_send_ok("M140 S0", cal_cmd_ms());
+            g_cal.bed_on = 0;
         }
         return;
     }
@@ -712,6 +778,24 @@ static void cal_tick(void) {
     }
     if (g_cal.st == CAL_NEED_TEMP) {
         cal_send_ok("M105", 8000);
+        return;
+    }
+
+    /* Heated leveling: set the bed, then poll M105 (no blocking M190, so Cancel stays responsive) */
+    if (g_cal.st == CAL_HEAT && g_cal.confirmed == 50) {
+        char cmd[24]; snprintf(cmd, sizeof cmd, "M140 S%d", g_cal.bed_c);
+        cal_send_ok(cmd, cal_cmd_ms());
+        return;
+    }
+    if (g_cal.st == CAL_HEAT && g_cal.confirmed == 51) {
+        long long t = now_ms();
+        if (!g_cal.last_poll_ms || t - g_cal.last_poll_ms > 2000) { g_cal.last_poll_ms = t; cal_send_ok("M105", 8000); }
+        return;
+    }
+
+    if (g_cal.st == CAL_MOVE_REMOVE && g_cal.confirmed == 61) {
+        cal_send_ok("G0 X0 Y0 Z100 F1000", cal_cmd_ms());
+        g_cal.confirmed = 62;
         return;
     }
 
@@ -816,7 +900,11 @@ static void api_ivi_cal_post(struct cli *c, const char *body, const char *path) 
                                 strcmp(act, "jog") && strcmp(act, "save"))) {
         if (!act[0]) jget_str(body, "action", act, sizeof act);
         if (!act[0]) jget_str(body, "kind", act, sizeof act);
-        int rc = cal_start(act, err, sizeof err);
+        char bv[16] = ""; int bed_c = 0;
+        /* optional heated leveling: "bed":60 (clamped 40..80 in cal_start); true = 60; 0/false/null = cold flow */
+        if (jget_str(body, "bed", bv, sizeof bv)) bed_c = !strcmp(bv, "true") ? 60 : (int)(atof(bv) + 0.5);
+        if (bed_c < 0) bed_c = 0;
+        int rc = cal_start(act, bed_c, err, sizeof err);
         if (rc) { jerr(c, rc, err); return; }
         struct sb s = {0}; sb_add(&s, "{\"ok\":true,\"cal\":"); cal_json(&s); sb_add(&s, "}"); jreply(c, 200, &s);
         return;

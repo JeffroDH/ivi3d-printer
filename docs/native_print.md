@@ -42,9 +42,19 @@ only.
 ## Mid-job
 
 While a touchscreen (or hook-started) job is running, the API can pause,
-resume, cancel, and adjust temperature, speed, flow, and Z-offset
-through the same request route. Manual moves, homing, and arbitrary
-console G-code stay blocked until the job ends.
+resume, cancel, and adjust temperature, speed, flow, fan (on/off), and
+Z-offset through the same request route. Manual moves, homing, and
+arbitrary console G-code stay blocked until the job ends. The same lock
+applies to a bridge job and to a job the firmware reports as `WORKING_*`
+(for example after a bridge restart mid-print).
+
+The web page switches to **Status** and **Adjust** boxes for the whole
+print ([a33_bridge/README.md](../a33_bridge/README.md)). Fan on/off from
+the web uses the hook's `cmd=fan` request, so it needs the 0.1.19
+touchscreen app.
+
+On the touchscreen's Adjust page the current Z adjustment for the print
+is shown under the “Z offset distance (mm)” label (`Current: −0.03 mm`).
 
 Z-offset mid-print is `M290`. “Save Z offset permanently” queues
 `M665 H` + `M500` until the printer is idle and does not change the

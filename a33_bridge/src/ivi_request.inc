@@ -18,7 +18,7 @@ static int g_assist_open;
 static long long g_assist_until;
 
 static struct {
-    int st, id, ok, autostart, nozzle, bed, speed, flow, zoff;
+    int st, id, ok, autostart, nozzle, bed, speed, flow, zoff, fan;
     char cmd[16], file[512], result[80];
     long long t0, deadline;
 } R;
@@ -30,7 +30,7 @@ static void req_clear_file(void) {
 
 static void req_reset_fields(void) {
     R.ok = 0; R.autostart = 0; R.result[0] = 0; R.file[0] = 0; R.cmd[0] = 0;
-    R.nozzle = R.bed = R.speed = R.flow = R.zoff = INT_MIN;
+    R.nozzle = R.bed = R.speed = R.flow = R.zoff = R.fan = INT_MIN;
 }
 
 /* Hundredths of a millimetre: +/-1, +/-2, +/-5 for 0.01 / 0.02 / 0.05 mm. */
@@ -76,6 +76,10 @@ static int req_write_file(void) {
         if (R.flow != INT_MIN) fprintf(f, "flow=%d\n", R.flow);
         if (R.flow != INT_MIN && !strcmp(R.cmd, "flow")) fprintf(f, "value=%d\n", R.flow);
     }
+    if (R.fan != INT_MIN) {                 /* 0.1.19: touchscreen Fan switch (on/off, like the stock Status page) */
+        fprintf(f, "fan=%d\n", R.fan ? 1 : 0);
+        if (!strcmp(R.cmd, "fan")) fprintf(f, "value=%d\n", R.fan ? 1 : 0);
+    }
     if (R.zoff != INT_MIN) {
         char zb[16]; zoff_fmt(R.zoff, zb, sizeof zb);
         fprintf(f, "zoffset=%s\n", zb);
@@ -115,9 +119,9 @@ static int req_begin(const char *cmd, const char *file, int timeout_ms, char *er
 }
 
 /* Fill adjust fields, then call req_begin and rewrite the file so fields are included. */
-static int req_begin_adjust(const char *cmd, int nozzle, int bed, int speed, int flow, int zoff, int timeout_ms, char *err, size_t en) {
+static int req_begin_adjust(const char *cmd, int nozzle, int bed, int speed, int flow, int zoff, int fan, int timeout_ms, char *err, size_t en) {
     int rc = req_begin(cmd, "", timeout_ms, err, en); if (rc) return rc;
-    R.nozzle = nozzle; R.bed = bed; R.speed = speed; R.flow = flow; R.zoff = zoff;
+    R.nozzle = nozzle; R.bed = bed; R.speed = speed; R.flow = flow; R.zoff = zoff; R.fan = fan;
     if (req_write_file()) { snprintf(err, en, "could not write print_request"); R.st = R_IDLE; return 500; }
     return 0;
 }
@@ -151,7 +155,8 @@ static void req_tick(void) {
     }
     if (R.st == R_PENDING && t >= R.deadline) {
         logf_("request %d timed out (%s)", R.id, R.cmd);
-        req_finish(0, "timeout");
+        /* a pre-0.1.19 touchscreen hook ignores cmd=fan */
+        req_finish(0, !strcmp(R.cmd, "fan") ? "timeout (touchscreen fan control needs the 0.1.19 touchscreen app)" : "timeout");
     }
 }
 
@@ -174,7 +179,8 @@ static int native_start(const char *path, const char *name, char *err, size_t en
 }
 
 static int is_adjust_cmd(const char *n) {
-    return cmd_word(n, "M104") || cmd_word(n, "M140") || cmd_word(n, "M220") || cmd_word(n, "M221") || cmd_word(n, "M290");
+    return cmd_word(n, "M104") || cmd_word(n, "M140") || cmd_word(n, "M220") || cmd_word(n, "M221") || cmd_word(n, "M290")
+        || cmd_word(n, "M106") || cmd_word(n, "M107");
 }
 
 static int parse_sval(const char *n) {

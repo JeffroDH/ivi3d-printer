@@ -2,6 +2,57 @@
 
 Versions are tagged `X.Y.Z-a33`. This log covers the on-printer daemon only, not the Mac/PC bridge in `bridge/`.
 
+## 0.1.19-a33
+
+Print-time Status and Adjust, a round-bed mesh map, heated leveling, and a
+console that says why it is unavailable.
+
+  • **Status / Adjust while printing.** During any print (a bridge job, a
+    touchscreen job, or a firmware `WORKING_*` status) the Toolhead and
+    Filament boxes become **Status** (progress ring, elapsed and remaining
+    time, layer and Z, nozzle and bed temperatures, file, Pause / Resume /
+    Stop / Clear) and **Adjust** (nozzle and bed targets, Z offset in
+    0.01 / 0.02 / 0.05 mm `M290` babysteps, speed `M220`, flow `M221`, fan,
+    Save Z offset permanently). The normal boxes return when the print
+    ends. `GET /api/printer` adds `ivi.print`
+    (`active`, `source`, `paused`, `file`, `speed`, `flow`, `layer`, `z`).
+  • **Motion lock.** While a print is active the binary refuses jog, home,
+    extrude / retract, and other moving or non-status console commands
+    (HTTP 409); only temperature, fan, speed, flow, `M290`, `M105`, and
+    `M114` are accepted. Pause / Resume / Stop stay available.
+  • Adjust and console commands queued during a bridge job are now sent
+    between job lines instead of after the job finished.
+  • Touchscreen jobs: fan on/off goes through the hook
+    (`sendSetFanOnCMD` / `sendSetFanOffCMD`, request `cmd=fan`). It needs the
+    0.1.19 touchscreen app; with an older app the request times out and
+    says so.
+  • **Round mesh map.** The Auto-level card draws the 7×7 mesh over the
+    210 mm print circle with the firmware's bilinear interpolation (grid
+    origin (−105, −105), 35 mm spacing, I = X from the left, J = Y from the
+    front). Everything outside r = 105 mm is dimmed and the grid points
+    outside the circle are drawn hollow (extrapolated). Hover or tap reads
+    a value. Rendered client-side, only when the mesh changes.
+  • **Heated leveling.** `POST /api/ivi/cal/start {"action":"level","bed":60}`
+    heats the bed (40–80 °C, clamped; `true` means 60; absent or 0 is the
+    plain cold flow; `bed` is only valid with `level`). Order: build plate
+    prompt, home and move up, attach-probe prompt, `M119` probe check,
+    `M140 S<t>`, wait until the bed is within 1 °C of the target (20 minute
+    limit), `G29`, `M500`, `M503`, `M140 S0`, move up, remove-probe prompt.
+    Cancel and any failure also send `M140 S0`. `G29` is not on the console
+    allow-list.
+  • **Probe gate is the nozzle only.** Every probe flow (XYZ, level, Run all)
+    waits for the nozzle actual to be 40 °C or below, as the stock
+    `checkTempForWizard` does; the bed temperature no longer matters.
+  • `GET /api/ivi/cal` (and `ivi.cal` in `/api/printer`) adds `bed_target`,
+    `bed`, and `nozzle` next to the existing `level.grid`.
+  • **Console.** A reason line under Send says why the console is off or
+    limited: link down, a calibration step waiting (with an Open Calibration
+    button), a touchscreen job, or a running print. Refusals from the bridge
+    (409 / 400) are shown in the console, including when sent with Enter.
+  • **Touchscreen Adjust screen.** The current Z adjustment for this print is
+    shown under the “Z offset distance (mm)” label (`Current: −0.03 mm`); the
+    text that overlapped the nozzle − / + buttons is gone.
+
 ## 0.1.18-a33
 
 www layout (Calibration as its own top-bar view, Z Offset card on the right,

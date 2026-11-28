@@ -51,7 +51,7 @@
 #include <limits.h>
 #include "ivi_icons.h"
 
-#define VERSION "0.1.18-a33"
+#define VERSION "0.1.19-a33"
 #define LINEMAX 1024
 #define MAXCLI 8
 #define APPQ 64
@@ -286,11 +286,55 @@ static void parse_status(const char *l) {
 /* fan state, tracked from every M106/M107 written to the STM32 (app, page, job stream). The firmware never
    reports fan state, so this is the bridge's record of the last commands sent: P0/P1, 0..255, -1 = unknown */
 static int g_fan[2] = { -1, -1 };
+
+/* print status for the page's Status / Adjust boxes (0.1.19). Tracked from the same writes as fan_track
+   (app, page, job stream): speed % (M220 S), flow % (M221 S), the Z of the last extruding XY move, and a
+   layer count that goes up each time that Z rises (z-hops and travel do not extrude, so they do not count).
+   A few compares per line and no extra serial traffic. -1 / have_* = 0 means unknown. */
+static struct { int speed, flow, layer, rel, erel, have_z, have_lz; double z, lz, e; } PT = { -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 };
+static void pt_reset(void) { PT.layer = 0; PT.rel = PT.erel = 0; PT.have_z = PT.have_lz = 0; PT.z = PT.lz = PT.e = 0; }
+static void pt_track(const char *c) {
+    if (c[0] == 'M') {
+        int sp = cmd_word(c, "M220"), fl = cmd_word(c, "M221");
+        if (sp || fl) {
+            const char *v = strstr(c, " S"); if (!v) return;
+            int x = atoi(v + 2); if (x < 1 || x > 999) return;
+            if (sp) PT.speed = x; else PT.flow = x;
+        } else if (cmd_word(c, "M82")) PT.erel = 0;
+        else if (cmd_word(c, "M83")) PT.erel = 1;
+        return;
+    }
+    if (c[0] != 'G') return;
+    if (cmd_word(c, "G90")) { PT.rel = 0; return; }
+    if (cmd_word(c, "G91")) { PT.rel = 1; return; }
+    if (cmd_word(c, "G28")) { PT.have_z = 0; return; }
+    int g92 = cmd_word(c, "G92");
+    if (!g92 && !cmd_word(c, "G1") && !cmd_word(c, "G0")) return;
+    int fx = 0, fz = 0, fe = 0; double z = 0, e = 0;
+    for (const char *w = strchr(c, ' '); w; w = strchr(w, ' ')) {
+        w++;
+        if (*w == 'X' || *w == 'Y') fx = 1;
+        else if (*w == 'Z') { fz = 1; z = atof(w + 1); }
+        else if (*w == 'E') { fe = 1; e = atof(w + 1); }
+    }
+    if (g92) { if (fe) PT.e = e; if (fz) { PT.z = z; PT.have_z = 1; } return; }
+    if (fz) { if (!PT.rel) { PT.z = z; PT.have_z = 1; } else if (PT.have_z) PT.z += z; }
+    if (!fe) return;
+    int erel = PT.rel || PT.erel;
+    double de = erel ? e : e - PT.e;
+    if (!erel) PT.e = e;
+    if (de > 0 && fx && PT.have_z) {
+        if (!PT.have_lz || PT.z > PT.lz + 0.001) PT.layer++;
+        PT.lz = PT.z; PT.have_lz = 1;
+    }
+}
+
 static void fan_track(const char *line) {
     char n[LINEMAX]; norm_cmd(line, n, sizeof n);
     char *st = strchr(n, '*'); if (st) *st = 0;                         /* job-line checksum */
     const char *c = n;
     if (c[0] == 'N' && isdigit((unsigned char)c[1])) { while (*c && *c != ' ') c++; while (*c == ' ') c++; }   /* line number */
+    pt_track(c);
     int on = cmd_word(c, "M106"), off = cmd_word(c, "M107");
     if (!on && !off) return;
     int pi = -1, sv = 255;
@@ -358,6 +402,7 @@ static long long g_net_want_since;
 /* ------------------------------------------------------------------ touchscreen (app) job, passive */
 static struct {
     int active; long long started_ms, last_ms; long lines; double m73_pct; double m73_left_min; int end_seen;
+    char name[256];                                    /* file name when the start came from this bridge (assist mode) */
 } AJ;
 
 /* ------------------------------------------------------------------ network job */
@@ -375,6 +420,11 @@ static struct {
 } J;
 
 static int job_active(void) { return J.st != J_IDLE && J.st != J_DONE && J.st != J_CANCELLED && J.st != J_ERROR; }
+/* 0.1.19: a touchscreen print counts even if this bridge missed its M2411 S2 (e.g. the bridge restarted
+   mid-print): the firmware's Working Status says WORKING_SCREEN. print_active() is the single test the
+   motion lock uses; any job, from either side, locks jog / home / extrude / console G-code. */
+static int ts_printing(void) { return AJ.active || (!job_active() && S.working[0] && starts(S.working, "WORKING_SCREEN")); }
+static int print_active(void) { return job_active() || ts_printing() || (S.working[0] && starts(S.working, "WORKING")); }
 
 static void write_current_job(int on) {
     char p[512]; snprintf(p, sizeof p, "%s/current_job", ivib_dir());
@@ -661,6 +711,7 @@ static int job_start(const char *path, const char *name, char *err, size_t en) {
     snprintf(J.last_name, sizeof J.last_name, "%s", keep);
     J.f = fopen(path, "r"); if (!J.f) { snprintf(err, en, "cannot open job"); return 500; }
     J.total_bytes = b; J.total_lines = l; J.st = J_PREFLIGHT; J.started_ms = now_ms(); J.resend_n = -1; J.lost_retry_n = -1; J.stall_line = -1; J.m73_pct = -1;
+    pt_reset();
     write_current_job(1);
     logi_("job %s: queued (%ld lines, %ld bytes)", keep, l, b);
     return 0;
@@ -947,7 +998,10 @@ static int allowed_during_net_job(const char *n) {
 static void app_line(char *raw) {
     char n[LINEMAX]; norm_cmd(raw, n, sizeof n);
     if (cmd_is(n, "M2411 S2") && !job_active()) {
-        memset(&AJ, 0, sizeof AJ); AJ.active = 1; AJ.started_ms = now_ms(); AJ.m73_pct = -1; g_assist_open = 0; logf_("touchscreen job started");
+        int from_bridge = g_assist_open && now_ms() < g_assist_until;
+        memset(&AJ, 0, sizeof AJ); AJ.active = 1; AJ.started_ms = now_ms(); AJ.m73_pct = -1; g_assist_open = 0; pt_reset();
+        if (from_bridge && J.last_name[0]) snprintf(AJ.name, sizeof AJ.name, "%s", J.last_name);
+        logf_("touchscreen job started");
     }
     if (AJ.active) {
         AJ.last_ms = now_ms();
@@ -967,6 +1021,17 @@ static void app_line(char *raw) {
     }
     if (g_owner == OWN_NET || g_appq_n || net_claim()) { appq_push(raw); return; }
     app_forward(raw);
+}
+
+/* one queued console / page command, when the link is free (idle, or between job lines) */
+static void net_console_one(void) {
+    if (g_netq_n && net_ready() && !AJ.active && !cal_busy() && (!job_active() || J.st == J_PRINTING || J.st == J_PAUSED)) {
+        char c[96]; snprintf(c, sizeof c, "%s", g_netq[g_netq_h]);
+        int qq = g_netq_quiet[g_netq_h]; g_netq_quiet[g_netq_h] = 0; g_netq_h = (g_netq_h + 1) % 16; g_netq_n--;
+        g_next_quiet = qq;
+        if (nook_cmd(c)) net_send(c, NW_EXPECT, P_QUERY, 5000, "trigger", NULL, NULL);
+        else net_send(c, NW_OK, P_QUERY, 10000, NULL, NULL, NULL);
+    }
 }
 
 /* ------------------------------------------------------------------ periodic */
@@ -1018,14 +1083,11 @@ static void tick(void) {
         int idle = S.working[0] && !starts(S.working, "WORKING") && S.working_ms > AJ.started_ms + 3000;
         if ((AJ.end_seen && t - AJ.last_ms > 3000) || (idle && t - AJ.last_ms > 15000)) { AJ.active = 0; logf_("touchscreen job ended (%ld lines)", AJ.lines); }
     }
+    /* 0.1.19: Adjust commands (temperature / fan / speed / flow / M290, already allow-listed for a job) go
+       between job lines. Before, job_tick took every free slot, so they waited until the print ended. */
+    if (job_active() && J.st == J_PRINTING && !J.want_cancel && !J.want_pause) net_console_one();
     job_tick();
-    if (g_netq_n && net_ready() && !AJ.active && !cal_busy() && (!job_active() || J.st == J_PRINTING || J.st == J_PAUSED)) {
-        char c[96]; snprintf(c, sizeof c, "%s", g_netq[g_netq_h]);
-        int qq = g_netq_quiet[g_netq_h]; g_netq_quiet[g_netq_h] = 0; g_netq_h = (g_netq_h + 1) % 16; g_netq_n--;
-        g_next_quiet = qq;
-        if (nook_cmd(c)) net_send(c, NW_EXPECT, P_QUERY, 5000, "trigger", NULL, NULL);
-        else net_send(c, NW_OK, P_QUERY, 10000, NULL, NULL, NULL);
-    }
+    net_console_one();
     /* idle temperature poll, only if the firmware's own reports stopped */
     if (g_poll_s > 0 && !job_active() && !AJ.active && !cal_busy() && net_ready() && t - g_last_app_tx > 2000 &&
         t - S.t_ms > g_poll_s * 1000LL && t - g_last_ser_rx > 1000) {
@@ -1216,6 +1278,19 @@ static void api_printer(struct cli *c) {
     zoff_want_probe();
     sb_add(&s, ",\"cal\":");
     cal_json(&s);
+    /* 0.1.19 Status / Adjust boxes: what is printing and the live adjust values */
+    {
+        int act = print_active();
+        const char *src = job_active() ? "network" : ts_printing() ? "touchscreen" : act ? "printer" : NULL;
+        sb_add(&s, ",\"print\":{\"active\":%s,\"source\":", act ? "true" : "false");
+        if (src) sb_str(&s, src); else sb_add(&s, "null");
+        sb_add(&s, ",\"paused\":%s", (act && paused) ? "true" : "false");
+        sb_add(&s, ",\"file\":");
+        if (job_active() && J.name[0]) sb_str(&s, J.name); else if (ts_printing() && AJ.name[0]) sb_str(&s, AJ.name); else sb_add(&s, "null");
+        if (PT.speed > 0) sb_add(&s, ",\"speed\":%d", PT.speed); else sb_add(&s, ",\"speed\":null");
+        if (PT.flow > 0) sb_add(&s, ",\"flow\":%d", PT.flow); else sb_add(&s, ",\"flow\":null");
+        if (act && PT.have_lz) sb_add(&s, ",\"layer\":%d,\"z\":%.2f}", PT.layer, PT.lz); else sb_add(&s, ",\"layer\":null,\"z\":null}");
+    }
     sb_add(&s, ",\"report_age_s\":%.1f}}", S.t_ms ? (now_ms() - S.t_ms) / 1000.0 : -1.0);
     jreply(c, 200, &s);
 }
@@ -1312,6 +1387,10 @@ static void req_json(struct sb *s) {
     if (R.flow != INT_MIN) {
         sb_add(s, ",\"flow\":%d", R.flow);
         if (!strcmp(R.cmd, "flow")) sb_add(s, ",\"value\":%d", R.flow);
+    }
+    if (R.fan != INT_MIN) {
+        sb_add(s, ",\"fan\":%d", R.fan ? 1 : 0);
+        if (!strcmp(R.cmd, "fan")) sb_add(s, ",\"value\":%d", R.fan ? 1 : 0);
     }
     if (R.zoff != INT_MIN) {
         char zb[16]; zoff_fmt(R.zoff, zb, sizeof zb);
@@ -1417,7 +1496,8 @@ static void api_job(struct cli *c) {
         sb_add(&s, "}}");
     } else if (AJ.active) {
         double el = (t - AJ.started_ms) / 1000.0;
-        sb_add(&s, "{\"job\":{\"file\":{\"name\":null,\"origin\":\"printer\"}},\"progress\":{\"completion\":");
+        sb_add(&s, "{\"job\":{\"file\":{\"name\":"); if (AJ.name[0]) sb_str(&s, AJ.name); else sb_add(&s, "null");
+        sb_add(&s, ",\"origin\":\"printer\"}},\"progress\":{\"completion\":");
         if (AJ.m73_pct >= 0) sb_add(&s, "%.1f", AJ.m73_pct); else sb_add(&s, "null");
         sb_add(&s, ",\"printTime\":%.0f,\"printTimeLeft\":", el);
         if (AJ.m73_left_min > 0) sb_add(&s, "%.0f", AJ.m73_left_min * 60); else sb_add(&s, "null");
@@ -2040,7 +2120,7 @@ static void handle(struct cli *c) {
         else if (!strcmp(p, "/api/printer/printhead") && jget_str(body, "factor", v, sizeof v)) snprintf(list[nl++], 96, "M220 S%d", atoi(v));
         if (!nl) { jerr(c, 400, "no command"); return; }
         if (cal_busy()) { jerr(c, 409, "calibration is running; use the Calibration tab"); return; }
-        if (AJ.active || (g_assist_open && now_ms() < g_assist_until)) {
+        if (ts_printing() || (g_assist_open && now_ms() < g_assist_until)) {
             int all_adj = 1;
             for (int i = 0; i < nl; i++) {
                 char out[96], e2[200];
@@ -2049,23 +2129,26 @@ static void handle(struct cli *c) {
                 if (!is_adjust_cmd(out)) all_adj = 0;
             }
             if (!all_adj) { jerr(c, 409, "manual moves, homing, and console G-code are blocked while a touchscreen job runs"); return; }
-            int nozzle = INT_MIN, bed = INT_MIN, speed = INT_MIN, flow = INT_MIN, zoff = INT_MIN, nset = 0;
+            int nozzle = INT_MIN, bed = INT_MIN, speed = INT_MIN, flow = INT_MIN, zoff = INT_MIN, fan = INT_MIN, nset = 0;
             for (int i = 0; i < nl; i++) {
                 if (cmd_word(list[i], "M104")) { nozzle = parse_sval(list[i]); nset++; }
                 else if (cmd_word(list[i], "M140")) { bed = parse_sval(list[i]); nset++; }
                 else if (cmd_word(list[i], "M220")) { speed = parse_sval(list[i]); nset++; }
                 else if (cmd_word(list[i], "M221")) { flow = parse_sval(list[i]); nset++; }
                 else if (cmd_word(list[i], "M290")) { int h = 0; if (parse_m290(list[i], &h) == 0) { zoff = h; nset++; } }
+                else if (cmd_word(list[i], "M107")) { fan = 0; nset++; }
+                else if (cmd_word(list[i], "M106")) { const char *sv = strstr(list[i], " S"); fan = (!sv || atoi(sv + 2) > 0) ? 1 : 0; nset++; }
             }
             const char *rcmd = "adjust";
             if (nset == 1) {
                 if (nozzle != INT_MIN || bed != INT_MIN) rcmd = "temp";
                 else if (speed != INT_MIN) rcmd = "speed";
                 else if (flow != INT_MIN) rcmd = "flow";
+                else if (fan != INT_MIN) rcmd = "fan";
                 else rcmd = "zoffset";
             }
             char err2[200];
-            int rc = req_begin_adjust(rcmd, nozzle, bed, speed, flow, zoff, REQ_CTL_MS, err2, sizeof err2);
+            int rc = req_begin_adjust(rcmd, nozzle, bed, speed, flow, zoff, fan, REQ_CTL_MS, err2, sizeof err2);
             if (rc) { jerr(c, rc, err2); return; }
             c->await_id = R.id; c->await_kind = AWAIT_NOCONTENT;
             return;
@@ -2073,7 +2156,7 @@ static void handle(struct cli *c) {
         for (int i = 0; i < nl; i++) {
             char out[96];
             if (check_command(list[i], out, sizeof out, err, sizeof err)) { jerr(c, 400, err); return; }
-            if (job_active() && !(cmd_word(out, "M104") || cmd_word(out, "M140") || cmd_word(out, "M220") || cmd_word(out, "M221") ||
+            if (print_active() && !(cmd_word(out, "M104") || cmd_word(out, "M140") || cmd_word(out, "M220") || cmd_word(out, "M221") ||
                                   cmd_word(out, "M290") ||
                                   cmd_word(out, "M106") || cmd_word(out, "M107") || cmd_word(out, "M105") || cmd_word(out, "M114"))) {
                 jerr(c, 409, "only temperature/fan/speed/flow/Z-offset commands while a job runs"); return;
