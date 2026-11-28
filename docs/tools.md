@@ -8,7 +8,6 @@ These are the tools for going beyond Wi-Fi (port 8080) and the USB-C Marlin seri
 >
 > **Two SWD-style 5-pin headers:** **central** → STM32 **[O]**; **lower** near SD, top→bottom **1 DIO, 2 3V3, 3 CLK, 4 GND, 5 RST [O]** (pin 2 is not GND), continuous with the rear pads by the **GD32E230F4** **[O]/[P]**. Chip-to-header continuity is **[U]**. The GD32 firmware is a soft-power sequencer: [gd32.md](gd32.md).
 >
-> A printable contact block for the three DEBUGUART pads is [../hardware/uart-pogo-holder/README.md](../hardware/uart-pogo-holder/README.md). Photo pitch is approximate; print the bore coupon and check with calipers.
 
 
 > **Affiliate disclosure:** the Amazon links below are affiliate links. As an Amazon Associate I earn from qualifying purchases, at no extra cost to you. Any equivalent part works.
@@ -85,7 +84,7 @@ On this unit the link is 3.3 V, 115200 8N1, ttyS2. For a different board, measur
 | TXD | **leave disconnected for first listen** |
 | 3.3V / 5V | **leave unconnected** |
 
-3. Open the terminal **before** power-on, 115200 8N1, no flow control. On this unit the boot log ends in a `#` root prompt; the return path (adapter TX to board RX) is required to type. A printable pogo block for the three pads is in [../hardware/uart-pogo-holder/README.md](../hardware/uart-pogo-holder/README.md).
+3. Open the terminal **before** power-on, 115200 8N1, no flow control. On this unit the boot log ends in a `#` root prompt; the return path (adapter TX to board RX) is required to type.
 
 ## Oscilloscope vs CANable
 

@@ -12,7 +12,6 @@ Confidence tags used throughout: **[V]** read in firmware, a boot log, or a live
 | [mainboard.md](mainboard.md) | `A33_407MB_200916` photos, silkscreen, connectors |
 | [network.md](network.md) | What answers on the LAN |
 | [tools.md](tools.md) | SWD and the debug UART, with the hard limits |
-| [../hardware/uart-pogo-holder/README.md](../hardware/uart-pogo-holder/README.md) | Printable pogo block for the DEBUGUART pads |
 
 ## Controllers
 
