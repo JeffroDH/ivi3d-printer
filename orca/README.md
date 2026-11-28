@@ -10,14 +10,14 @@
 ## Import
 1. OrcaSlicer → **File → Import → Import Configs…** → pick `IVI3D.orca_printer` (or the three `.json` files).
 2. Select printer **IVI3D 0.3 nozzle**, filament **IVI3D PLA**, process **IVI3D 0.15mm Standard** (or **0.20mm Fast** / **0.10mm High Quality**).
-3. Quit Orca and run the IVI Bridge installer, or `bridge/install/macos/Fix IVI Bridge Key.command` (Linux `bridge/install/linux/fix-key.sh`, Windows `bridge\install\windows\Fix IVI Bridge Key.bat`) if the bridge is already
+3. **On-printer bridge (normal path):** set the printer's connection host to `<printer-ip>:5001`. On a home LAN no API key is needed; from Tailscale or any non-LAN address, use the key stored on the printer ([a33_bridge/README.md](../a33_bridge/README.md#orca-slicer), [docs/orca_bridge.md](../docs/orca_bridge.md)). Skip the key step below.
+   **Computer-side bridge (optional):** quit Orca and run the IVI Bridge installer, or `bridge/install/macos/Fix IVI Bridge Key.command` (Linux `bridge/install/linux/fix-key.sh`, Windows `bridge\install\windows\Fix IVI Bridge Key.bat`) if the bridge is already
    installed ([../bridge/README.md](../bridge/README.md)). It writes the bridge's API key over the
    `PASTE-API-KEY-FROM-IVI-BRIDGE-INSTALLER` placeholder in the imported preset, the Device tab connection and the
    plugin config. Do this again after every re-import. Optional: Connection icon on the Printer bar → Test.
 4. Optional header hook: Process → Others → Post-processing scripts:
-   `/usr/bin/python3 "/Volumes/14TB/3D Printing Files/IVI3D/orca/ivi_fdm_header.py";`
-   The bridge already adds it on upload. Not needed for USB printing (Orca **Upload and Print**); may matter for files uploaded over Wi-Fi and started from the touch
-   screen (it shows type/material/time from that header). Unverified whether the screen refuses files without it.
+   `/usr/bin/python3 "<path-to-repo>/orca/ivi_fdm_header.py";`
+   Both bridges already add the IVI header on upload. It is not needed for Orca **Upload and Print**; it supplies the type, material, and time that the touchscreen shows for a stored file.
 
 The bed is a 105 mm-radius circle with the origin at the centre; the delta homes to the top, so the start G-code homes
 then drops to Z15 at the bed edge before the purge line (same as IVI 3licer).
@@ -95,6 +95,11 @@ Caveats:
 - **SR-30:** NOT PVA. Stratasys alkaline-soluble terpolymer, dissolved in a heated NaOH bath (~70 °C, Stratasys/MakerBot). Single nozzle means it can't be support under another material here; whole-part tests only. Hygroscopic: dry before use. Values are untested guesses.
 
 ## Upload vs Upload and Print
+With the **on-printer bridge** (host `<printer-ip>:5001`):
+- **Upload and Print**: the file is stored on the printer and the touchscreen Status page opens for it. Confirm the plate and tap RUN, or enable Auto-start in the web UI. The job then runs from the touchscreen app. The Device tab shows progress and offers Pause/Resume/Cancel and temperature, speed, flow, fan, and Z-offset changes ([docs/native_print.md](../docs/native_print.md)).
+- **Upload**: stored only; start it on the touchscreen.
+
+With the **computer-side bridge** (host `127.0.0.1:5001`):
 - **Upload and Print** — the bridge streams the job over USB and shows live progress, temps and Pause/Resume/Cancel on
   the Device tab. Keep the Mac awake and the cable connected until it finishes.
 - **Upload** — the file is stored on the printer over Wi-Fi; start it on the touch screen. USB controls on the Device

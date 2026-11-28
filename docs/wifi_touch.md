@@ -1,18 +1,23 @@
-# Wi-Fi control and touch injection
+# Network control, USB-C, and touch injection
 
-Three ways to drive a print exist today. Only the USB-C path can start one without touching the screen.
+Ways to drive a print, from the one in daily use to the ones kept for recovery and research.
 
-| Path | Start a job? | Notes |
+| Path | Starts a job? | Notes |
 |---|---|---|
-| kore `POST /api/v1/upload` | No | File appears in the on-screen Wi-Fi list. Start is a finger on Make, then the dialogs, then Start |
-| [bridge/](../bridge/README.md) on the STM32 USB-C port | Yes | `M2411 S2` and a line-by-line stream. Verified with an FDM print on 2026-11-01. The screen locks on `WORKING_PC` |
-| `tools/ivi_touch_nav` | Only if you ask it to tap Start | Drives the stock Qt UI by injecting touch events. Default `goto-print` stops on the status page **before** Start |
+| **ivibridge** on the printer, ports **5001** and **80** ([a33_bridge/](../a33_bridge/README.md)) | Yes, through the stock touchscreen path | OctoPrint-compatible API and web UI. Orca **Upload and Print** stores the file in `/userdata/WifiFile` and posts a start request that the touchscreen hook picks up. The stock Status page opens (assist mode: confirm the plate and tap RUN), or the persistent Auto-start setting runs the stock RUN path. The job then runs from the touchscreen app, as a touchscreen start would. Flow: [native_print.md](native_print.md) |
+| Stock kore `POST /api/v1/upload`, TCP 8080 | No | The file appears in the on-screen Wi-Fi list. Start is a finger on Make, then the dialogs, then Start. Print-control routes return 404 on V1.3.2-alpha |
+| [bridge/](../bridge/README.md) on the STM32 USB-C port | Yes | Optional computer-side service. `M2411 S2` and a line-by-line stream. The screen locks on `WORKING_PC`. The USB port must be free of any other program |
+| `tools/ivi_touch_nav` | Only if you ask it to tap Start | Drives the stock Qt UI by injecting touch events over SSH. Default `goto-print` stops on the status page **before** Start |
 
-Nothing in the stock app starts a print from the network. UDP 20050 only answers `discover`. Patching the QML or the UI binary is not part of this tree.
+UDP 20050 only answers `discover`. Nothing in the stock app starts a print from the network; the ivibridge row works because the touchscreen app carries a small QML hook ([tools/ivi_hook/](../tools/ivi_hook/README.md)) that opens the Status page and calls the stock handlers.
+
+## ivibridge in one paragraph
+
+ivibridge owns the real serial node (`/dev/ivi-stm32`) and hands the stock app a pty at `/dev/ttyUSB0`, so the app and the network share the STM32 link without a second process opening it. While a touchscreen or native-start job runs, the bridge never writes onto that link. Pause, resume, cancel, temperature, speed, flow, fan on/off, and Z-offset go through the hook ([native_print.md](native_print.md)). Moves, homing, and other console G-code are refused until the job ends. The page and API are reachable on the LAN without a key; loopback and Tailscale `100.x` need the key. Install and rollback: [a33_bridge/README.md](../a33_bridge/README.md#install-and-rollback).
 
 ## Upload names
 
-kore keeps the first two non-empty pieces of a filename split on `.`. The second piece must be exactly `gcode`, `cnc`, or `nc`, or the reply is **412** `File type error`. `cube.gcode` is stored. `benchy_0.2mm.gcode` is rejected. The bridge rewrites Wi-Fi uploads before sending them: extra dots become `-` (`Cube_0.2mm_PLA.gcode` → `Cube_0-2mm_PLA.gcode`), and a collision between two originals gets `-2`, `-3`, and so on. USB streaming keeps the original name. The navigator's `safe_name()` is the same shape of rename for its own uploads. Full rules: [a33.md](a33.md#kore-upload-api), [bridge/README.md](../bridge/README.md).
+The stock kore upload keeps the first two non-empty pieces of a filename split on `.`. The second piece must be exactly `gcode`, `cnc`, or `nc`, or the reply is **412** `File type error`. `cube.gcode` is stored. `benchy_0.2mm.gcode` is rejected. ivibridge and the computer-side bridge both rewrite names before storing or sending them: extra dots and characters outside `[A-Za-z0-9_-]` become `-` (`Cube_0.2mm_PLA.gcode` becomes `Cube_0-2mm_PLA.gcode`), the extension is folded to `gcode`, `cnc`, or `nc`, the name is capped at 100 bytes, and a collision between two originals gets `-2`, `-3`, and so on. The navigator's `safe_name()` applies the same shape of rename for its own uploads. Full rules: [a33.md](a33.md#kore-upload-api).
 
 ## Touch injection
 
@@ -46,10 +51,11 @@ The tool's own README is [../tools/ivi_touch_nav/README.md](../tools/ivi_touch_n
 
 Holding the front power button for about 3 seconds drops the rails (GD32: PB1, then PA4). That is a hard power cut. The next boot runs `e2fsck -y` on a `barrier=0` rootfs. Use the on-screen Stop first.
 
-## What the bridge should keep doing
+## Rules that apply to every path
 
-Leave print control on the USB-C port. Wi-Fi upload is optional and only for names kore will accept. Do not write `/dev/ttyUSB0` from another process while the Qt app owns it. Do not send `M2155 S0` while the screen is up; that interval is global and `S0` disables reports for both ports.
+- Leave print control to one owner at a time. Do not write `/dev/ttyUSB0` from another process while the Qt app owns it, and do not open the USB-C port while a touchscreen or native-start job is streaming (that stalls it).
+- Do not send `M2155 S0` while the screen is up. That interval is global, and `S0` disables reports for both ports.
 
 ## Related
 
-[a33.md](a33.md) · [stm32.md](stm32.md) · [network.md](network.md) · [architecture.md](architecture.md) · [../bridge/README.md](../bridge/README.md)
+[native_print.md](native_print.md) · [calibration.md](calibration.md) · [orca_bridge.md](orca_bridge.md) · [a33.md](a33.md) · [stm32.md](stm32.md) · [network.md](network.md) · [architecture.md](architecture.md) · [../bridge/README.md](../bridge/README.md) · [../a33_bridge/README.md](../a33_bridge/README.md)

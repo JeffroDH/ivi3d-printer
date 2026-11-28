@@ -85,8 +85,8 @@ A longer index, including older decompile notes, is [docs/README.md](docs/README
 | [docs/network.md](docs/network.md) | What answers on the LAN. |
 | [docs/calibration.md](docs/calibration.md) | Calibration view and API, G33 / G29 / paper-test math, heated leveling, mesh map, Z-offset display, `M420` after `G28`. |
 | [docs/native_print.md](docs/native_print.md) | How ivibridge starts a job through the touchscreen hook, and mid-job control. |
-| [docs/wifi_touch.md](docs/wifi_touch.md) | Stock kore upload, USB-C streaming, and the touch navigator. Written before ivibridge became the network path. |
-| [docs/orca_bridge.md](docs/orca_bridge.md) | Earlier plan for the computer-side bridge. The installed on-printer path is [a33_bridge/](a33_bridge/README.md). |
+| [docs/wifi_touch.md](docs/wifi_touch.md) | The ways to drive a print: ivibridge, stock kore upload, USB-C streaming, and the touch navigator. |
+| [docs/orca_bridge.md](docs/orca_bridge.md) | Connecting Orca: the on-printer bridge vs the computer-side bridge, start G-code and fan notes. |
 | [docs/slicer_report.md](docs/slicer_report.md) | How IVI 3licer 1.6.2 (a rebranded Snapmaker Luban) talks to the printer. |
 | [docs/backups.md](docs/backups.md) | What has been backed up, and the restore routes. |
 | [docs/tools.md](docs/tools.md) | SWD and the debug UART, with the hard limits. |

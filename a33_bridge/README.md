@@ -86,7 +86,7 @@ Intentionally omitted from this port: print history, timelapse, toolpath preview
 ## Orca Slicer
 
 1. Printer settings → Connection: host type **OctoPrint**.
-2. Host is the printer on port 5001, for example `http://192.168.50.85:5001` on a typical LAN. Use your printer's own address.
+2. Host is the printer on port 5001, for example `http://<printer-ip>:5001`. Use your printer's own address.
 3. On a RFC 1918 LAN the Device tab works without pasting an API key (LAN trust). From a Tailscale `100.x` address, or any other non-LAN client, enter the key from `/userapp/ivibridge/apikey` on the printer.
 
 ## Install and rollback
@@ -154,6 +154,26 @@ ssh "$PRINTER" 'set -e
 
 Then copy `www/index.html` to `/userapp/ivibridge/www/` (same hash check as above) and power-cycle, or start with `sh /userapp/ivibridge/boot.sh`.
 
+### Touchscreen app with the hook
+
+Starting a job from the network, and every mid-job control (pause, resume, cancel, temperature, speed, flow, fan on/off, Z-offset), is carried out by the QML hook inside the touchscreen app ([native_print.md](../docs/native_print.md)). The daemon alone serves the API and stores files; without the hooked app, a start request is not picked up. The hooked app is `/userapp/app/IVI-Main-Controller` repacked with [rcc_repack](../tools/rcc_repack/README.md) from [tools/ivi_hook/](../tools/ivi_hook/README.md). Packed binaries are not stored in this repository, and the repack always starts from the stock/fansync baseline, never from a previously packed file.
+
+Replace the app only while the printer is idle, and keep a copy of whatever is installed first:
+
+```sh
+scp -O IVI-Main-Controller.rccpack "$PRINTER:/tmp/IVI-Main-Controller.new" &&
+ssh -T -o RequestTTY=no -o RemoteCommand=none "$PRINTER" 'set -e
+  sha256sum /tmp/IVI-Main-Controller.new            # compare with the hash you built
+  cp -p /userapp/app/IVI-Main-Controller /userapp/app/IVI-Main-Controller.bak-prev
+  sh /userapp/ivibridge/ivibridge-ram.sh stop
+  cp /tmp/IVI-Main-Controller.new /userapp/app/IVI-Main-Controller.tmp
+  chmod 755 /userapp/app/IVI-Main-Controller.tmp
+  mv /userapp/app/IVI-Main-Controller.tmp /userapp/app/IVI-Main-Controller
+  sh /userapp/ivibridge/boot.sh'
+```
+
+`stop` restores the stock serial node and restarts the app, and `boot.sh` brings the bridge back and relaunches the new app on the pty. Confirm the app is running and the page loads. To roll back, repeat with the saved copy.
+
 Uninstall: `sh /userapp/ivibridge/uninstall.sh`. That removes only the tagged hook line, leaves the stock `ivissh` line alone, and deletes `/userapp/ivibridge/`. Jobs and logs on `/userdata/WifiFile` are kept.
 
 ## Building and tests
@@ -182,7 +202,7 @@ python3 -W ignore tests/test_boot.py
 
 ## Known limitations
 
-- The board never reports fan state, so the bridge keeps its own record from every `M106`/`M107` it forwards (page, Orca, touchscreen, or job file). That record starts unknown (`null`) after every restart, until the first fan command. The page's fan button follows it. The stock touchscreen Fan toggle does not; the optional app patch `IVI-Main-Controller.fansync` (Filament page and print status page) polls `GET http://127.0.0.1:5001/api/fan` every 2 s while the page is shown and moves the toggle to match, without sending a command. While the state is unknown, the toggle keeps its stock behaviour.
+- The board never reports fan state, so the bridge keeps its own record from every `M106`/`M107` it forwards (page, Orca, touchscreen, or job file). That record starts unknown (`null`) after every restart, until the first fan command. The page's fan button follows it. The stock touchscreen Fan toggle does not; the app patch (the fansync baseline that the hook is built on, Filament page and print status page) polls `GET http://127.0.0.1:5001/api/fan` every 2 s while the page is shown and moves the toggle to match, without sending a command. While the state is unknown, the toggle keeps its stock behaviour.
 - Automatic `M114` polls are hidden from the console, as described above.
 - The A33 Linux tree is set up for an OV5640 on the CSI camera port, outputting YUV. There is no ffmpeg on the printer, so the on-printer camera is not used. The Camera tab takes a snapshot or MJPEG URL from a separate camera, with the snapshot view capped at 5 fps in the browser.
 - `lo` is down in the stock boot. The Tailscale `boot.sh` brings it up (Tailscale's userspace forwarding to the bridge needs it), and the touchscreen fan sync relies on it to reach `127.0.0.1:5001`. Without `lo`, the sync fails silently and the toggle behaves as stock.

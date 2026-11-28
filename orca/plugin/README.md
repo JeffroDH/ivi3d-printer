@@ -43,6 +43,9 @@ Reinstalling resets the plugin's granted permissions, so Orca asks again.
 5. If the plugin doesn't load, check the **Diagnostics** tab and `~/Library/Application Support/OrcaSlicer/log/python_*.log`.
 
 ## Use
+
+The plugin's API client targets the computer-side bridge ([bridge/](../../bridge/README.md)). The on-printer [ivibridge](../../a33_bridge/README.md) serves the same OctoPrint-style routes for Orca's Device tab; its stored-job start goes through the touchscreen hook instead of USB streaming ([docs/orca_bridge.md](../../docs/orca_bridge.md)).
+
 - Slice and send/export as usual (bridge as OctoPrint host). The header is added automatically.
 - **Upload and Print** streams the job over USB (live progress, Mac must stay awake and connected); **Upload**
   stores it on the printer for the touch screen, and the bridge keeps USB closed during that print (opening USB

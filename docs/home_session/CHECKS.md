@@ -3,7 +3,7 @@
 Sources:
 - the rootfs backup (`printer_http_api.conf`);
 - the disassembly of `printer_http_api.so` and of `IVI-Main-Controller` v1.222;
-- the box copy of `ivi_bridge.py`. The Mac copy may differ (M20/M21 additions).
+- the box copy of `ivi_bridge.py` at the time. A deployed copy may differ.
 
 Tags: [O] means observed in the binary or config, [I] means inferred. Nothing was run on the printer, the board or the Mac.
 
@@ -16,7 +16,7 @@ Tags: [O] means observed in the binary or config, [I] means inferred. Nothing wa
 - **Extension check:** the name is split on `.` (at most 2 parts), and the **second part must be exactly `gcode`, `cnc` or `nc`**.
   - Accepted: `cube.gcode`.
   - Rejected with 412 "File type error": **`benchy_0.2mm.gcode`**, `x.GCODE`, `x.g`.
-  - The bridge passes the slicer's file name through unchanged, so dotted names from the slicer would be rejected on Wi-Fi upload.
+  - A client that passes a dotted slicer name through unchanged would be rejected on Wi-Fi upload. `ivi_bridge.py` and ivibridge rename names first ([wifi_touch.md](../wifi_touch.md#upload-names)).
 - **Name length and paths:** the name is `strcpy`'d into a 128-byte buffer, and nothing stops `/` or `..`. The client therefore limits names to 100 bytes and plain names.
 - **Size limits:**
   - `http_body_max` is 1 024 000 000 bytes.
@@ -63,13 +63,11 @@ def ivi_upload(host, path, name):
 ```
 Example: `ivi_upload('<IP>', 'cube.gcode', 'cube.gcode')` returns `(201, 'Upload successfully')`.
 
-### A, continued: what this means for ivi_bridge.py (box copy) [O]
+### A, continued: what this means for the computer-side bridge [O]
 - **What the bridge does:** `WifiPrinter.upload` sends `POST /api/v1/connect`, then `/api/v1/upload` (multipart with `token` plus `file`), then `/api/v1/disconnect`.
 - **Token:** the upload handler ignores the extra `token` field, so the request still works.
-- **Filename:** the bridge passes the slicer's file name unchanged.
-  - An Orca or IVI 3licer name such as `Cube_0.2mm_PLA.gcode` contains extra dots, so the printer **rejects it with 412 "File type error"**.
-  - Names with one dot work.
-- **Not changed:** the bridge was not modified. A one-line fix would be to replace every `.` except the last with `-` before upload; the same rule is in `ivi_touch/upload.py:safe_name`.
+- **Filename:** an Orca or IVI 3licer name such as `Cube_0.2mm_PLA.gcode` contains extra dots, so the printer **rejects it with 412 "File type error"** if it is sent unchanged. Names with one dot work.
+- **Rename:** the bridge replaces extra dots and characters outside `[A-Za-z0-9_-]` with `-` before upload (`Cube_0-2mm_PLA.gcode`). `ivi_touch/upload.py:safe_name` applies the same shape of rule.
 
 ### B, continued: navigator probe modes
 | `--probe` | What gets refused |

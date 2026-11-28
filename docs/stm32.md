@@ -156,6 +156,14 @@ The touchscreen fan switch sends bare `M106` / `M107` (both channels). Laser sam
 
 No `M106` / `M107` / `M2006` path drives a mainboard MOSFET **[V]**. The two unused `FAN24V` headers cannot be selected with `P` ≥ 2. They may be always-on 24 V **[U]** until measured. `M42` can toggle a free GPIO only after that pin is traced, and not on stepper or endstop pins.
 
+## Bed leveling and the probe
+
+The probe is a clip-on sensor that attaches to the nozzle, reported over CAN in the head state (`A1` bit 4 / bit 6, `A6` / `C0` below). `M119` shows it.
+
+- `G33` (delta auto-calibration, `GlobalFuntions::goCalibrate`) and `G29` (bed leveling, `goLeveling`) are the commands the touchscreen sends. `G29` stores a mesh in RAM. Neither command writes EEPROM by itself, so `M500` has to follow; ivibridge sends it after a successful `G29` or `G33` ([calibration.md](calibration.md#when-m500-is-sent)).
+- **`G28` turns bed leveling off.** The app's command table ([data/stm32_app_commands.csv](data/stm32_app_commands.csv)) has no `M420`, so the stock app never turns leveling back on. A mesh is applied to a job only if the job's start G-code sends `M420 S1` after the `G28`. `M420 V` prints the state.
+- Calibration flow, the heated-bed variant, and the mesh math: [calibration.md](calibration.md).
+
 ## CAN toolhead
 
 CAN2, PB5 RX / PB6 TX, 500 kbit/s, standard TX id **0x12** only. RX filter is accept-all and the id of the head's own frames is **[U]** **[V]**. The connector, owner-measured **[O]**: pin 1 `HEADVCC24V`, 2 `CAN+`, 3 `CAN−`, 4 GND.

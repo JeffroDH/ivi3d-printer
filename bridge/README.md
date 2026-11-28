@@ -1,6 +1,8 @@
 # ivi-bridge — Orca Slicer / Anycubic Slicer Next → IVI3D
 
-A small local Python service that looks like an **OctoPrint** server to the slicer and forwards jobs to the IVI3D.
+A small local Python service that looks like an **OctoPrint** server to the slicer and forwards jobs to the IVI3D. It runs on a computer.
+
+> **Normal use is the on-printer bridge.** [ivibridge](../a33_bridge/README.md) runs on the printer itself, needs no computer or cable, and starts jobs through the touchscreen app ([docs/native_print.md](../docs/native_print.md)). Use this computer-side bridge when you want USB-C streaming with live monitoring, the watch-folder and post-processing paths for Anycubic Slicer Next, or the Orca plugin's tab. Comparison: [docs/orca_bridge.md](../docs/orca_bridge.md).
 
 | Mode | Transport | What happens |
 |---|---|---|
@@ -70,8 +72,8 @@ Uninstall: `Uninstall IVI Bridge.bat` (add `-Purge` from a prompt to delete sett
 | **Upload** | Stored on the printer over **Wi-Fi** | You, from the **touch screen** (the job runs from the printer's own storage, so the Mac can sleep) | **USB controls are turned off for that print**: opening the USB port during a stored-file print stalls it (cable plugged in alone is fine). The Device page shows a banner; press **Printer idle, re-enable USB** when the print is done or cancelled. Pause/cancel on the touch screen. |
 
 **Wi-Fi file names.** The printer only accepts `NAME.gcode`, `NAME.nc` or `NAME.cnc` with a single dot and a
-lower-case extension (it checks the text after the *first* dot), so a slicer name like `Cube_0.2mm_PLA.gcode` used to
-fail with HTTP 412 "File type error". The bridge now renames Wi-Fi uploads: extra dots and anything outside
+lower-case extension (it checks the text after the *first* dot), so a slicer name like `Cube_0.2mm_PLA.gcode` would
+fail with HTTP 412 "File type error". The bridge renames Wi-Fi uploads: extra dots and anything outside
 `A–Z a–z 0–9 _ -` become `-` (`Cube_0-2mm_PLA.gcode`), the extension is kept (`.GCODE`/`.g` → `.gcode`), and names are
 capped at 100 bytes. The touch screen shows the new name; the log, the upload message and History show both. Because the
 printer silently overwrites a file of the same name, the bridge remembers which original each name came from
@@ -84,7 +86,7 @@ the same file replaces its earlier upload, as before. Files put on the printer b
 
 Stop the bridge before a direct USB-C session (bootloader `M997`, `tools/stm32/bootloader_probe.py`, or a terminal on `/dev/cu.usbmodem*`). It keeps the port open while it runs, including during a Wi-Fi print. Start it again afterwards. The bootloader check itself is in [docs/stm32.md](../docs/stm32.md#recovery).
 Controls (USB only): `POST /api/printer/tool` (`target`, `flowrate`), `/api/printer/bed` (`target`), `/api/printer/printhead` (`feedrate`), `/api/printer/command` (whitelist: `M104/M140/M220/M221 S<n>`, `M105`, `M2007`, `M106/M107`, `M2410`, `M2411 S1/S3`; limits nozzle ≤300 °C, bed ≤120 °C, speed 10–300 %, flow 10–200 %). `/api/job` pause/resume/cancel also works for a touch-screen-started job (`M2410`, `M2411 S1`, `M2411 S3`).
-**`M104`/`M140`/`M220`/`M221` are standard Marlin and not yet verified on firmware V1.3.2-alpha.**
+`M104`/`M140`/`M220`/`M221` are standard Marlin. The touchscreen sends them, and the on-printer bridge relies on them for temperature, speed, and flow.
 **Notifications** for upload done / print started / finished / cancelled / errors (`"notify": false` to silence).
 **Status page:** http://127.0.0.1:5001/ — styled like the printer's *Control* screen. **Toolhead**: X/Y/Z readout (M114), Home (G28), jog pad X±/Y±/Z± (G91 · G1 · G90; X/Y = move to X0 Y0, Z = home), jog speed 200/500/1500/3000 mm/min and distance 0.05/1/10/50 mm, plus speed %, flow %, Pause/Resume/Cancel/Clear. **Filament**: Load/Unload like the touch screen: pick the loaded filament (`"filaments"`: PLA 210, PETG 240, ABS 250, TPU 225, PCTG 250, or Custom °C) → `M104` and *Heating…* with live temperature (polled, no blocking `M109`; continues once within `filament_tolerance_c` = 3 °C, Cancel available, timeout `filament_heat_timeout_s`) → `M83`, unload `G1 E10 F300` + `G1 E-<filament_load_mm> F1500`, load `G1 E<filament_load_mm> F300`, `M82`, then *Filament coming out of the nozzle?* (Yes, done / No, extrude more = `G1 E<filament_retry_mm=20> F300`, asks again; nozzle stays hot) → `M104 S0` after Yes, after Unload and on Cancel (like the touch screen) → Done/Error (`GET/POST /api/ivi/filament`). `"filament_load": "m701"` sends `M701`/`M702` instead, but **firmware V1.3.2-alpha ignores them**, nozzle 210/240/270 °C and bed 60/80/100 °C presets with −/+ 5 °C, Fan (M106 S255/M107), Cooldown, Extrude/Retract (M83 · G1 E · M82; the firmware refuses cold extrusion, so if the nozzle target is <170 °C or not yet reached it first heats to `jog_extrude_temp` = 235 °C with the same Heating dialog/Cancel — Cancel restores the previous target — and leaves the nozzle hot afterwards: "Nozzle left at 235°C – Cooldown to turn off") using jog speed 100–1000 mm/min and distance 10–100 mm. Controls are disabled while USB is not connected. Side by side at ≥1100 px, tabs below. G1 limits: |X|,|Y| ≤150, |Z| ≤300, |E| ≤150 mm, F ≤6000. Tested on the printer: bed/nozzle temp, jogs, Home, fan, extrude. M701/M702 are ignored by the firmware.
 

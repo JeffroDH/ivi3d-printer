@@ -334,7 +334,7 @@ Limitation: the simulator follows the same QML reading as the code, so the tests
 - **Extension check:** the name is split on `.` (at most 2 parts), and the **second part must be exactly `gcode`, `cnc` or `nc`**.
   - Accepted: `cube.gcode`.
   - Rejected with 412 "File type error": **`benchy_0.2mm.gcode`**, `x.GCODE`, `x.g`.
-  - The bridge passes the slicer's file name through unchanged, so dotted names from the slicer would be rejected on Wi-Fi upload.
+  - A dotted slicer name sent unchanged would be rejected on Wi-Fi upload. The bridges and `ivi_touch/upload.py:safe_name` rename names first ([wifi_touch.md](../../docs/wifi_touch.md#upload-names)).
 - **Name length and paths:** the name is `strcpy`'d into a 128-byte buffer, and nothing stops `/` or `..`. The client therefore limits names to 100 bytes and plain names.
 - **Size limits:**
   - `http_body_max` is 1 024 000 000 bytes.
