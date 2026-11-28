@@ -73,7 +73,7 @@ A longer index, including older decompile notes, is [docs/README.md](docs/README
 | Path | Contents |
 |---|---|
 | [a33_bridge/](a33_bridge/README.md) | On-printer ivibridge 0.1.19: daemon sources, web UI, tests, install scripts. Changelog: [a33_bridge/CHANGELOG.md](a33_bridge/CHANGELOG.md). Built binaries are not in the tree; use `scripts/build.sh`. |
-| [bridge/](bridge/README.md) | Optional computer-side OctoPrint service (USB stream + kore upload), with macOS, Linux, and Windows installers in `bridge/install/`. |
+| [bridge/](bridge/README.md) | Optional computer-side OctoPrint service 0.1.19 (USB stream + kore upload), with macOS, Linux, and Windows installers in `bridge/install/`. Same allow-list, print-time Status / Adjust and motion lock, round mesh map, and upload pre-scan as the on-printer bridge. |
 | [orca/](orca/README.md) | Orca Slicer FDM delta profile (printer / filament / process + `.orca_printer` bundle) and an optional IVI header hook. |
 | [fusion/](fusion/README.md) | Autodesk Fusion post processors for the laser and CNC heads. Decoded from IVI 3licer test files; not yet run on hardware. Format notes: [docs/laser_cnc_gcode.md](docs/laser_cnc_gcode.md). |
 | [ivi-control.sh](ivi-control.sh) | Command-line client for the **stock** kore API on port 8080 (discover, upload, `execute_code`). It is not the ivibridge client. |

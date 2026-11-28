@@ -38,7 +38,7 @@ def default_serial_pattern(platform=None):
     if platform == "win32": return "COM*"
     return "/dev/ttyACM*,/dev/ttyUSB*"
 
-VERSION = "0.1.0"
+VERSION = "0.1.19"
 PRINTER_HOST_PLACEHOLDER = "<printer-ip>"  # default until the user sets their printer's address
 
 def printer_host_ok(host):
@@ -697,9 +697,13 @@ class SerialJob:
         self.poll_feedrate, self.feedrate_poll_s = poll_feedrate, feedrate_poll_s
         self.feedrate = None; self._m73 = None; self._last_fr_poll = None   # _m73 = (seconds left, clock)
         self._boff = None; self._sent_t = None   # byte-offset prefix (lazy), clock of the last ack
+        self.on_write = None                     # PrintTrack hook (speed / flow / layer / fan record)
 
     def _write(self, cmd):
         self.ser.write((cmd + "\n").encode())
+        if self.on_write:
+            try: self.on_write(cmd)
+            except Exception: pass
 
     def _readline(self):
         line = self.ser.readline().decode(errors="replace").strip()
@@ -966,16 +970,46 @@ def job_prelude(cfg, kind, lines):
     return pre
 
 # ---------------------------------------------------------- monitor -------
-# Commands the bridge lets the UI / Orca send over USB. M104/M140/M220/M221 are standard Marlin and
-# NOT yet verified on firmware V1.3.2-alpha.
-ALLOWED_CMD = re.compile(r"^(M503|M115|M119|M104 S\d{1,3}|M140 S\d{1,3}|M220 S\d{1,3}|M221 S\d{1,3}|M105|M2007|M2410|M2411 S[13]"
-                         r"|M106( S\d{1,3})?|M107|M114|M701|M702|M82|M83|G90|G91|G28( X)?( Y)?( Z)?"
+# Commands the bridge lets the UI / Orca send over USB. Same allow-list and limits as the on-printer
+# ivibridge (a33_bridge/src/ivibridge.c check_command): no M3/M4 at all, no G29/G33/M500, no job-control words.
+ALLOWED_CMD = re.compile(r"^(M503|M115|M119|M104 S\d{1,3}|M140 S\d{1,3}|M220( S\d{1,3})?|M221 S\d{1,3}|M105|M2007|M2410|M2411 S[13]"
+                         r"|M106( P[01])?( S\d{1,3})?|M107( P[01])?|M114|M701|M702|M82|M83|G90|G91|G28( X)?( Y)?( Z)?"
+                         r"|M290 Z[+-]?0\.0[125]"
                          r"|G1( [XYZEF]-?\d{1,4}(\.\d{1,3})?)+)$")
-LIMITS = {"M104": 300, "M140": 120, "M220": 300, "M221": 200, "M106": 255}
+LIMITS = {"M104": (0, 300), "M140": (0, 120), "M220": (10, 300), "M221": (10, 200), "M106": (0, 255)}
 G1_LIMITS = {"X": 150.0, "Y": 150.0, "Z": 300.0, "E": 150.0, "F": 6000.0}   # |value| caps (mm, mm/min)
+M290_STEPS = ("0.01", "0.02", "0.05")       # the Adjust Z-offset steps, as on the touchscreen and the A33 bridge
+
+def norm_cmd(cmd):
+    """Upper-case, single-spaced, comment stripped (like the A33 norm_cmd)."""
+    return " ".join(str(cmd).split(";", 1)[0].strip().upper().split())
+
+def parse_m290(c):
+    """'M290 Z-0.02' -> -2 (hundredths of a mm); None if not M290; ValueError for any other step."""
+    w = c.split()
+    if not w or w[0] != "M290": return None
+    if len(w) == 2 and w[1][:1] == "Z":
+        v = w[1][1:]; sign = -1 if v.startswith("-") else 1; v = v.lstrip("+-")
+        if v in M290_STEPS: return sign * int(round(float(v) * 100))
+    raise ValueError("M290 Z only allows +/-0.01, +/-0.02, or +/-0.05 mm")
+
+def laser_over(c):
+    """M3/M4 (laser/spindle) with S above 100."""
+    w = c.split()
+    if not w or w[0] not in ("M3", "M4", "M03", "M04"): return False
+    for x in w[1:]:
+        if x[:1] == "S":
+            try: return float(x[1:]) > 100.0
+            except ValueError: return False
+    return False
 
 def check_command(cmd):
-    c = " ".join(cmd.strip().upper().split())
+    if "\n" in str(cmd) or "\r" in str(cmd): raise ValueError(f"command not allowed: {cmd!r}")
+    c = norm_cmd(cmd)
+    if not c: raise ValueError("empty command")
+    if laser_over(c): raise ValueError("laser/spindle power above S100 refused")
+    if c.startswith("M290"):
+        parse_m290(c); return c
     if not ALLOWED_CMD.match(c):
         raise ValueError(f"command not allowed: {cmd!r}")
     if c.startswith("G1 "):
@@ -987,12 +1021,136 @@ def check_command(cmd):
             if abs(v) > G1_LIMITS[k]: raise ValueError(f"{k}{v:g} exceeds limit {G1_LIMITS[k]:g}")
             if k == "F" and v <= 0: raise ValueError("feed rate must be > 0")
         return c
-    code, _, arg = c.partition(" S")
-    if code in LIMITS and arg and int(arg) > LIMITS[code]:
-        raise ValueError(f"{code} S{arg} exceeds limit {LIMITS[code]}")
-    if code in ("M220", "M221") and int(arg) < 10:
-        raise ValueError(f"{code} S{arg} below 10%")
+    w = c.split(); code = w[0]
+    for x in w[1:]:
+        if x[0] == "S" and code in LIMITS:
+            lo, hi = LIMITS[code]; v = int(x[1:])
+            if v > hi: raise ValueError(f"{code} S{v} exceeds limit {hi}")
+            if v < lo: raise ValueError(f"{code} S{v} below {lo}" + ("%" if code in ("M220", "M221") else ""))
     return c
+
+# While any print runs (a USB stream, a stored-file print, or a touchscreen job the monitor sees as WORKING_*):
+# only these. Same set as the on-printer bridge's 0.1.19 motion lock. Pause / resume / cancel go through /api/job.
+PRINT_SAFE = ("M104", "M140", "M220", "M221", "M290", "M106", "M107", "M105", "M114")
+def print_safe(c):
+    w = str(c).split()
+    return bool(w) and w[0] in PRINT_SAFE
+
+class MotionLocked(RuntimeError):
+    """A move / home / extrude / other non-adjust command while a print is active (HTTP 409)."""
+
+MOTION_LOCK_MSG = ("manual moves, homing, extrusion and other console G-code are blocked while a print runs; "
+                   "only temperature, fan, speed, flow, Z-offset (M290) and M105/M114 are accepted")
+
+# Upload / job pre-scan, as on the on-printer bridge: a job file must not carry job-control or firmware words.
+JOB_FORBIDDEN = ("M2001", "M2410", "M2411", "M997", "M110")
+def prescan_gcode(path):
+    """Raise ValueError for a job-control/firmware word or M3/M4 above S100 anywhere in the file."""
+    with open(path, errors="replace") as f:
+        for n, line in enumerate(f, 1):
+            c = norm_cmd(line).split("*", 1)[0].strip()
+            if not c: continue
+            w = c.split()
+            if w[0][:1] == "N" and w[0][1:].isdigit(): w = w[1:]; c = " ".join(w)
+            if not w: continue
+            if laser_over(c): raise ValueError(f"line {n}: laser/spindle power above S100 refused ({c})")
+            if w[0] in JOB_FORBIDDEN:
+                raise ValueError(f"line {n}: job-control/firmware command not allowed inside a job ({c})")
+
+class PrintTrack:
+    """Speed %, flow %, layer and Z of the last extruding XY move, fan record, and this print's M290 sum,
+    from every line written to the printer (job stream, page, Orca). Port of the A33 pt_track / fan_track:
+    a few compares per line, no extra serial traffic. None = unknown."""
+    def __init__(self):
+        self.speed = self.flow = None; self.fans = [None, None]; self.reset()
+    def reset(self):
+        self.layer = 0; self.rel = self.erel = False; self.z = None; self.lz = None; self.e = 0.0; self.babystep_h = 0
+    def track(self, line):
+        c = norm_cmd(line)
+        if "*" in c: c = c.split("*", 1)[0].strip()
+        w = c.split()
+        if w and w[0][:1] == "N" and w[0][1:].isdigit(): w = w[1:]
+        if not w: return
+        code = w[0]
+        try: self._track(code, w[1:])
+        except (ValueError, IndexError): pass
+    def _track(self, code, args):
+        p = {a[0]: a[1:] for a in args if a}
+        if code in ("M220", "M221"):
+            if "S" in p:
+                v = int(float(p["S"]))
+                if 1 <= v <= 999:
+                    if code == "M220": self.speed = v
+                    else: self.flow = v
+            return
+        if code in ("M106", "M107"):
+            sv = 0 if code == "M107" else int(float(p["S"]) + 0.5) if "S" in p else 255
+            sv = max(0, min(255, sv))
+            if "P" in p:
+                i = int(p["P"])
+                if i > 1: return
+                self.fans[i] = sv
+            else: self.fans = [sv, sv]
+            return
+        if code == "M290":
+            try: self.babystep_h += parse_m290("M290 " + " ".join("%s%s" % kv for kv in p.items()))
+            except ValueError: pass
+            return
+        if code == "M82": self.erel = False; return
+        if code == "M83": self.erel = True; return
+        if code == "G90": self.rel = False; return
+        if code == "G91": self.rel = True; return
+        if code == "G28": self.z = None; return
+        if code == "G92":
+            if "E" in p: self.e = float(p["E"])
+            if "Z" in p: self.z = float(p["Z"])
+            return
+        if code not in ("G0", "G1"): return
+        fx = "X" in p or "Y" in p
+        if "Z" in p:
+            z = float(p["Z"])
+            if not self.rel: self.z = z
+            elif self.z is not None: self.z += z
+        if "E" not in p: return
+        e = float(p["E"]); erel = self.rel or self.erel
+        de = e if erel else e - self.e
+        if not erel: self.e = e
+        if de > 0 and fx and self.z is not None:
+            if self.lz is None or self.z > self.lz + 0.001: self.layer += 1
+            self.lz = self.z
+    def fan_json(self):
+        pct = [None if v is None else (v * 100 + 127) // 255 for v in self.fans]
+        known = [v for v in pct if v is not None]
+        return {"fan": max(known) if known else None, "fans": pct}
+
+# M503 parse for the mesh map and the Z-offset readout (lines as the console / monitor sees them).
+MESH_N = 7
+def parse_settings_line(line, st):
+    s = line.strip()
+    if s.lower().startswith("echo:"): s = s[5:].strip()
+    w = s.split()
+    if not w: return False
+    p = {a[0]: a[1:] for a in w[1:] if a}
+    try:
+        if w[0] == "G29" and len(w) >= 5 and w[1] == "W":
+            i, j, z = int(p["I"]), int(p["J"]), float(p["Z"])
+            if 0 <= i < MESH_N and 0 <= j < MESH_N:
+                g = st.get("grid") or [[None] * MESH_N for _ in range(MESH_N)]
+                g[j][i] = z; st["grid"] = g; st["updated"] = time.time(); return True
+        elif w[0] == "M420":
+            if "S" in p: st["enabled"] = bool(int(float(p["S"])))
+            if "Z" in p: st["fade"] = float(p["Z"])
+            return True
+        elif w[0] == "M665":
+            if "H" in p: st["H"] = float(p["H"])
+            return True
+        elif w[0] == "M851":
+            if "Z" in p: st["probe_z"] = float(p["Z"])
+            return True
+    except (KeyError, ValueError): return False
+    if "bed leveling on" in s.lower(): st["enabled"] = True; return True
+    if "bed leveling off" in s.lower(): st["enabled"] = False; return True
+    return False
 
 class SerialMonitor:
     """Owns the USB port while no USB job is streaming: polls M105 + M2007 and asks for M2155 auto
@@ -1002,7 +1160,12 @@ class SerialMonitor:
         self.cfg, self.factory, self.clock, self.sleep = cfg, serial_factory, clock, sleep
         self.ser = None; self.status = {}; self.error = None; self.updated = None
         self.lock = threading.Lock(); self._stop = threading.Event(); self._paused = threading.Event()
-        self.thread = None; self.last_cmd = None; self.on_line = None
+        self.thread = None; self.last_cmd = None; self.on_line = None; self.on_write = None
+
+    def _wrote(self, c):
+        if self.on_write:
+            try: self.on_write(c)
+            except Exception: pass
 
     @property
     def connected(self): return self.ser is not None
@@ -1069,7 +1232,7 @@ class SerialMonitor:
         c = check_command(cmd); out = []
         with self.lock:
             if not self.ser: raise RuntimeError(f"USB not connected: {self.error or 'no port'}")
-            self.ser.write((c + "\n").encode()); self.last_cmd = c
+            self.ser.write((c + "\n").encode()); self.last_cmd = c; self._wrote(c)
             end = self.clock() + seconds
             while self.clock() < end:
                 line = self.ser.readline().decode(errors="replace").strip()
@@ -1085,7 +1248,7 @@ class SerialMonitor:
         c = check_command(cmd)
         with self.lock:
             if not self.ser: raise RuntimeError(f"USB not connected: {self.error or 'no port'}")
-            self.ser.write((c + "\n").encode()); self.last_cmd = c
+            self.ser.write((c + "\n").encode()); self.last_cmd = c; self._wrote(c)
         log("monitor: sent", c); return c
 
 class FilamentChange:
@@ -1489,9 +1652,59 @@ class Bridge:
         self.webcam = Webcam(cfg); self.timelapse = None; self.last_timelapse = None
         self.temps = collections.deque(maxlen=max(10, int(cfg.get("temp_history_s", 1800)) // 2))
         self.queue = []
+        self.pt = PrintTrack()                # 0.1.19 Status / Adjust values and the fan record
+        self.settings = {}                    # parsed M503: mesh grid, M420, M665 H, M851 Z (mesh map)
+        if self.monitor: self.monitor.on_write = self.pt.track
+
+    # ---- print state (0.1.19 Status / Adjust and the motion lock) ----
+    def printer_working(self):
+        """The monitor sees the firmware running a job it did not get from this bridge (touchscreen job)."""
+        mon = self.monitor
+        if not mon or not mon.connected or self.busy(): return False
+        return str(mon.status.get("working", "")).upper().startswith("WORKING")
+
+    def print_active(self):
+        return self.busy() or self.usb_locked() or self.printer_working()
+
+    def print_source(self):
+        if self.busy(): return "usb"
+        if self.usb_locked(): return "storage"
+        if self.printer_working(): return "printer"
+        return None
+
+    def print_info(self):
+        act = self.print_active(); src = self.print_source(); j = self.job
+        st = self.job_info().get("state", "")
+        f = (j.name if self.busy() and j else self.storage_print if src == "storage" else
+             self.last_file if src == "printer" else None)
+        return {"active": act, "source": src, "paused": bool(act and str(st).startswith(("Paused", "Pausing"))),
+                "file": f, "speed": self.pt.speed, "flow": self.pt.flow,
+                "layer": self.pt.layer if act and self.pt.lz is not None else None,
+                "z": round(self.pt.lz, 2) if act and self.pt.lz is not None else None,
+                "zoffset_h": self.pt.babystep_h if act else None,
+                "usb_controls": src in ("usb", "printer")}
+
+    def motion_check(self, cmds):
+        if self.print_active():
+            bad = [c for c in cmds if not print_safe(c)]
+            if bad: raise MotionLocked(f"{MOTION_LOCK_MSG} (refused: {', '.join(bad)})")
+
+    def console_reason(self):
+        mon = self.monitor
+        if self.usb_locked(): return "Console off: the printer is printing a stored file and USB is released so the print does not stall. Use the touchscreen, or re-enable USB once it finishes."
+        if not (self.busy() or (mon and mon.connected)):
+            return "Console unavailable: the printer's USB-C port is not connected" + (f" ({mon.error})." if mon and mon.error else ".")
+        if self.printer_working(): return "Touchscreen job running: only temperature, fan, speed, flow, Z-offset (M290) and status commands (M105, M114) are accepted."
+        if self.busy(): return "Print running: only temperature, fan, speed, flow, Z-offset (M290) and status commands (M105, M114) are accepted."
+        return ""
+
+    def note_line(self, d, text):
+        if d == "<" and parse_settings_line(str(text), self.settings): pass
 
     # ---- console / safety layer ----
     def log_console(self, d, text):
+        try: self.note_line(d, text)
+        except Exception: pass
         self.console_seq += 1
         self.console.append({"seq": self.console_seq, "t": time.time(), "dir": d, "text": str(text)[:500]})
 
@@ -1500,10 +1713,7 @@ class Bridge:
         from its own storage; only STREAM_SAFE commands while a USB job streams."""
         cs = [check_macro_line(c) for c in cmds]
         if self.usb_locked(): raise RuntimeError("USB controls are off while the printer prints from its own storage")
-        if self.busy():
-            bad = [c for c in cs if not STREAM_SAFE.match(c)]
-            if bad: raise RuntimeError(f"not allowed while a USB job is streaming: {', '.join(bad)} "
-                                       "(only temperature/fan/speed/flow and status reports)")
+        self.motion_check(cs)
         return cs
 
     def console_send(self, cmd):
@@ -1545,6 +1755,30 @@ class Bridge:
             else: self.log_console(">", c); out.append(self.send_command(c))
         return out
 
+    def cal_info(self):
+        """Read-only calibration readout for the mesh map: the last M503 seen (console, backup, or Refresh)."""
+        st = self.settings; t = (self.live_status() or {}).get("temps") or {}
+        b, n = t.get("bed") or {}, t.get("tool0") or {}
+        return {"busy": False, "flows": False, "phase": "idle",
+                "level": {"enabled": st.get("enabled"), "fade": st.get("fade"), "grid": st.get("grid"),
+                          "updated": st.get("updated")},
+                "paper": {"H": st.get("H")}, "probe_z": st.get("probe_z"),
+                "bed": b.get("actual"), "bed_target": b.get("target"), "nozzle": n.get("actual"),
+                "note": "Leveling and XYZ calibration run from the printer's Calibration view."}
+
+    def refresh_settings(self):
+        """M503 over USB (idle only) to refresh the mesh map."""
+        if self.print_active(): raise MotionLocked("M503 refresh waits until the print ends")
+        if not self.monitor or not self.monitor.connected: raise RuntimeError("USB not connected")
+        old = self.settings.pop("grid", None)
+        self.log_console(">", "M503")
+        try: lines = self.monitor.query("M503", 5.0)
+        except Exception:
+            if old is not None: self.settings["grid"] = old
+            raise
+        for l in lines: self.log_console("<", l)
+        return self.settings
+
     def backup_settings(self):
         """M503 -> ~/.config/ivi-bridge/backups/m503-<time>.txt (0600). Idle + USB monitor only."""
         if self.busy(): raise RuntimeError("a USB job is running")
@@ -1583,6 +1817,7 @@ class Bridge:
         path = safe_job_path(self.cfg, name)
         if self.usb_locked(): raise RuntimeError("USB controls are off while the printer prints from its own storage")
         if self.busy(): raise RuntimeError("a job is already running")
+        if self.printer_working(): raise RuntimeError("the touchscreen is printing; finish or stop that job first")
         return self.submit(path, name, start=True, mode="usb")
 
     def delete_file(self, name):
@@ -1605,9 +1840,11 @@ class Bridge:
         self.storage_print = None
         if self.monitor: self.monitor.resume()
 
-    def send_command(self, cmd):
-        """Temp/speed/flow etc. over USB: through the streaming job if one runs, else the monitor."""
+    def send_command(self, cmd, job_control=False):
+        """Temp/speed/flow etc. over USB: through the streaming job if one runs, else the monitor.
+        job_control: pause / resume / cancel of a touchscreen job (M2410, M2411 S1/S3), exempt from the motion lock."""
         c = check_command(cmd)
+        if not (job_control and c in ("M2410", "M2411 S1", "M2411 S3")): self.motion_check([c])
         if self.busy() and isinstance(self.job, SerialJob):
             self.job._write(c); return c
         if self.usb_locked(): raise RuntimeError("USB controls are off while the printer prints from its own storage")
@@ -1618,7 +1855,7 @@ class Bridge:
         if action not in ("load", "unload"): raise ValueError("action must be load or unload")
         temp = int(round(float(temp)))
         if not 150 <= temp <= 300: raise ValueError("temperature must be 150-300 °C")
-        if self.busy(): raise RuntimeError("a USB job is running")
+        if self.print_active(): raise MotionLocked("load / unload is blocked while a print runs")
         f = self.filament
         if f and f.state in ("heating", "moving", "confirm"): raise RuntimeError("a filament change is already running")
         self.filament = FilamentChange(self, action, temp); self.filament.start(); return self.filament.info()
@@ -1630,7 +1867,7 @@ class Bridge:
         distance, feed = float(distance), float(feed)
         if not 0 < distance <= G1_LIMITS["E"]: raise ValueError("distance must be 0-%g mm" % G1_LIMITS["E"])
         if not 0 < feed <= G1_LIMITS["F"]: raise ValueError("feed must be 0-%g mm/min" % G1_LIMITS["F"])
-        if self.busy(): raise RuntimeError("a USB job is running")
+        if self.print_active(): raise MotionLocked("extrude / retract is blocked while a print runs")
         f = self.filament
         if f and f.state in ("heating", "moving", "confirm"): raise RuntimeError("a filament change is already running")
         mon = self.monitor
@@ -1661,6 +1898,7 @@ class Bridge:
         with self.lock:
             if self.busy(): raise RuntimeError("a job is running; use Cancel")
             if self.usb_locked(): raise RuntimeError("USB controls are off while the printer prints from its own storage")
+            if self.printer_working(): raise RuntimeError("the touchscreen is printing; stop it on the printer")
             if self.monitor: self.monitor.release()
             ser = self.serial_factory()
             try:
@@ -1674,6 +1912,7 @@ class Bridge:
                 if self.monitor: self.monitor.resume()
 
     def submit(self, path, name, start=True, mode=None):
+        prescan_gcode(path)
         if mode in ("serial", "usb"): route = "usb" if start else "spool"
         elif mode == "wifi": route = "wifi"
         else: route = route_upload(self.cfg, start)
@@ -1730,6 +1969,7 @@ class Bridge:
                                  line_numbers=self.cfg.get("line_numbers", True),
                                  estimate_s=stats.get("time_s"))
             self.job.on_line = lambda l: self.log_console("<", l)
+            self.pt.reset(); self.job.on_write = self.pt.track
             self.timelapse = None
             if self.cfg.get("timelapse") and self.webcam.info()["snapshot"]:
                 self.timelapse = Timelapse(self.cfg, self.webcam, name); self.job.on_layer = self.timelapse.layer
@@ -1862,10 +2102,26 @@ h3{margin:.2em 0 .8em;color:var(--t);font-weight:600}
 .con{height:260px;overflow:auto;background:#15171c;color:#cfd6e2;font:12px Menlo,monospace;border-radius:8px;padding:.5em}.con .cs{color:#7fc8ff}.con .ce{color:#ff8a7a}
 .wtabs{display:none;gap:.5em;margin:.8em 1em 0;max-width:1500px}.wtabs button{background:var(--lb);color:var(--t);border-radius:999px;padding:.5em 1.4em;font-size:16px}.wtabs button.on{background:var(--b);color:#fff}
 .cambtns{display:flex;gap:.4em;margin-top:.45em;flex-wrap:wrap;align-items:center}.cambtn{background:var(--lb);color:var(--t);border-radius:999px;padding:.4em .95em;font-size:13px;min-height:2.2em;touch-action:manipulation}.cambtn.on{background:var(--b);color:#fff}@media (max-width:560px){.tabs button{font-size:15px;padding:.6em .15em}#tpzw{display:none}}@media (max-width:600px) and (orientation:portrait){body{overflow-x:hidden}.panels{padding:.75em;max-width:100%}.tgrid{grid-template-columns:1fr;grid-template-areas:"pos" "jog" "sel";justify-items:stretch;gap:1em}.tpos,.tsel,.tjog{width:100%;max-width:100%}.tjog{display:flex;flex-direction:column;align-items:center}.tjog .lite{max-width:16em}.pad{justify-content:center}#p_tool .compact{justify-content:center}.fgrid{grid-template-columns:5.2em minmax(0,1fr) 7.2em;gap:.35em .45em}.fgrid .lbl{margin:0;padding:0;line-height:1.2}.fgrid .opts{min-width:0}.fgrid .opts button{padding:.45em .1em;font-size:13px}.fgrid .side{gap:.45em}.fgrid .side .btn{padding:.4em .5em;font-size:14px;min-width:0;width:100%}.fgrid .side .fan{font-size:14px}.two{gap:.7em;margin-bottom:.8em}.opts{max-width:100%}}
+.prt{display:none}body.printing .prt{display:block}body.printing .idle{display:none}
+.sgrid{display:grid;grid-template-columns:9.5em 1fr;gap:1em 1.5em;align-items:center}.ring{width:9.5em;height:9.5em}
+.ring circle{fill:none;stroke-width:9}.ring .rb{stroke:#e3ebf7}.ring .rf{stroke:var(--b);stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dasharray .5s}
+.ring text{font-size:20px;font-weight:600;fill:#123;text-anchor:middle;dominant-baseline:middle}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:.3em 1em;font-size:14px}.kv span{color:#567}.kv b{color:#123;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sbtn{display:flex;gap:.6em;flex-wrap:wrap;margin-top:1em}.sbtn button{flex:1;min-width:6em}
+.agrid{display:grid;grid-template-columns:8.5em 1fr;gap:.8em 1em;align-items:center}
+.step{display:flex;gap:.35em;flex-wrap:wrap}.step button{background:var(--lb);color:var(--t);border-radius:8px;padding:.5em .7em;min-width:3.2em;font-size:15px}
+.zcur{font-size:13px;color:#345;margin-top:.2em}.hint{font-size:12px;color:#789;margin:.6em 0 0}
+.pnote{display:none;margin-top:.8em;padding:.5em .7em;border-radius:8px;background:#fff6dc;border:1px solid #ecd38a;color:#5c4400;font-size:13px}
+body.printing #mlist button.mv{opacity:.4;pointer-events:none}
+.meshw{position:relative;width:min(330px,100%);margin:1.1em auto 1.1em;padding:0 1.6em}
+.mesh{display:block;width:100%;aspect-ratio:1;border-radius:6px;cursor:crosshair;touch-action:manipulation}
+.mx{position:absolute;font-size:11px;color:#567}.mb_{bottom:-1.25em;left:50%;transform:translateX(-50%)}.mt_{top:-1.25em;left:50%;transform:translateX(-50%)}.ml_{left:0;top:50%;transform:translateY(-50%)}.mr_{right:0;top:50%;transform:translateY(-50%)}
+.mlo{display:inline-block;width:.8em;height:.8em;border-radius:2px;vertical-align:-1px;margin:0 .25em}
+.creason{display:none;margin-top:.45em;padding:.5em .7em;border-radius:8px;background:#fff6dc;border:1px solid #ecd38a;color:#5c4400;font-size:13px}.creason.on{display:block}
 @media (min-width:1100px){.tabs{display:none}.panels{display:grid;grid-template-columns:1fr 1fr;gap:2em}
 .panel{display:block;border:1px solid #d3e0f3;border-radius:10px;padding:1em}
-.panels{grid-template-areas:"tool fil" "con files" "cam files";align-items:start}
-#p_tool{grid-area:tool}#p_fil{grid-area:fil}#p_con{grid-area:con}#p_cam{grid-area:cam}#p_files{grid-area:files}
+.panels{grid-template-areas:"tool fil" "con files" "cam files" "cam mesh";align-items:start}
+#p_tool{grid-area:tool}#p_fil{grid-area:fil}#p_con{grid-area:con}#p_cam{grid-area:cam}#p_files{grid-area:files}#p_mesh{grid-area:mesh}
 .wtabs{display:flex}#p_tp{display:none}body.wtp .panels>.panel{display:none}body.wtp #p_tp{display:block;grid-column:1/-1}}#camimg{cursor:zoom-in}#camfs{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:rgba(10,14,22,.94);padding:env(safe-area-inset-top,0) env(safe-area-inset-right,0) env(safe-area-inset-bottom,0) env(safe-area-inset-left,0)}#camfs.on{display:flex;flex-direction:column}#camfs.on #camimg{max-width:100%;max-height:100%;width:auto;height:auto;flex:1;object-fit:contain;background:#000;border-radius:0;cursor:zoom-out}#camfsx{position:absolute;top:max(.6em,env(safe-area-inset-top));right:max(.6em,env(safe-area-inset-right));z-index:41;background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:999px;padding:.55em 1em;font:600 15px -apple-system,Helvetica,sans-serif;cursor:pointer}body.camfs-on{overflow:hidden}#camframe:fullscreen,#camframe:-webkit-full-screen{width:100%;height:100%;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:.5em;box-sizing:border-box}#camframe:fullscreen #camimg,#camframe:-webkit-full-screen #camimg{max-height:calc(100% - 3.2em);max-width:100%;width:auto;height:auto;border-radius:0;cursor:zoom-out}#camframe:fullscreen .cambtns,#camframe:-webkit-full-screen .cambtns{margin-top:.5em}
 </style>
 <div class=top>Control<a href=# onclick="tick();return false">&#8635;</a></div>
@@ -1882,7 +2138,17 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
 <span style="font-size:12px;color:#789">Streamed from this Mac over USB with live monitoring &ndash; keep the Mac awake and the cable connected until it finishes.</span></div></div>
 <div class=wtabs><button id=w_main class=on onclick="wtab(0)">Controls</button><button id=w_tp onclick="wtab(1)">Toolpath</button></div>
 <div class=panels>
-<div class=panel id=p_tool><h3>Toolhead</h3>
+<div class=panel id=p_tool><h3 id=h_tool>Toolhead</h3>
+<div class=prt id=pstat>
+ <div class=sgrid><svg class=ring viewBox="0 0 120 120"><circle class=rb cx=60 cy=60 r=50 /><circle class=rf id=sring cx=60 cy=60 r=50 stroke-dasharray="0 314.2"/><text x=60 y=60 id=spct>–</text></svg>
+ <div class=kv><span>File</span><b id=sfile>–</b><span>State</span><b id=sstate>–</b><span>Elapsed</span><b id=selp>–</b><span>Left</span><b id=sleft>–</b>
+  <span>Layer</span><b id=slayer>–</b><span>Z</span><b id=sz>–</b><span>Nozzle</span><b id=snz>–</b><span>Bed</span><b id=sbd>–</b></div></div>
+ <div class=sbtn><button class="btn su" title="M2410" onclick="cmd('pause','pause')">Pause</button><button class="btn su" title="M2411 S1" onclick="cmd('pause','resume')">Resume</button>
+  <button class="btn su" style="background:#c33" title="M2411 S3" onclick="if(confirm('Stop this print?'))cmd('cancel')">Stop</button></div>
+ <div class=pnote id=snote></div>
+ <p class=hint>Jog, home, extrude and the motion macros are locked until the print ends; the bridge refuses them too.</p>
+</div>
+<div class=idle>
 <div class=tgrid>
  <div class=tpos><div class=pos><span id=px>X: –</span><span id=py>Y: –</span><span id=pz>Z: –</span></div></div>
  <div class=tsel>
@@ -1899,8 +2165,21 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
  <button onclick="cmd('pause','pause')">Pause</button><button onclick="cmd('pause','resume')">Resume</button>
  <button onclick="if(confirm('Cancel print?'))cmd('cancel')">Cancel</button>
  <button title="M2411 S3: clear a stuck/paused PC job" onclick="if(confirm('Clear a stuck job on the printer (M2411 S3)?'))fetch('/api/ivi/clear',{method:'POST',headers:H}).then(r=>r.json()).then(j=>say(j.message||j.error))">Clear stuck job</button></div>
+</div></div>
+<div class=panel id=p_fil><h3 id=h_fil>Filament</h3>
+<div class=prt id=padj>
+ <div class=agrid>
+  <div><div class=lbl>Nozzle</div><div class=val id=anz>–</div></div><div class=step><button class=au onclick="adj('M104','nz',-5)">−5</button><button class=au onclick="adj('M104','nz',-1)">−1</button><button class=au onclick="adj('M104','nz',1)">+1</button><button class=au onclick="adj('M104','nz',5)">+5</button></div>
+  <div><div class=lbl>Bed</div><div class=val id=abd>–</div></div><div class=step><button class=au onclick="adj('M140','bd',-5)">−5</button><button class=au onclick="adj('M140','bd',-1)">−1</button><button class=au onclick="adj('M140','bd',1)">+1</button><button class=au onclick="adj('M140','bd',5)">+5</button></div>
+  <div><div class=lbl>Z offset distance (mm)</div><div class=zcur id=azc>Current: +0.00 mm</div></div><div class=step><button class=au onclick="zb(-0.05)">−0.05</button><button class=au onclick="zb(-0.02)">−0.02</button><button class=au onclick="zb(-0.01)">−0.01</button><button class=au onclick="zb(0.01)">+0.01</button><button class=au onclick="zb(0.02)">+0.02</button><button class=au onclick="zb(0.05)">+0.05</button></div>
+  <div><div class=lbl>Speed</div><div class=val id=asp>–</div></div><div class=step><button class=au onclick="adj('M220','sp',-10)">−10</button><button class=au onclick="adj('M220','sp',-5)">−5</button><button class=au onclick="adj('M220','sp',5)">+5</button><button class=au onclick="adj('M220','sp',10)">+10</button></div>
+  <div><div class=lbl>Flow</div><div class=val id=afl>–</div></div><div class=step><button class=au onclick="adj('M221','fl',-5)">−5</button><button class=au onclick="adj('M221','fl',-1)">−1</button><button class=au onclick="adj('M221','fl',1)">+1</button><button class=au onclick="adj('M221','fl',5)">+5</button></div>
+  <div class=lbl>Fan</div><div class=fan style="justify-content:flex-start"><button class="tog au" id=afan onclick="fanT()"></button></div>
+ </div>
+ <div class=pnote id=anote></div>
+ <p class=hint>Z offset moves the nozzle in M290 babysteps for this print only (+ = higher). To keep a new offset, use the printer's own page (Save Z offset permanently) or run the paper test there.</p>
 </div>
-<div class=panel id=p_fil><h3>Filament</h3>
+<div class=idle>
 <div class=two><button class="big u" onclick="pick('load')">Load Filament</button><button class="big u" onclick="pick('unload')">Unload Filament</button></div>
 <div class=fgrid>
  <div><div class=lbl>Nozzle</div><div class=val id=nzv>–</div></div>
@@ -1912,7 +2191,7 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
  <div class=opts data-g=bd data-c=M140><button>60°C</button><button>80°C</button><button>100°C</button><button class=pm data-d=-5>-</button><button class=pm data-d=5>+</button></div>
  <div class=lbl>Extrude speed<br>(mm/min)</div><div class=opts data-g=fspd><button class=sel>100</button><button>200</button><button>500</button><button>1000</button></div>
  <div class=lbl>Extrude distance<br>(mm)</div><div class=opts data-g=fdst><button class=sel>10</button><button>20</button><button>50</button><button>100</button></div>
-</div></div>
+</div></div></div>
 <div class=panel id=p_cam><h3>Webcam</h3>
 <div id=camoff class=lbl>No camera configured. Set <code>webcam_stream_url</code>, <code>webcam_snapshot_url</code> or <code>webcam_usb_device</code> in the bridge config (see README).</div>
 <div id=camframe style="display:none">
@@ -1943,7 +2222,14 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
 <h3 style="margin-top:1em">Console</h3>
 <div id=con class=con></div>
 <div style="display:flex;gap:.5em;margin-top:.5em"><input id=cin placeholder="G-code, e.g. M105" style="flex:1;font:14px Menlo,monospace;padding:.45em;border:1px solid #bcd;border-radius:6px" onkeydown="if(event.key=='Enter')csend()"><button id=cbtn class=btn style="min-width:5em" onclick="csend()">Send</button></div>
-<div class=lbl id=cnote style="margin-top:.3em">Only commands on the bridge's safety list are sent. During a USB print only temperature, fan, speed, flow and status commands are allowed; during an Upload (Wi-Fi) print the console is off.</div>
+<div class=creason id=creason role=status aria-live=polite></div>
+<div class=lbl id=cnote style="margin-top:.3em">Only commands on the bridge's safety list are sent (the same list as the on-printer bridge). During a print only temperature, fan, speed, flow, Z-offset (M290) and M105/M114 are accepted; during an Upload (Wi-Fi) print the console is off.</div>
+</div>
+<div class=panel id=p_mesh><h3>Bed mesh <span class=lbl id=meshst></span></h3>
+<div class=meshw><canvas class=mesh id=calmesh width=140 height=140 onmousemove="meshPick(event)" onclick="meshPick(event)" ontouchstart="meshPick(event)" aria-label="Bed mesh over the 210 mm print circle, front at the bottom"></canvas><span class="mx mb_">Front</span><span class="mx mt_">Back</span><span class="mx ml_">X−</span><span class="mx mr_">X+</span></div>
+<div class=lbl id=calmeshrd></div><div class=lbl id=calmeshlg></div>
+<div class=compact style="border:0;padding:0"><button class=mu id=meshbtn onclick="meshRefresh()">Read mesh (M503)</button><span class=lbl id=meshz></span></div>
+<p class=hint>The firmware's 7×7 bilinear mesh (35 mm spacing from −105, −105; I = X from the left, J = Y from the front) drawn over the 210 mm print circle, interpolated the way the firmware applies it. Hollow dots are grid points outside the circle (extrapolated). Leveling (cold or heated), XYZ calibration and the paper test run from the printer's own Calibration view, not from this computer.</p>
 </div>
 <div class=panel id=p_tp><h3>Live toolpath <span id=tpc style="color:#456;font-size:13px;font-weight:400"></span></h3><div id=tpp>
 <div id=tpn style="font-size:13px;color:#789;margin:.3em 0"></div>
@@ -1952,7 +2238,7 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
 <div style="font-size:12px;color:#456">top view &middot; bright = printed this layer, faint = still to print, dim = earlier layers, orange = nozzle</div></div></div></div></div>
 </div>
 <p class=note id=msg>Controls need USB. <b>Upload and Print</b> streams the job over USB (live status, Mac must stay awake and connected); <b>Upload</b> stores it on the printer for the touch screen and turns USB controls off during that print. Speed % (M220) and flow % (M221) are not yet verified on this firmware.</p>
-<div class=tabs><button id=t_tool class=on onclick="tab('tool')">Toolhead</button><button id=t_fil onclick="tab('fil')">Filament</button><button id=t_cam onclick="tab('cam')">Camera</button><button id=t_files onclick="tab('files')">Files</button><button id=t_con onclick="tab('con')">Console</button><button id=t_tp onclick="tab('tp')">Toolpath</button></div>
+<div class=tabs><button id=t_tool class=on onclick="tab('tool')">Toolhead</button><button id=t_fil onclick="tab('fil')">Filament</button><button id=t_cam onclick="tab('cam')">Camera</button><button id=t_files onclick="tab('files')">Files</button><button id=t_con onclick="tab('con')">Console</button><button id=t_mesh onclick="tab('mesh')">Mesh</button><button id=t_tp onclick="tab('tp')">Toolpath</button></div>
 <div id=dlg class=dlg style="display:none"><div class=box><div class=top style="border-radius:12px 12px 0 0">
 <span id=mt>Filament</span></div><div style="padding:1.2em">
 <div id=v_pick><p class=lbl>Which filament is loaded?</p><div id=fp class=fgrid2></div>
@@ -1965,7 +2251,7 @@ keeps the port closed. Pause or cancel on the touch screen. When the printer is 
 async function usbOn(){if(!confirm('Is the printer idle (stored print finished or cancelled)? Opening USB during a stored print stalls it.'))return;
  await fetch('/api/ivi/usb',{method:'POST',headers:H,body:JSON.stringify({action:'enable'})});say('USB controls re-enabled');tick()}
 function hms(s){if(s==null)return'–';s=Math.round(s);return Math.floor(s/3600)+'h '+String(Math.floor(s%3600/60)).padStart(2,'0')+'m'}
-function tab(t){for(const n of['tool','fil','cam','files','con','tp']){document.getElementById('t_'+n).classList.toggle('on',n==t);document.getElementById('p_'+n).classList.toggle('on',n==t)}}
+function tab(t){for(const n of['tool','fil','cam','files','con','mesh','tp']){document.getElementById('t_'+n).classList.toggle('on',n==t);document.getElementById('p_'+n).classList.toggle('on',n==t)}}
 tab('tool');
 function wtab(v){document.body.classList.toggle('wtp',!!v);w_main.classList.toggle('on',!v);w_tp.classList.toggle('on',!!v)}
 function say(m){msg.textContent=m}
@@ -2009,6 +2295,8 @@ async function tick(){try{const j=await (await fetch('/api/job',{headers:H})).js
  const t=p.temperature||{},f=v=>v?Math.round(v.actual)+'°C/'+Math.round(v.target)+'°C':'–';nzv.textContent=f(t.tool0);bdv.textContent=f(t.bed);
  T.nz=t.tool0?t.tool0.target:0;T.bd=t.bed?t.bed.target:0;
  for(const[g2,v]of[['nz',T.nz],['bd',T.bd]])document.querySelectorAll('[data-g='+g2+'] button:not(.pm)').forEach(b=>b.classList.toggle('sel',parseInt(b.textContent)==v));
+ try{prTick(j,p,u)}catch(e){}
+ try{renderMesh(p.ivi&&p.ivi.cal&&p.ivi.cal.level&&p.ivi.cal.level.grid,p.ivi&&p.ivi.cal)}catch(e){}
  try{tpTick(j,lk)}catch(e){}
  const q=p.position;px.textContent='X: '+(q?q.x.toFixed(2):'–');py.textContent='Y: '+(q?q.y.toFixed(2):'–');pz.textContent='Z: '+(q?q.z.toFixed(2):'–')
 }catch(e){st.textContent='bridge offline';document.querySelectorAll('.u').forEach(b=>b.disabled=true)}}
@@ -2133,7 +2421,7 @@ async function histLoad(){let d;try{d=await J('/api/ivi/history')}catch(e){retur
  htab.innerHTML='<tr><th>Job</th><th>Result</th><th>Time</th><th>Est.</th><th>Filament</th><th>When</th></tr>'+d.jobs.slice(0,30).map(r=>'<tr><td>'+esc(r.name)+'</td><td class="'+(r.state=='Finished'?'ok':r.via=='wifi'?'':'bad')+'">'+esc(r.state)+'</td><td>'+hms(r.duration_s)+'</td><td>'+hms(r.estimate_s)+'</td><td>'+fmtG(r)+'</td><td>'+new Date(r.started*1000).toLocaleString()+'</td></tr>').join('')}
 async function hact(){await J('/api/ivi/history',{action:'clear'}).catch(()=>{});histLoad()}
 async function mLoad(){try{MAC=(await J('/api/ivi/macros')).macros}catch(e){return}
- mlist.innerHTML=MAC.map((m,i)=>'<button class="mb u" data-i='+i+' title="'+esc(m.commands.join('; '))+'">'+esc(m.name)+'</button>').join('');
+ mlist.innerHTML=MAC.map((m,i)=>'<button class="mb u'+(m.commands.every(c=>PSAFE.includes(c.split(' ')[0]))?'':' mv')+'" data-i='+i+' title="'+esc(m.commands.join('; '))+'">'+esc(m.name)+'</button>').join('');
  mlist.querySelectorAll('button').forEach(b=>b.onclick=()=>mrun(MAC[+b.dataset.i]));med.value=MAC.map(m=>m.name+' | '+m.commands.join('; ')).join(NL);uLock()}
 async function mrun(m){const c0=m.commands[0];if(m.commands.length==1&&(c0=='@load'||c0=='@unload'))return pick(c0.slice(1));
  try{const j=await J('/api/ivi/macros',{action:'run',name:m.name});say('Ran '+m.name+': '+j.ran.join(' · '))}catch(e){say('Failed: '+e.message)}conPoll();tick()}
@@ -2143,9 +2431,67 @@ async function mreset(){await J('/api/ivi/macros',{action:'reset'}).catch(()=>{}
 async function conPoll(){let d;try{d=await J('/api/ivi/console?since='+CS)}catch(e){return}
  for(const l of d.lines){const e=document.createElement('div');e.className=l.dir=='>'?'cs':'cr';e.textContent=(l.dir=='>'?'> ':'')+l.text;con.appendChild(e)}
  if(d.lines.length){CS=d.seq;while(con.children.length>400)con.removeChild(con.firstChild);con.scrollTop=con.scrollHeight}
- cin.disabled=cbtn.disabled=!d.enabled;cin.placeholder=d.usb_locked?'Console off: printing from printer storage (Upload)':!d.enabled?'Console needs USB':d.streaming?'USB print running: temp/fan/speed/flow/status only':'G-code, e.g. M105'}
+ creason.textContent=d.reason||'';creason.classList.toggle('on',!!d.reason);cbtn.title=d.reason||'';
+ cin.disabled=cbtn.disabled=!d.enabled;cin.placeholder=d.usb_locked?'Console off: printing from printer storage (Upload)':!d.enabled?'Console needs USB':d.print_active?'Print running: temperature/fan/speed/flow/M290/status only':'G-code, e.g. M105'}
 async function csend(){const c=cin.value.trim();if(!c)return;try{await J('/api/ivi/console',{command:c});cin.value=''}catch(e){const x=document.createElement('div');x.className='ce';x.textContent='! '+e.message;con.appendChild(x);con.scrollTop=con.scrollHeight}conPoll()}
 function uLock(){const u=!usb.textContent.startsWith('off')&&!usb.textContent.startsWith('not');document.querySelectorAll('#p_files .u,#p_con .u').forEach(b=>b.disabled=!u)}
+/* 0.1.19: Status / Adjust while printing (same boxes as the on-printer bridge) */
+let PR={};const PSAFE=['M104','M140','M220','M221','M290','M106','M107','M105','M114'];
+function fmtN(n,sign){if(n==null||n==='')return '—';const x=Number(n);if(isNaN(x))return '—';let s=x.toFixed(2);if(sign&&x>=0)s='+'+s;return s}
+function prTick(j,p,u){const pr=(p.ivi&&p.ivi.print)||{},act=!!pr.active;PR=pr;document.body.classList.toggle('printing',act);
+ h_tool.textContent=t_tool.textContent=act?'Status':'Toolhead';h_fil.textContent=t_fil.textContent=act?'Adjust':'Filament';
+ const ctl=act&&pr.usb_controls&&u;document.querySelectorAll('.au,.su').forEach(b=>b.disabled=!ctl);
+ const fanv=p.ivi?p.ivi.fan:null;fanOn=fanv!=null&&fanv>0;[fan,afan].forEach(e=>e&&e.classList.toggle('on',fanOn));
+ meshbtn.disabled=act||!u;meshbtn.title=act?'Reading the mesh waits until the print ends':'';
+ if(!act)return;
+ const ji=j.ivi||{},c=j.progress&&j.progress.completion,t=p.temperature||{},f=v=>v?Math.round(v.actual)+' / '+Math.round(v.target)+' °C':'–';
+ sring.setAttribute('stroke-dasharray',(3.142*((c||0)))+' 314.2');spct.textContent=c==null?'–':Math.round(c)+'%';
+ sfile.textContent=pr.file||(j.job&&j.job.file&&j.job.file.name)||'–';sstate.textContent=j.state||'–';
+ selp.textContent=hms(ji.elapsed);sleft.textContent=ji.left!=null?hms(ji.left)+(ji.left_source?' ('+ji.left_source+')':''):'–';
+ slayer.textContent=ji.layers?((ji.layer||0)+' / '+ji.layers):(pr.layer!=null?String(pr.layer):'–');sz.textContent=pr.z!=null?pr.z.toFixed(2)+' mm':'–';
+ snz.textContent=f(t.tool0);sbd.textContent=f(t.bed);anz.textContent=f(t.tool0);abd.textContent=f(t.bed);
+ asp.textContent=(pr.speed||100)+' %'+(pr.speed?'':' (default)');afl.textContent=(pr.flow||100)+' %'+(pr.flow?'':' (default)');
+ azc.textContent='Current: '+fmtN((pr.zoffset_h||0)/100,1)+' mm (this print)';
+ const msg=pr.source=='storage'?'This print runs from printer storage, so USB is released and adjustments are made on the touchscreen.':!u?'USB is not connected, so adjustments are unavailable.':'';
+ [snote,anote].forEach(e=>{e.textContent=msg;e.style.display=msg?'block':'none'})}
+function adj(code,k,d){let cur;
+ if(k=='nz')cur=T.nz||0;else if(k=='bd')cur=T.bd||0;else if(k=='sp')cur=PR.speed||100;else cur=PR.flow||100;
+ let v=Math.round(cur+d);const lim={M104:[0,300],M140:[0,120],M220:[10,300],M221:[10,200]}[code];v=Math.max(lim[0],Math.min(lim[1],v));g([code+' S'+v])}
+function zb(d){g(['M290 Z'+(d>0?'+':'')+d.toFixed(2)])}
+var MESH={grid:null,key:'',lo:0,hi:0};
+var MR=105,MO=-105,MS=35,ME=112;
+function meshColor(v,lo,hi){if(v==null||isNaN(v))return '#dfe6f0';const span=Math.max(0.02,hi-lo);let t=(v-lo)/span;t=Math.max(0,Math.min(1,t));
+ return 'rgb('+Math.round(40+t*190)+','+Math.round(90+80*(1-Math.abs(t-0.5)*2))+','+Math.round(200-t*140)+')'}
+function meshAt(g,x,y){const fx=(x-MO)/MS,fy=(y-MO)/MS,i=Math.max(0,Math.min(5,Math.floor(fx))),j=Math.max(0,Math.min(5,Math.floor(fy)));
+ const tx=fx-i,ty=fy-j,a=g[j]&&g[j][i],b=g[j]&&g[j][i+1],c=g[j+1]&&g[j+1][i],d=g[j+1]&&g[j+1][i+1];
+ if(a==null||b==null||c==null||d==null)return null;return (a*(1-tx)+b*tx)*(1-ty)+(c*(1-tx)+d*tx)*ty}
+function meshInside(i,j){const x=MO+i*MS,y=MO+j*MS;return x*x+y*y<=MR*MR+0.01}
+function renderMesh(grid,cal){
+ if(cal){meshst.textContent=cal.level&&cal.level.enabled===true?'leveling on (M420 S1)':cal.level&&cal.level.enabled===false?'leveling off (M420 S0)':'';
+  meshz.textContent=cal.probe_z!=null||(cal.paper&&cal.paper.H!=null)?('M851 Z '+fmtN(cal.probe_z)+' · H '+fmtN(cal.paper&&cal.paper.H)):''}
+ const cv=document.getElementById('calmesh');if(!cv||!cv.getContext)return;
+ const key=JSON.stringify(grid||null);if(key===MESH.key)return;MESH.key=key;MESH.grid=grid;
+ const N=224,ctx=cv.getContext('2d');cv.width=N;cv.height=N;const img=ctx.createImageData(N,N),ok=grid&&grid.length===7;
+ let lo=0,hi=0;const vals=[];
+ if(ok)for(let j=0;j<7;j++)for(let i=0;i<7;i++){const z=grid[j]&&grid[j][i];if(z!=null&&meshInside(i,j))vals.push(+z)}
+ if(vals.length){lo=Math.min(...vals);hi=Math.max(...vals)}MESH.lo=lo;MESH.hi=hi;const sc=2*ME/N;
+ for(let py=0;py<N;py++)for(let px=0;px<N;px++){const x=-ME+(px+0.5)*sc,y=ME-(py+0.5)*sc,in_=x*x+y*y<=MR*MR,k=(py*N+px)*4;
+  const v=ok&&Math.abs(x)<=-MO&&Math.abs(y)<=-MO?meshAt(grid,x,y):null;let r=232,gg=238,b=246;
+  if(v!=null){const m=meshColor(v,lo,hi).match(/\\d+/g);r=+m[0];gg=+m[1];b=+m[2]}
+  if(!in_){r=Math.round(r*0.25+235*0.75);gg=Math.round(gg*0.25+238*0.75);b=Math.round(b*0.25+243*0.75)}
+  img.data[k]=r;img.data[k+1]=gg;img.data[k+2]=b;img.data[k+3]=255}
+ ctx.putImageData(img,0,0);ctx.strokeStyle='#1a3d8f';ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(N/2,N/2,MR/sc,0,2*Math.PI);ctx.stroke();
+ if(ok)for(let j2=0;j2<7;j2++)for(let i2=0;i2<7;i2++){const cx=(MO+i2*MS+ME)/sc,cy=(ME-(MO+j2*MS))/sc;ctx.beginPath();ctx.arc(cx,cy,3.2,0,2*Math.PI);
+  if(meshInside(i2,j2)){ctx.fillStyle='#123';ctx.fill()}else{ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle='#567';ctx.lineWidth=1.3;ctx.stroke()}}
+ calmeshlg.innerHTML=ok?('<span class=mlo style="background:'+meshColor(lo,lo,hi)+'"></span>'+fmtN(lo,1)+' … <span class=mlo style="background:'+meshColor(hi,lo,hi)+'"></span>'+fmtN(hi,1)+' mm inside the print circle · range '+(hi-lo).toFixed(3)+' mm · ○ = outside r 105 (extrapolated)'):'No mesh read yet. Press Read mesh (M503) while the printer is idle.';
+ calmeshrd.textContent=ok?'Hover or tap the bed for a value.':''}
+function meshPick(e){if(!MESH.grid)return;const cv=calmesh,r=cv.getBoundingClientRect(),p=e.touches?e.touches[0]:e;
+ const x=-ME+(p.clientX-r.left)/r.width*2*ME,y=ME-(p.clientY-r.top)/r.height*2*ME,i=Math.round((x-MO)/MS),j=Math.round((y-MO)/MS),gx=MO+i*MS,gy=MO+j*MS;
+ if(i>=0&&i<7&&j>=0&&j<7&&Math.hypot(x-gx,y-gy)<6){const z=MESH.grid[j]&&MESH.grid[j][i];
+  calmeshrd.textContent='I'+i+' J'+j+' (X '+gx+', Y '+gy+'): '+(z==null?'n/a':fmtN(z,1)+' mm')+(meshInside(i,j)?' · probed':' · outside the print circle (extrapolated)');return}
+ if(x*x+y*y>MR*MR){calmeshrd.textContent='Outside the 210 mm print circle';return}
+ const v=meshAt(MESH.grid,x,y);calmeshrd.textContent='X '+x.toFixed(0)+', Y '+y.toFixed(0)+': '+(v==null?'n/a':fmtN(v,1)+' mm')+' (bilinear)'}
+async function meshRefresh(){try{const c=await J('/api/ivi/cal/refresh',{});MESH.key='';renderMesh(c.level&&c.level.grid,c);say('Mesh read (M503)')}catch(e){say('Mesh not read: '+e.message)}conPoll()}
 camInit();tlLoad();tgDraw();filesLoad();histLoad();mLoad();conPoll();
 setInterval(()=>{tgDraw();conPoll()},3000);setInterval(()=>{if(document.getElementById('p_cam').offsetParent)camSnap()},1000);setInterval(()=>{filesLoad();histLoad();tlLoad()},15000);
 tick();setInterval(tick,2000)</script>"""
@@ -2204,7 +2550,9 @@ def make_handler(bridge):
                 since = int(self._q("since", 0) or 0)
                 return self._json(200, {"lines": [l for l in bridge.console if l["seq"] > since], "seq": bridge.console_seq,
                                         "enabled": not bridge.usb_locked() and bool(bridge.busy() or (bridge.monitor and bridge.monitor.connected)),
-                                        "streaming": bridge.busy(), "usb_locked": bridge.usb_locked()})
+                                        "streaming": bridge.busy(), "usb_locked": bridge.usb_locked(),
+                                        "print_active": bridge.print_active(), "reason": bridge.console_reason()})
+            if p == "/api/ivi/cal": return self._json(200, bridge.cal_info())
             if p == "/api/ivi/macros": return self._json(200, {"macros": bridge.macros()})
             if p == "/api/ivi/temps":
                 return self._json(200, {"samples": list(bridge.temps), "window_s": cfg.get("temp_history_s", 1800)})
@@ -2246,6 +2594,12 @@ def make_handler(bridge):
             if p == "/api/ivi/backups": return self._json(200, {"backups": bridge.list_backups(), "dir": "~/.config/ivi-bridge/backups"})
             return False
         def _extras_post(self, p, body):
+            if p in ("/api/ivi/cal/start", "/api/ivi/cal/cancel", "/api/ivi/cal/answer"):
+                return self._json(501, {"error": "leveling, XYZ calibration and the paper test run from the printer's own "
+                                                 "Calibration view (on-printer ivibridge), not from the computer bridge"})
+            if p == "/api/ivi/cal/refresh":
+                try: bridge.refresh_settings(); return self._json(200, bridge.cal_info())
+                except Exception as e: return self._json(409, {"error": str(e)})
             if p not in ("/api/ivi/console", "/api/ivi/macros", "/api/ivi/files", "/api/ivi/queue", "/api/ivi/history"): return False
             try: cmd = json.loads(body or b"{}")
             except ValueError: return self._json(400, {"error": "bad json"})
@@ -2315,9 +2669,16 @@ def make_handler(bridge):
                                    "printing": st == "Printing", "paused": st.startswith("Paused"),
                                    "ready": not bridge.busy()}},
                                    "temperature": temps, "position": bridge.live_status().get("position"),
-                                   "ivi": {"usb": bool(bridge.busy() or (mon and mon.connected)),
+                                   "ivi": dict({"bridge": "computer", "version": VERSION,
+                                           "usb": bool(bridge.busy() or (mon and mon.connected)),
                                            "usb_error": mon.error if mon else "serial_monitor off",
-                                           "usb_locked": bridge.usb_locked(), "storage_file": bridge.storage_print}})
+                                           "usb_locked": bridge.usb_locked(), "storage_file": bridge.storage_print,
+                                           "working": (bridge.live_status() or {}).get("working"),
+                                           "print": bridge.print_info(), "cal": bridge.cal_info()},
+                                           **bridge.pt.fan_json())})
+            if p == "/api/fan":
+                f = bridge.pt.fan_json()
+                return self._json(200, dict(f, on=None if f["fan"] is None else f["fan"] > 0))
             if p == "/" or p == "/index.html":
                 b = status_page(cfg).encode()
                 self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -2362,9 +2723,10 @@ def make_handler(bridge):
             if p.startswith("/api/printer/"):
                 try: cmd = json.loads(body or b"{}")
                 except ValueError: return self._json(400, {"error": "bad json"})
-                try: gcodes = octo_printer_cmds(p, cmd)
+                try: gcodes = [check_command(g) for g in octo_printer_cmds(p, cmd)]
                 except ValueError as e: return self._json(400, {"error": str(e)})
                 try:
+                    bridge.motion_check(gcodes)            # all or nothing: a jog is not half-sent during a print
                     for g in gcodes: bridge.send_command(g)
                 except ValueError as e: return self._json(400, {"error": str(e)})
                 except Exception as e: return self._json(409, {"error": str(e)})
@@ -2383,7 +2745,7 @@ def make_handler(bridge):
                     g = {"pause": {"pause": "M2410", "resume": "M2411 S1"}.get(a, "M2411 S1" if paused else "M2410"),
                          "cancel": "M2411 S3"}.get(c)
                     if not g: return self._json(400, {"error": f"unsupported command {c}"})
-                    try: bridge.send_command(g)
+                    try: bridge.send_command(g, job_control=True)
                     except Exception as e: return self._json(409, {"error": str(e)})
                     return self._json(200, {"state": bridge.job_info()["state"], "sent": g})
                 if not j or not bridge.busy(): return self._json(409, {"error": "no active job"})
@@ -2419,9 +2781,12 @@ def make_handler(bridge):
             start = fields.get("print", "false").lower() == "true"
             try:
                 msg_txt = bridge.submit(path, fname, start=start)
+            except ValueError as e:
+                log("submit refused:", e)
+                return self._json(400, {"error": str(e)})
             except Exception as e:
                 log("submit failed:", e)
-                return self._json(409 if "already" in str(e) else 500, {"error": str(e)})
+                return self._json(409 if "already" in str(e) or isinstance(e, MotionLocked) else 500, {"error": str(e)})
             log(msg_txt)
             self._json(201, {"done": True, "files": {"local": {"name": fname, "origin": "local"}},
                              "effectivePrint": start, "message": msg_txt})
